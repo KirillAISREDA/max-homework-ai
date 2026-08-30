@@ -8,6 +8,7 @@ from pathlib import Path
 from hwcheck.config import load_settings
 from hwcheck.eval.offline import run_offline_eval
 from hwcheck.llm import ChatMessage, GigaChatClient
+from hwcheck.pipeline.vision import recognize_page
 from hwcheck.prompts import load_prompt
 
 
@@ -46,16 +47,20 @@ async def _run(args: argparse.Namespace) -> None:
             print(f"tokens={result.tokens_in}+{result.tokens_out}, latency={result.latency_s:.2f}s")
         elif args.command == "vision":
             prompt = load_prompt("vision", args.prompt_version)
-            result = await client.analyze_image(
+            rec = await recognize_page(
+                client,
                 args.image.read_bytes(),
                 prompt=prompt,
                 model=settings.vision_model,
                 filename=args.image.name,
             )
-            print(result.content)
+            if rec.page is not None:
+                print(rec.page.model_dump_json(indent=2))
+            else:
+                print(f"Не удалось распознать. Последний ответ модели:\n{rec.raw}")
             print(
-                f"\n--- model={result.model}, tokens={result.tokens_in}+{result.tokens_out}, "
-                f"latency={result.latency_s:.2f}s"
+                f"\n--- orientation={rec.orientation}°, attempts={rec.attempts}, "
+                f"tokens={rec.tokens_in}+{rec.tokens_out}, latency={rec.latency_s:.2f}s"
             )
         elif args.command == "eval":
             prompt = load_prompt("vision", args.prompt_version)
