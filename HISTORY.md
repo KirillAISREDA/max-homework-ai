@@ -25,3 +25,25 @@
 - Доступ к GigaChat API (client_id/secret) и аккаунт Cloud.ru — есть ли уже? (нужно для недели 1)
 - Токен бота MAX — зарегистрирован ли бот?
 - Откуда возьмём датасет 30–50 реальных домашних работ для офлайн-оценки (неделя 1)?
+
+---
+
+## 2026-08-30 — Сессия 2: скелет проекта и клиент GigaChat
+
+**Ответы Кирилла на вопросы сессии 1:** доступ к GigaChat и аккаунт Cloud.ru есть; бот в MAX будет быстро; датасет соберём «живой» — не блокер.
+
+**Сделано (ветка `feat/project-skeleton`):**
+- Скелет: uv + pyproject, ruff, mypy strict, pytest, GitHub Actions CI.
+- `hwcheck.llm`: протоколы `LLMClient`/`VisionClient` + `chat_structured` (валидация JSON по pydantic-схеме, 1 retry с указанием ошибки, затем `StructuredOutputError`).
+- `GigaChatClient` поверх официального SDK `gigachat` (OAuth и refresh токена — внутри SDK; vision через `aupload_file` + attachments; свой OAuth не писали — правило Research & Reuse).
+- `prompts/vision/v1.md` + загрузчик версионированных промптов.
+- Офлайн-оценка (`hwcheck eval <папка>`): латентность (медиана/p90/max), токены, доля валидного JSON, доля confidence < 0.7 — под валидацию главного риска (латентность vision).
+- CLI: `uv run python -m hwcheck ping | vision <фото> | eval <папка>`.
+- 10 тестов, все проверки зелёные.
+
+**Принятые решения:**
+- Идентификаторы моделей — в конфиге (`VISION_MODEL` и т.д., дефолты линейки GigaChat 2), т.к. линейка обновляется несколько раз в год.
+- Структурированный вывод — через промпт + pydantic-валидацию с одним retry (как в арх. §4), без JSON-mode API.
+- Промпты лежат в `prompts/{step}/{version}.md`, версия передаётся сквозь пайплайн.
+
+**Следующие шаги:** прогнать `hwcheck ping` с реальными кредами; собрать первые фото и запустить `hwcheck eval` — замерить латентность vision.
