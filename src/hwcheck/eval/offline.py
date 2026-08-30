@@ -112,5 +112,5 @@ def _print_summary(results: list[ImageEvalResult], *, model: str, prompt_version
     if valid:
         tokens = statistics.mean(r.tokens_in + r.tokens_out for r in valid)
         print(f"Средние токены на фото: {tokens:.0f}")
-        low_conf = sum(1 for r in valid if (r.min_confidence or 1.0) < 0.7)
+        low_conf = sum(1 for r in valid if r.min_confidence is not None and r.min_confidence < 0.7)
         print(f"Фото с заданиями confidence < 0.7: {low_conf}/{len(valid)}")

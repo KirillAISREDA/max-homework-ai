@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     gigachat_scope: str = "GIGACHAT_API_PERS"
     gigachat_verify_ssl_certs: bool = True
     gigachat_ca_bundle: str | None = None
+    # Дефолт SDK — 30 с без ретраев; vision-вызов легально живёт 30-60+ с (арх. §7)
+    gigachat_timeout: float = 90.0
+    gigachat_max_retries: int = 3
 
     # Роутинг по моделям (арх. §4): Max — vision и сложная математика, Pro — тьютор,
     # Lite — короткие реплики. Идентификаторы сверять с актуальной линейкой GigaChat.

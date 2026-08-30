@@ -2,6 +2,8 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
+import pytest
+
 from hwcheck.config import Settings
 from hwcheck.llm.base import ChatMessage
 from hwcheck.llm.gigachat_client import GigaChatClient
@@ -36,13 +38,15 @@ async def test_chat_maps_payload_and_usage() -> None:
     assert result.latency_s > 0
 
 
-async def test_analyze_image_uploads_and_attaches() -> None:
+async def test_analyze_image_uploads_attaches_and_cleans_up() -> None:
     client = make_client()
     client._client.aupload_file = AsyncMock(  # type: ignore[method-assign]
         return_value=SimpleNamespace(id_="file-123")
     )
     achat = AsyncMock(return_value=fake_response('{"tasks": []}'))
     client._client.achat = achat  # type: ignore[method-assign]
+    adelete = AsyncMock()
+    client._client.adelete_file = adelete  # type: ignore[method-assign]
 
     result = await client.analyze_image(
         b"fake-image", prompt="распознай", model="GigaChat-2-Max", filename="photo.png"
@@ -53,3 +57,20 @@ async def test_analyze_image_uploads_and_attaches() -> None:
     payload: dict[str, Any] = achat.call_args.args[0]
     assert payload["messages"][0]["attachments"] == ["file-123"]
     assert result.content == '{"tasks": []}'
+    # 152-ФЗ: фото удаляется из хранилища GigaChat после анализа
+    adelete.assert_awaited_once_with("file-123")
+
+
+async def test_analyze_image_cleans_up_on_chat_error() -> None:
+    client = make_client()
+    client._client.aupload_file = AsyncMock(  # type: ignore[method-assign]
+        return_value=SimpleNamespace(id_="file-123")
+    )
+    client._client.achat = AsyncMock(side_effect=RuntimeError("api down"))  # type: ignore[method-assign]
+    adelete = AsyncMock()
+    client._client.adelete_file = adelete  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="api down"):
+        await client.analyze_image(b"img", prompt="p", model="GigaChat-2-Max")
+
+    adelete.assert_awaited_once_with("file-123")

@@ -4,6 +4,7 @@ OAuth (токен на 30 минут) и его обновление SDK дел�
 подключается через ca_bundle_file (см. .env.example).
 """
 
+import contextlib
 import time
 from collections.abc import Sequence
 from types import TracebackType
@@ -22,6 +23,8 @@ class GigaChatClient:
             scope=settings.gigachat_scope,
             verify_ssl_certs=settings.gigachat_verify_ssl_certs,
             ca_bundle_file=settings.gigachat_ca_bundle,
+            timeout=settings.gigachat_timeout,
+            max_retries=settings.gigachat_max_retries,
         )
 
     async def __aenter__(self) -> Self:
@@ -65,7 +68,13 @@ class GigaChatClient:
             "messages": [{"role": "user", "content": prompt, "attachments": [uploaded.id_]}],
             "temperature": 0.1,
         }
-        result = await self._call(payload, model=model)
+        try:
+            result = await self._call(payload, model=model)
+        finally:
+            # 152-ФЗ: фото тетради не должно оставаться в хранилище GigaChat.
+            # Ошибка удаления не важнее основного результата/ошибки.
+            with contextlib.suppress(Exception):
+                await self._client.adelete_file(uploaded.id_)
         result.latency_s = time.monotonic() - t0  # включая upload файла
         return result
 
