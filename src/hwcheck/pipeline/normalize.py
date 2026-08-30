@@ -8,14 +8,18 @@
 
 import io
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 MAX_SIDE = 2048
 JPEG_QUALITY = 90
 
 
+class ImageDecodeError(ValueError):
+    """Байты не являются пригодным изображением (битый файл, не-картинка, bomb)."""
+
+
 def normalize_image(data: bytes) -> bytes:
-    image = Image.open(io.BytesIO(data))
+    image = _open(data)
     transposed = ImageOps.exif_transpose(image)
     if max(transposed.size) > MAX_SIDE:
         transposed.thumbnail((MAX_SIDE, MAX_SIDE))
@@ -24,12 +28,27 @@ def normalize_image(data: bytes) -> bytes:
 
 def rotate_image(data: bytes, degrees: int) -> bytes:
     """Поворот по часовой стрелке на 90/180/270 градусов."""
-    image = Image.open(io.BytesIO(data))
-    return _to_jpeg(image.rotate(-degrees, expand=True))
+    return _to_jpeg(_open(data).rotate(-degrees, expand=True))
+
+
+def _open(data: bytes) -> Image.Image:
+    try:
+        image = Image.open(io.BytesIO(data))
+        image.load()
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise ImageDecodeError(f"Не удалось прочитать изображение: {exc}") from exc
+    return image
 
 
 def _to_jpeg(image: Image.Image) -> bytes:
-    if image.mode != "RGB":
+    if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
+        # convert("RGB") просто отбрасывает альфу (прозрачное → чёрное);
+        # рукопись на прозрачном фоне обязана лечь на белый
+        rgba = image.convert("RGBA")
+        background = Image.new("RGB", rgba.size, (255, 255, 255))
+        background.paste(rgba, mask=rgba.getchannel("A"))
+        image = background
+    elif image.mode != "RGB":
         image = image.convert("RGB")
     buffer = io.BytesIO()
     image.save(buffer, format="JPEG", quality=JPEG_QUALITY)

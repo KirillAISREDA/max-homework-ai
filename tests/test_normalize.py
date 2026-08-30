@@ -1,8 +1,14 @@
 import io
 
+import pytest
 from PIL import Image
 
-from hwcheck.pipeline.normalize import MAX_SIDE, normalize_image, rotate_image
+from hwcheck.pipeline.normalize import (
+    MAX_SIDE,
+    ImageDecodeError,
+    normalize_image,
+    rotate_image,
+)
 
 
 def make_jpeg(width: int, height: int, exif_orientation: int | None = None) -> bytes:
@@ -45,3 +51,31 @@ def test_rotate_90_swaps_dimensions() -> None:
 def test_rotate_180_keeps_dimensions() -> None:
     result = rotate_image(make_jpeg(1280, 960), 180)
     assert size_of(result) == (1280, 960)
+
+
+def test_transparent_png_composited_on_white() -> None:
+    # прозрачные пиксели с чёрным RGB под альфой не должны стать чёрным фоном
+    image = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+
+    result = normalize_image(buffer.getvalue())
+
+    pixel = Image.open(io.BytesIO(result)).getpixel((50, 50))
+    assert isinstance(pixel, tuple)
+    assert all(channel > 240 for channel in pixel[:3])
+
+
+def test_png_output_is_jpeg() -> None:
+    image = Image.new("RGB", (100, 100), "white")
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+
+    result = normalize_image(buffer.getvalue())
+
+    assert Image.open(io.BytesIO(result)).format == "JPEG"
+
+
+def test_corrupt_bytes_raise_domain_error() -> None:
+    with pytest.raises(ImageDecodeError):
+        normalize_image(b"definitely not an image")

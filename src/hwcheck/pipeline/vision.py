@@ -34,7 +34,6 @@ async def recognize_page(
     *,
     prompt: str,
     model: str,
-    filename: str = "image.jpg",
 ) -> RecognizedPage:
     normalized = normalize_image(image)
     tokens_in = tokens_out = 0
@@ -44,7 +43,9 @@ async def recognize_page(
 
     for attempts, degrees in enumerate(ORIENTATIONS, start=1):
         data = normalized if degrees == 0 else rotate_image(normalized, degrees)
-        result = await client.analyze_image(data, prompt=prompt, model=model, filename=filename)
+        # после нормализации байты всегда JPEG — исходное имя (.png и т.п.)
+        # дало бы неверный Content-Type при загрузке
+        result = await client.analyze_image(data, prompt=prompt, model=model, filename="page.jpg")
         tokens_in += result.tokens_in
         tokens_out += result.tokens_out
         latency += result.latency_s

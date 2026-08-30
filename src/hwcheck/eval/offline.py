@@ -54,9 +54,7 @@ async def run_offline_eval(
             print(f"[{i}/{len(images)}] {path.name} ...", flush=True)
             t0 = time.monotonic()
             try:
-                rec = await recognize_page(
-                    client, path.read_bytes(), prompt=prompt, model=model, filename=path.name
-                )
+                rec = await recognize_page(client, path.read_bytes(), prompt=prompt, model=model)
                 result = ImageEvalResult(
                     image=path.name,
                     latency_s=round(rec.latency_s, 2),

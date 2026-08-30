@@ -39,11 +39,13 @@ class FakeVisionClient:
     def __init__(self, responses: list[str]) -> None:
         self._responses = list(responses)
         self.image_sizes: list[tuple[int, int]] = []
+        self.filenames: list[str] = []
 
     async def analyze_image(
         self, image: bytes, *, prompt: str, model: str, filename: str = "image.jpg"
     ) -> LLMResult:
         self.image_sizes.append(Image.open(io.BytesIO(image)).size)
+        self.filenames.append(filename)
         return LLMResult(
             content=self._responses.pop(0), model=model, tokens_in=100, tokens_out=50, latency_s=1.0
         )
@@ -55,6 +57,8 @@ async def test_first_orientation_succeeds() -> None:
     assert rec.page is not None and len(rec.page.tasks) == 1
     assert (rec.orientation, rec.attempts) == (0, 1)
     assert client.image_sizes == [(1280, 960)]
+    # байты после нормализации всегда JPEG — имя должно соответствовать
+    assert client.filenames == ["page.jpg"]
 
 
 async def test_rotation_ladder_finds_tasks() -> None:

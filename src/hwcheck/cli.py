@@ -8,6 +8,7 @@ from pathlib import Path
 from hwcheck.config import load_settings
 from hwcheck.eval.offline import run_offline_eval
 from hwcheck.llm import ChatMessage, GigaChatClient
+from hwcheck.pipeline.normalize import ImageDecodeError
 from hwcheck.pipeline.vision import recognize_page
 from hwcheck.prompts import load_prompt
 
@@ -47,13 +48,12 @@ async def _run(args: argparse.Namespace) -> None:
             print(f"tokens={result.tokens_in}+{result.tokens_out}, latency={result.latency_s:.2f}s")
         elif args.command == "vision":
             prompt = load_prompt("vision", args.prompt_version)
-            rec = await recognize_page(
-                client,
-                args.image.read_bytes(),
-                prompt=prompt,
-                model=settings.vision_model,
-                filename=args.image.name,
-            )
+            try:
+                rec = await recognize_page(
+                    client, args.image.read_bytes(), prompt=prompt, model=settings.vision_model
+                )
+            except ImageDecodeError as exc:
+                raise SystemExit(f"{args.image}: {exc}") from exc
             if rec.page is not None:
                 print(rec.page.model_dump_json(indent=2))
             else:
