@@ -62,9 +62,9 @@
 
 ## Неделя 3 — тьютор и генератор
 
-- [ ] Comparator + Error Classifier (таксономия ошибок, JSON-режим)
-- [ ] Tutor: FSM подсказок 0→3, ответ в промпт только на уровне 3
-- [ ] Exercise Generator + валидация эталона Validator'ом
+- [x] Comparator + Error Classifier (таксономия, confidence<0.6 → unclear)
+- [x] Tutor: FSM подсказок 0→3, ответ в промпт только на уровне 3, resolved по детерминированной сверке
+- [x] Exercise Generator + валидация эталона Validator'ом (1 retry → отброс)
 - [ ] Всё в одном контейнере воркера (Dockerfile)
 
 ## Неделя 4 — интеграция с MAX
