@@ -44,16 +44,22 @@ class FileCache:
 
     def get(self, key: str) -> dict[str, object] | None:
         path = self._root / f"{key}.json"
-        if not path.exists():
+        try:
+            data: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
             return None
-        data: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            # битый файл (прерванная запись) — считаем промахом и убираем
+            path.unlink(missing_ok=True)
+            return None
         return data
 
     def put(self, key: str, value: dict[str, object]) -> None:
         self._root.mkdir(parents=True, exist_ok=True)
-        (self._root / f"{key}.json").write_text(
-            json.dumps(value, ensure_ascii=False), encoding="utf-8"
-        )
+        path = self._root / f"{key}.json"
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
 
 
 def cache_key(task_text: str, *, model: str, prompt_version: str) -> str:

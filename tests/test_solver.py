@@ -36,6 +36,17 @@ async def test_cache_roundtrip(tmp_path: Path) -> None:
     assert second.solution == first.solution
 
 
+async def test_corrupt_cache_file_is_cache_miss(tmp_path: Path) -> None:
+    cache = FileCache(tmp_path)
+    await solve_task(FakeLLMClient([GOOD]), "задание", model="m", cache=cache)
+    key_file = next(tmp_path.glob("*.json"))
+    key_file.write_text("{оборванная запись", encoding="utf-8")
+
+    solved, llm_result = await solve_task(FakeLLMClient([GOOD]), "задание", model="m", cache=cache)
+    assert solved.from_cache is False  # битый файл — промах, не крэш
+    assert llm_result is not None
+
+
 async def test_invalid_ref_not_cached(tmp_path: Path) -> None:
     cache = FileCache(tmp_path)
     await solve_task(FakeLLMClient([BAD_MATH]), "задание", model="m", cache=cache)

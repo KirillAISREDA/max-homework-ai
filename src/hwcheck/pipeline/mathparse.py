@@ -28,7 +28,10 @@ _DIVISION_COLON = re.compile(r"(?<=[\d)])\s*:\s*(?=[-\d(])")
 _SQRT_BARE = re.compile(r"√\s*(\d+(?:[.,]\d+)?)")
 _ALLOWED = re.compile(r"^[\d+\-*/(). ]*$")
 _LONG_NUMBER = re.compile(rf"\d{{{MAX_NUMBER_DIGITS + 1},}}")
-_EXPONENT = re.compile(r"\*\*\s*\(?\s*-?\s*(\d+)")
+# показатель степени — только «голое» число: составной показатель 2**(1+999999999)
+# невидим для проверки величины и школе не нужен
+_COMPOSITE_EXPONENT = re.compile(r"\*\*\s*[-(]")
+_EXPONENT = re.compile(r"\*\*\s*(\d+)")
 
 _TRANSFORMATIONS = (*standard_transformations, rationalize)
 
@@ -88,6 +91,8 @@ def _eval_segment(segment: str) -> Any | None:
     if _LONG_NUMBER.search(segment):
         return None
     if segment.count("**") > 1:  # вложенные степени (9**9**9) — DoS
+        return None
+    if _COMPOSITE_EXPONENT.search(segment):
         return None
     for match in _EXPONENT.finditer(segment):
         if int(match.group(1)) > MAX_EXPONENT:
