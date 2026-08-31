@@ -5,12 +5,15 @@ import asyncio
 import json
 from pathlib import Path
 
-from hwcheck.config import load_settings
+from hwcheck.config import Settings, load_settings
 from hwcheck.eval.offline import run_offline_eval
 from hwcheck.llm import ChatMessage, GigaChatClient
+from hwcheck.pipeline.classifier import classify_error
+from hwcheck.pipeline.generator import generate_similar
 from hwcheck.pipeline.grade import grade
 from hwcheck.pipeline.normalize import ImageDecodeError
 from hwcheck.pipeline.solver import FileCache, solve_task
+from hwcheck.pipeline.tutor import TutorSession, tutor_reply
 from hwcheck.pipeline.vision import recognize_page
 from hwcheck.prompts import load_prompt
 
@@ -41,6 +44,14 @@ def main(argv: list[str] | None = None) -> None:
     gr.add_argument("--step", action="append", default=[], help="Шаг ученика (повторяемый)")
     gr.add_argument("--answer", default=None, help="Итоговый ответ ученика")
     gr.add_argument("--prompt-version", default="v1")
+
+    tu = sub.add_parser("tutor", help="Интерактивный диалог-разбор ошибки (демо в терминале)")
+    tu.add_argument("--task", required=True)
+    tu.add_argument("--step", action="append", default=[], help="Шаг ученика (повторяемый)")
+    tu.add_argument("--answer", default=None, help="Ответ ученика")
+
+    ge = sub.add_parser("generate", help="Сгенерировать похожую тренировочную задачу")
+    ge.add_argument("--task", required=True, help="Исходная задача")
 
     args = parser.parse_args(argv)
     asyncio.run(_run(args))
@@ -117,3 +128,53 @@ async def _run(args: argparse.Namespace) -> None:
             grade_result = grade(args.step, args.answer, solved.solution)
             print(grade_result.model_dump_json(indent=2))
             print(f"--- эталон: {solved.solution.answer} {solved.solution.units or ''}".rstrip())
+        elif args.command == "tutor":
+            await _tutor_repl(client, settings, args)
+        elif args.command == "generate":
+            exercise = await generate_similar(client, args.task, None, model=settings.tutor_model)
+            if exercise is None:
+                print("Не удалось сгенерировать задачу с валидным эталоном (2 попытки).")
+            else:
+                print(exercise.model_dump_json(indent=2))
+
+
+async def _tutor_repl(client: GigaChatClient, settings: Settings, args: argparse.Namespace) -> None:
+    """Демо полного цикла в терминале: solve → grade → classify → диалог тьютора."""
+    solved, _ = await solve_task(
+        client, args.task, model=settings.solver_model, cache=FileCache(Path(".cache/solver"))
+    )
+    if not solved.ref_ok:
+        raise SystemExit("Эталон не прошёл самопроверку — эскалация.")
+    grade_result = grade(args.step, args.answer, solved.solution)
+    if grade_result.verdict == "correct":
+        print("Решение верное — тьютор не нужен. Молодец!")
+        return
+    error = await classify_error(
+        client,
+        args.task,
+        args.step,
+        args.answer,
+        solved.solution,
+        grade_result,
+        model=settings.tutor_model,
+    )
+    print(f"[классификатор: {error.error_type} / {error.skill} (conf {error.confidence})]")
+    session = TutorSession(
+        task_text=args.task,
+        student_steps=args.step,
+        student_answer=args.answer,
+        ref=solved.solution,
+        error=error,
+        first_error_line=grade_result.first_error_line,
+    )
+    print("Диалог с тьютором (пустая строка — выход):")
+    while not session.resolved:
+        student_message = input("ученик> ").strip()
+        if not student_message:
+            break
+        reply, session = await tutor_reply(
+            client, session, student_message, model=settings.tutor_model
+        )
+        print(f"тьютор [{session.hint_level}]> {reply}")
+    if session.resolved:
+        print("[решено ✓]")
