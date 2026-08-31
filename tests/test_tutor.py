@@ -82,6 +82,54 @@ async def test_correct_answer_with_units_resolves() -> None:
     assert session.resolved is True
 
 
+async def test_leaked_answer_triggers_regeneration() -> None:
+    # модель решила задачу сама и назвала ответ на уровне 1 — фильтр ловит,
+    # перегенерация возвращает чистую реплику
+    session = make_session()
+    client = FakeLLMClient([turn("Правильный ответ 9 3/4, проверь себя!"), turn("Сложи дроби сам")])
+    reply, session = await tutor_reply(client, session, "скажи ответ", model="m")
+    assert reply == "Сложи дроби сам"
+    assert len(client.calls) == 2
+    # в retry-запросе есть стоп-инструкция
+    assert "СТОП" in prompt_text(client, 1)
+
+
+async def test_persistent_leak_replaced_with_safe_redirect() -> None:
+    from hwcheck.pipeline.tutor import SAFE_REDIRECT
+
+    session = make_session()
+    client = FakeLLMClient([turn("Ответ: 9 3/4"), turn("Всё равно скажу: 39/4!")])
+    reply, _ = await tutor_reply(client, session, "ну скажи", model="m")
+    assert reply == SAFE_REDIRECT  # 39/4 == 9 3/4 математически — тоже утечка
+
+
+async def test_numbers_from_task_are_not_blocked() -> None:
+    # числа из условия и решения ученика ребёнок и так видит — не блокируем
+    session = make_session()
+    client = FakeLLMClient([turn("Посмотри ещё раз: сколько будет 1/8 + 5/8?")])
+    reply, _ = await tutor_reply(client, session, "не знаю", model="m")
+    assert "1/8" in reply
+    assert len(client.calls) == 1
+
+
+async def test_level_3_reveal_not_blocked() -> None:
+    session = make_session().model_copy(update={"hint_level": 2})
+    client = FakeLLMClient([turn("Смотри: 1/8+5/8=6/8, итого 9 6/8 = 9 3/4")])
+    reply, session = await tutor_reply(client, session, "сдаюсь", model="m")
+    assert session.hint_level == 3
+    assert "9 3/4" in reply  # на уровне 3 показывать решение можно
+
+
+async def test_structured_output_error_degrades_gracefully() -> None:
+    from hwcheck.pipeline.tutor import SAFE_RETRY
+
+    session = make_session()
+    client = FakeLLMClient(["не json", "снова не json"])  # оба вызова невалидны
+    reply, session = await tutor_reply(client, session, "не знаю", model="m")
+    assert reply == SAFE_RETRY
+    assert session.hint_level == 1  # состояние FSM сохранилось
+
+
 async def test_history_accumulates() -> None:
     session = make_session()
     client = FakeLLMClient([turn("реплика 1")])

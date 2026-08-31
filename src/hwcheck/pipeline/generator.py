@@ -56,4 +56,6 @@ def _valid(exercise: GeneratedExercise) -> bool:
     if not exercise.ref_steps or not exercise.ref_answer.strip():
         return False
     checks = check_steps(exercise.ref_steps)
-    return all(c.status != "mismatch" for c in checks)
+    # строго все шаги «ok»: skipped-шаг (текст, непарсящееся) означает,
+    # что эталон НЕ проверен — такую задачу отбрасываем (арх. §3.3)
+    return all(c.status == "ok" for c in checks)

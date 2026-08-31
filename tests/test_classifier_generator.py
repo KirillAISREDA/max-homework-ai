@@ -82,3 +82,21 @@ async def test_generator_retry_succeeds() -> None:
     exercise = await generate_similar(client, "задача", None, model="m")
     assert exercise is not None
     assert exercise.ref_answer == "90"
+
+
+UNVERIFIABLE_EXERCISE = json.dumps(
+    {
+        "task_text": "Поезд ехал.",
+        "ref_steps": ["Поезд ехал быстро, поэтому скорость 90"],
+        "ref_answer": "90",
+        "units": None,
+    },
+    ensure_ascii=False,
+)
+
+
+async def test_generator_rejects_unverifiable_steps() -> None:
+    # skipped-шаги (текст, не равенства) = эталон НЕ проверен SymPy → отброс
+    client = FakeLLMClient([UNVERIFIABLE_EXERCISE, UNVERIFIABLE_EXERCISE])
+    exercise = await generate_similar(client, "задача", None, model="m")
+    assert exercise is None

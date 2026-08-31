@@ -169,7 +169,10 @@ async def _tutor_repl(client: GigaChatClient, settings: Settings, args: argparse
     )
     print("Диалог с тьютором (пустая строка — выход):")
     while not session.resolved:
-        student_message = input("ученик> ").strip()
+        try:
+            student_message = input("ученик> ").strip()
+        except EOFError:
+            break
         if not student_message:
             break
         reply, session = await tutor_reply(
