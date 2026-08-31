@@ -34,3 +34,6 @@ data/
 # Build
 dist/
 build/
+
+# Local caches
+.cache/

@@ -9,6 +9,7 @@ dependencies = [
     "pillow>=12.3.0",
     "pydantic>=2.7",
     "pydantic-settings>=2.2",
+    "sympy>=1.14.0",
 ]
 
 [dependency-groups]
@@ -40,7 +41,7 @@ mypy_path = "src"
 packages = ["hwcheck"]
 
 [[tool.mypy.overrides]]
-module = "gigachat.*"
+module = ["gigachat.*", "sympy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
