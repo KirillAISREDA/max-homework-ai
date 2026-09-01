@@ -3,8 +3,10 @@
 import argparse
 import asyncio
 import json
+import logging
 from pathlib import Path
 
+from hwcheck.bot.runner import run_polling
 from hwcheck.config import Settings, load_settings
 from hwcheck.eval.offline import run_offline_eval
 from hwcheck.llm import ChatMessage, GigaChatClient
@@ -59,6 +61,8 @@ def main(argv: list[str] | None = None) -> None:
     ge = sub.add_parser("generate", help="Сгенерировать похожую тренировочную задачу")
     ge.add_argument("--task", required=True, help="Исходная задача")
 
+    sub.add_parser("bot", help="Запустить бота MAX (long polling, для разработки)")
+
     args = parser.parse_args(argv)
     asyncio.run(_run(args))
 
@@ -67,6 +71,11 @@ async def _run(args: argparse.Namespace) -> None:
     settings = load_settings()
     if not settings.gigachat_credentials:
         raise SystemExit("Не задан GIGACHAT_CREDENTIALS (см. .env.example)")
+
+    if args.command == "bot":
+        logging.basicConfig(level=logging.INFO)
+        await run_polling(settings)
+        return
 
     async with GigaChatClient(settings) as client:
         if args.command == "ping":

@@ -69,10 +69,16 @@
 
 ## Неделя 4 — интеграция с MAX
 
-- [ ] MAX Gateway: webhook, подпись, дедуп по update_id, мгновенный 200 OK
-- [ ] Core API: users, homework, sessions, лимиты (token bucket), FSM диалога в Redis
+- [x] Клиент MAX Bot API (updates/messages/answers/download), толерантные модели апдейтов
+- [x] FSM диалога за протоколом StateStore (in-memory; Redis — при деплое)
+- [x] Сценарий: фото → vision → проверка по заданиям → кнопки «Разобрать» → тьютор
+- [x] EventLog: конкурсный учёт вызовов компонентов, обезличенные id, dev/prod
+- [x] Семафор GigaChat (фримиум 1 поток) — лечит 429
+- [x] CLI `hwcheck bot` — long polling, без публичного URL
+- [ ] **Живой тест с реальным ботом MAX** (нужен MAX_TOKEN от Кирилла — в процессе)
+- [ ] Webhook-режим (FastAPI) + дедуп update_id — при деплое на Cloud.ru
 - [ ] PostgreSQL-схема (миграции), Object Storage для фото
-- [ ] Деплой на Cloud.ru (Container Apps), end-to-end сценарий в MAX
+- [ ] Деплой на Cloud.ru (Container Apps), Dockerfile
 
 ## Неделя 5 — student model, отчёты, admin
 

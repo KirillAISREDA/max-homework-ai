@@ -11,6 +11,15 @@ class Settings(BaseSettings):
     # Дефолт SDK — 30 с без ретраев; vision-вызов легально живёт 30-60+ с (арх. §7)
     gigachat_timeout: float = 90.0
     gigachat_max_retries: int = 3
+    # PERS-фримиум: 1 одновременный запрос; больше — 429 (арх. §8: семафор)
+    gigachat_concurrency: int = 1
+
+    max_token: str = ""
+    max_base_url: str = "https://platform-api2.max.ru"
+
+    # dev-события не попадают в конкурсные метрики (антифрод, Положение п. 2.2)
+    environment: str = "dev"
+    events_path: str = "var/events.jsonl"
 
     # Роутинг по моделям (арх. §4): Max — vision и сложная математика, Pro — тьютор,
     # Lite — короткие реплики. Идентификаторы сверять с актуальной линейкой GigaChat.
