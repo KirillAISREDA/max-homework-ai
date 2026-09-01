@@ -47,7 +47,15 @@ class VisionClient(Protocol):
 
 
 class StructuredOutputError(RuntimeError):
-    """Модель не вернула валидный JSON по схеме даже после retry."""
+    """Модель не вернула валидный JSON по схеме даже после retry.
+
+    result — LLMResult последней попытки (с накопленными токенами обоих вызовов),
+    чтобы вызывающий мог учесть расход даже при неудаче.
+    """
+
+    def __init__(self, message: str, result: "LLMResult | None" = None) -> None:
+        super().__init__(message)
+        self.result = result
 
 
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
@@ -97,5 +105,6 @@ async def chat_structured[T: BaseModel](
             return schema.model_validate_json(extract_json(retry_result.content)), retry_result
         except ValidationError as retry_error:
             raise StructuredOutputError(
-                f"Невалидный JSON после retry (model={model}, schema={schema.__name__})"
+                f"Невалидный JSON после retry (model={model}, schema={schema.__name__})",
+                retry_result,
             ) from retry_error

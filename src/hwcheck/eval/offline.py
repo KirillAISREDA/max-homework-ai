@@ -10,8 +10,11 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from hwcheck.llm.base import VisionClient
-from hwcheck.pipeline.vision import recognize_page
+from hwcheck.pipeline.vision import (
+    VisionAndChatClient,
+    recognize_page,
+    recognize_page_two_stage,
+)
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
@@ -32,7 +35,7 @@ class ImageEvalResult:
 
 
 async def run_offline_eval(
-    client: VisionClient,
+    client: VisionAndChatClient,
     dataset_dir: Path,
     out_file: Path,
     *,
@@ -40,6 +43,8 @@ async def run_offline_eval(
     prompt: str,
     prompt_version: str,
     limit: int | None = None,
+    two_stage: bool = False,
+    structure_model: str | None = None,
 ) -> list[ImageEvalResult]:
     images = sorted(p for p in dataset_dir.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
     if limit is not None:
@@ -54,7 +59,17 @@ async def run_offline_eval(
             print(f"[{i}/{len(images)}] {path.name} ...", flush=True)
             t0 = time.monotonic()
             try:
-                rec = await recognize_page(client, path.read_bytes(), prompt=prompt, model=model)
+                if two_stage:
+                    rec = await recognize_page_two_stage(
+                        client,
+                        path.read_bytes(),
+                        vision_model=model,
+                        structure_model=structure_model or model,
+                    )
+                else:
+                    rec = await recognize_page(
+                        client, path.read_bytes(), prompt=prompt, model=model
+                    )
                 result = ImageEvalResult(
                     image=path.name,
                     latency_s=round(rec.latency_s, 2),
