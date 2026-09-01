@@ -28,6 +28,7 @@ class ChatState(BaseModel):
     tasks: list[CheckedTask] = Field(default_factory=list)
     tutor: TutorSession | None = None
     tutoring_index: int | None = None
+    resolved_indices: list[int] = Field(default_factory=list)  # разобранные ошибки
 
 
 class StateStore(Protocol):

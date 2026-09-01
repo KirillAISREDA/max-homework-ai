@@ -15,6 +15,7 @@ from hwcheck.events import EventLog
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.grade import GradeResult, grade
+from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import FileCache, RefSolution, StructuredOutputError, solve_task
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
 from hwcheck.pipeline.validator import check_steps
@@ -31,6 +32,7 @@ UNREADABLE = (
     "Не смог разобрать фото 😕 Попробуй переснять: страница целиком, "
     "вертикально, при хорошем свете."
 )
+RETRY = "Что-то пошло не так с моей стороны 😔 Попробуй ещё раз через минуту."
 
 
 class Bot:
@@ -70,6 +72,15 @@ class Bot:
     async def _on_photo(self, chat_id: int, user_id: int | None, url: str) -> None:
         self._events.log("homework_uploaded", user_id=user_id, user_initiated=True)
         await self._max.send_message(chat_id, CHECKING)
+        try:
+            await self._process_photo(chat_id, user_id, url)
+        except Exception:
+            # ребёнок не должен остаться наедине с «Проверяю...» и тишиной
+            logger.exception("photo processing failed")
+            self._events.log("check_failed", user_id=user_id)
+            await self._max.send_message(chat_id, RETRY)
+
+    async def _process_photo(self, chat_id: int, user_id: int | None, url: str) -> None:
         image = await self._max.download(url)
         rec = await recognize_page_two_stage(
             self._llm,
@@ -99,10 +110,7 @@ class Bot:
         await self._store.set(chat_id, state)
         await self._send_review(chat_id, state)
 
-    async def _check_task(self, user_id: int | None, task: object) -> CheckedTask:
-        from hwcheck.pipeline.schemas import VisionTask
-
-        assert isinstance(task, VisionTask)
+    async def _check_task(self, user_id: int | None, task: VisionTask) -> CheckedTask:
         ref: RefSolution | None = None
         if task.task_text.strip():
             try:
@@ -161,19 +169,23 @@ class Bot:
     ) -> None:
         self._events.log("button_pressed", user_id=user_id, user_initiated=True, payload=payload)
         state = await self._store.get(chat_id)
-        if not payload.startswith("tutor:"):
-            await self._max.answer_callback(callback_id)
-            return
-        index = int(payload.split(":", 1)[1])
-        if index >= len(state.tasks):
+        index = (
+            _parse_tutor_index(payload, len(state.tasks)) if payload.startswith("tutor:") else None
+        )
+        if index is None:
             await self._max.answer_callback(callback_id)
             return
         item = state.tasks[index]
         await self._max.answer_callback(callback_id, notification=f"Разбираем №{item.task.number}")
-        session = await self._start_tutoring(user_id, item)
-        reply, session = await tutor_reply(
-            self._llm, session, "Помоги найти ошибку", model=self._settings.tutor_model
-        )
+        try:
+            session = await self._start_tutoring(user_id, item)
+            reply, session = await tutor_reply(
+                self._llm, session, "Помоги найти ошибку", model=self._settings.tutor_model
+            )
+        except Exception:
+            logger.exception("tutoring start failed")
+            await self._max.send_message(chat_id, RETRY)
+            return
         self._events.log(
             "tutor_reply", user_id=user_id, component="tutor", hint_level=session.hint_level
         )
@@ -220,9 +232,14 @@ class Bot:
         if state.phase != "tutoring" or state.tutor is None:
             await self._max.send_message(chat_id, WELCOME)
             return
-        reply, session = await tutor_reply(
-            self._llm, state.tutor, text, model=self._settings.tutor_model
-        )
+        try:
+            reply, session = await tutor_reply(
+                self._llm, state.tutor, text, model=self._settings.tutor_model
+            )
+        except Exception:
+            logger.exception("tutor reply failed")
+            await self._max.send_message(chat_id, RETRY)
+            return
         self._events.log(
             "tutor_reply",
             user_id=user_id,
@@ -232,16 +249,22 @@ class Bot:
         )
         if session.resolved:
             self._events.log("error_fixed", user_id=user_id, user_initiated=True)
+            resolved = (
+                [*state.resolved_indices, state.tutoring_index]
+                if state.tutoring_index is not None
+                else state.resolved_indices
+            )
             state = state.model_copy(
-                update={"phase": "review", "tutor": None, "tutoring_index": None}
+                update={
+                    "phase": "review",
+                    "tutor": None,
+                    "tutoring_index": None,
+                    "resolved_indices": resolved,
+                }
             )
             await self._store.set(chat_id, state)
             await self._max.send_message(chat_id, reply)
-            remaining = [
-                [callback_button(f"Разобрать №{t.task.number}", f"tutor:{i}")]
-                for i, t in enumerate(state.tasks)
-                if t.grade.verdict == "wrong" and i != state.tutoring_index
-            ]
+            remaining = _remaining_buttons(state)
             if remaining:
                 await self._max.send_message(
                     chat_id, "Разберём ещё одну ошибку?", buttons=remaining
@@ -250,6 +273,24 @@ class Bot:
             state = state.model_copy(update={"tutor": session})
             await self._store.set(chat_id, state)
             await self._max.send_message(chat_id, reply)
+
+
+def _remaining_buttons(state: ChatState) -> list[list[dict[str, str]]]:
+    """Кнопки для ещё не разобранных ошибок."""
+    return [
+        [callback_button(f"Разобрать №{t.task.number}", f"tutor:{i}")]
+        for i, t in enumerate(state.tasks)
+        if t.grade.verdict == "wrong" and i not in state.resolved_indices
+    ]
+
+
+def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:
+    """Payload недоверенный: только 'tutor:<цифры>' в границах списка."""
+    raw = payload.split(":", 1)[1] if ":" in payload else ""
+    if not raw.isdigit():
+        return None
+    index = int(raw)
+    return index if index < n_tasks else None
 
 
 def _validator_only_grade(steps: list[str]) -> GradeResult:

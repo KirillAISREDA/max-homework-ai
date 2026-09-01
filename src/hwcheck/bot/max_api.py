@@ -24,6 +24,9 @@ class MaxClient:
             headers={"Authorization": token},
             timeout=httpx.Timeout(100.0),  # long polling до 90 с
         )
+        # для скачивания медиа по абсолютным URL из апдейтов: токен бота
+        # не должен уходить на сторонний (CDN-) хост
+        self._files = httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True)
 
     async def __aenter__(self) -> Self:
         return self
@@ -35,6 +38,7 @@ class MaxClient:
         tb: TracebackType | None,
     ) -> None:
         await self._http.aclose()
+        await self._files.aclose()
 
     async def get_updates(
         self, marker: int | None, *, timeout: int = 30
@@ -69,8 +73,8 @@ class MaxClient:
         response.raise_for_status()
 
     async def download(self, url: str) -> bytes:
-        """Скачивает вложение (фото) по URL из апдейта."""
-        response = await self._http.get(url)
+        """Скачивает вложение (фото) по URL из апдейта — без токена бота."""
+        response = await self._files.get(url)
         response.raise_for_status()
         return response.content
 

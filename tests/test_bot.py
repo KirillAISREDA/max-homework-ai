@@ -119,7 +119,47 @@ def test_anonymize_stable_and_irreversible() -> None:
     assert value is not None and "42" not in value
 
 
-@pytest.mark.parametrize("payload", ["tutor:99", "unknown"])
+def test_remaining_buttons_exclude_resolved() -> None:
+    from hwcheck.bot.fsm import ChatState, CheckedTask
+    from hwcheck.bot.handlers import _remaining_buttons
+    from hwcheck.pipeline.schemas import VisionTask
+
+    def wrong_task(number: int) -> CheckedTask:
+        return CheckedTask(
+            task=VisionTask(number=number, task_text="", confidence=0.9),
+            ref=None,
+            grade=_validator_only_grade(["2+2=5"]),
+        )
+
+    state = ChatState(tasks=[wrong_task(4), wrong_task(7)], resolved_indices=[0])
+    buttons = _remaining_buttons(state)
+    # разобранное задание №4 (индекс 0) не предлагается повторно
+    assert len(buttons) == 1
+    assert buttons[0][0]["payload"] == "tutor:1"
+
+
+def test_parse_tutor_index_rejects_garbage() -> None:
+    from hwcheck.bot.handlers import _parse_tutor_index
+
+    assert _parse_tutor_index("tutor:1", 3) == 1
+    assert _parse_tutor_index("tutor:-1", 3) is None  # отрицательный индекс не оборачивается
+    assert _parse_tutor_index("tutor:x", 3) is None
+    assert _parse_tutor_index("tutor:99", 3) is None
+    assert _parse_tutor_index("tutor:", 3) is None
+
+
+def test_marker_persistence(tmp_path: Path) -> None:
+    from hwcheck.bot.runner import _load_marker, _save_marker
+
+    path = tmp_path / "marker.txt"
+    assert _load_marker(path) is None
+    _save_marker(path, 12345)
+    assert _load_marker(path) == 12345
+    path.write_text("мусор", encoding="utf-8")
+    assert _load_marker(path) is None
+
+
+@pytest.mark.parametrize("payload", ["tutor:99", "unknown", "tutor:-1", "tutor:abc"])
 async def test_callback_out_of_range_is_safe(tmp_path: Path, payload: str) -> None:
     bot, fake_max, _ = make_bot(tmp_path)
     update: dict[str, Any] = {
