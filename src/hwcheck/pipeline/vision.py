@@ -6,7 +6,6 @@
 """
 
 import re
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -14,7 +13,7 @@ from pydantic import ValidationError
 
 from hwcheck.llm.base import (
     ChatMessage,
-    LLMResult,
+    LLMClient,
     StructuredOutputError,
     VisionClient,
     chat_structured,
@@ -89,25 +88,25 @@ def _try_parse(content: str) -> VisionPage | None:
 # а свободную транскрипцию той же страницы выдаёт. Структурирует транскрипцию
 # уже текстовая модель — надёжный chat_structured, без vision-бюджета.
 
-_MATH_CHARS = re.compile(r"[=+\-*:×·]")
 _DIGITS = re.compile(r"\d")
+# «цифра-оператор-цифра» — заголовок «стр. 5 № 4» или мусор из повёрнутых глифов
+# набирает цифры, но не имеет формы вычисления
+_EQUATION_SHAPE = re.compile(r"\d\s*[=+\-*:×·]\s*\d")
 
-MIN_DIGITS = 5
+MIN_DIGITS = 3
+# ниже — считаем ориентацию сомнительной и продолжаем лестницу
+CONF_ACCEPT = 0.5
 
 
-class VisionAndChatClient(VisionClient, Protocol):
-    async def chat(
-        self,
-        messages: Sequence[ChatMessage],
-        *,
-        model: str,
-        temperature: float = 0.1,
-    ) -> LLMResult: ...
+class VisionAndChatClient(VisionClient, LLMClient, Protocol):
+    """Клиент с vision и текстовым chat (GigaChatClient реализует оба)."""
 
 
 def looks_like_math(transcript: str) -> bool:
     """Дешёвая проверка транскрипции до траты вызова структуризации."""
-    return len(_DIGITS.findall(transcript)) >= MIN_DIGITS and bool(_MATH_CHARS.search(transcript))
+    return len(_DIGITS.findall(transcript)) >= MIN_DIGITS and bool(
+        _EQUATION_SHAPE.search(transcript)
+    )
 
 
 async def recognize_page_two_stage(
@@ -125,6 +124,9 @@ async def recognize_page_two_stage(
     tokens_in = tokens_out = 0
     latency = 0.0
     last_raw = ""
+    # лучший неидеальный кандидат: страница с заданиями низкой уверенности,
+    # иначе валидная пустая (сохраняет page_comment — диагноз модели)
+    best: tuple[VisionPage, int, str] | None = None
 
     for attempts, degrees in enumerate(ORIENTATIONS, start=1):
         data = normalized if degrees == 0 else rotate_image(normalized, degrees)
@@ -146,14 +148,26 @@ async def recognize_page_two_stage(
             page, structure_result = await chat_structured(
                 client, messages, VisionPage, model=structure_model
             )
-        except StructuredOutputError:
+        except StructuredOutputError as exc:
+            if exc.result is not None:  # расход неудачных попыток тоже считаем
+                tokens_in += exc.result.tokens_in
+                tokens_out += exc.result.tokens_out
+                latency += exc.result.latency_s
             continue
         tokens_in += structure_result.tokens_in
         tokens_out += structure_result.tokens_out
         latency += structure_result.latency_s
-        if page.tasks:
+
+        if page.tasks and min(t.confidence for t in page.tasks) >= CONF_ACCEPT:
             return RecognizedPage(
                 page, degrees, attempts, tokens_in, tokens_out, latency, result.content
             )
+        # низкая уверенность — возможно, мусор не той ориентации: пробуем дальше,
+        # но запоминаем как кандидата
+        if best is None or (page.tasks and not best[0].tasks):
+            best = (page, degrees, result.content)
 
+    if best is not None:
+        page, degrees, raw = best
+        return RecognizedPage(page, degrees, len(ORIENTATIONS), tokens_in, tokens_out, latency, raw)
     return RecognizedPage(None, 0, len(ORIENTATIONS), tokens_in, tokens_out, latency, last_raw)

@@ -66,6 +66,63 @@ def test_looks_like_math() -> None:
     assert looks_like_math(TRANSCRIPT) is True
     assert looks_like_math(GIBBERISH) is False
     assert looks_like_math("") is False
+    # цифры без формы вычисления (заголовки) — не математика
+    assert looks_like_math("стр. 5 № 4 Домашняя работа 2026") is False
+    # короткий пример младших классов — математика
+    assert looks_like_math("2+2=4") is True
+
+
+def structured_page(confidences: list[float], n_tasks: int | None = None) -> str:
+    tasks = [
+        {
+            "number": i + 1,
+            "task_text": "",
+            "student_solution_steps": [f"{i}+1={i + 1}"],
+            "student_answer": None,
+            "confidence": c,
+        }
+        for i, c in enumerate(confidences)
+    ]
+    return json.dumps(
+        {"tasks": tasks, "page_ok": bool(tasks), "page_comment": None if tasks else "нет заданий"},
+        ensure_ascii=False,
+    )
+
+
+async def test_low_confidence_continues_ladder() -> None:
+    # мусор не той ориентации структурировался с низкой уверенностью —
+    # лестница продолжается и находит уверенный вариант
+    client = FakeTwoStageClient(
+        [TRANSCRIPT, TRANSCRIPT], [structured_page([0.2]), structured_page([0.9])]
+    )
+    rec = await recognize_page_two_stage(
+        client, make_image(), vision_model="vm", structure_model="sm"
+    )
+    assert rec.page is not None
+    assert rec.orientation == 270
+    assert rec.page.tasks[0].confidence == 0.9
+
+
+async def test_all_empty_preserves_page_comment() -> None:
+    # структуризация везде вернула 0 заданий — сохраняем её диагноз, а не None
+    client = FakeTwoStageClient([TRANSCRIPT] * 4, [structured_page([])] * 4)
+    rec = await recognize_page_two_stage(
+        client, make_image(), vision_model="vm", structure_model="sm"
+    )
+    assert rec.page is not None
+    assert rec.page.tasks == []
+    assert rec.page.page_comment == "нет заданий"
+
+
+async def test_structured_error_tokens_counted() -> None:
+    # обе попытки структуризации невалидны → расход всё равно учитывается
+    client = FakeTwoStageClient([TRANSCRIPT] + [GIBBERISH] * 3, ["не json", "снова не json"])
+    rec = await recognize_page_two_stage(
+        client, make_image(), vision_model="vm", structure_model="sm"
+    )
+    assert rec.page is None
+    # 4 vision по 9000 + 2 chat по 500 (retry внутри chat_structured)
+    assert rec.tokens_in == 4 * 9000 + 2 * 500
 
 
 async def test_first_orientation_success() -> None:
