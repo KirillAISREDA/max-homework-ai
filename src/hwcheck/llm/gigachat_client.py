@@ -4,6 +4,7 @@ OAuth (токен на 30 минут) и его обновление SDK дел�
 подключается через ca_bundle_file (см. .env.example).
 """
 
+import asyncio
 import contextlib
 import time
 from collections.abc import Sequence
@@ -26,6 +27,9 @@ class GigaChatClient:
             timeout=settings.gigachat_timeout,
             max_retries=settings.gigachat_max_retries,
         )
+        # тариф ограничивает одновременные запросы (PERS: 1) — иначе 429.
+        # Семафор берётся на один HTTP-вызов, не на составную операцию (без вложенности)
+        self._semaphore = asyncio.Semaphore(settings.gigachat_concurrency)
 
     async def __aenter__(self) -> Self:
         await self._client.__aenter__()
@@ -62,7 +66,8 @@ class GigaChatClient:
         filename: str = "image.jpg",
     ) -> LLMResult:
         t0 = time.monotonic()
-        uploaded = await self._client.aupload_file((filename, image, _mime_type(filename)))
+        async with self._semaphore:
+            uploaded = await self._client.aupload_file((filename, image, _mime_type(filename)))
         payload: dict[str, Any] = {
             "model": model,
             "messages": [{"role": "user", "content": prompt, "attachments": [uploaded.id_]}],
@@ -74,13 +79,15 @@ class GigaChatClient:
             # 152-ФЗ: фото тетради не должно оставаться в хранилище GigaChat.
             # Ошибка удаления не важнее основного результата/ошибки.
             with contextlib.suppress(Exception):
-                await self._client.adelete_file(uploaded.id_)
+                async with self._semaphore:
+                    await self._client.adelete_file(uploaded.id_)
         result.latency_s = time.monotonic() - t0  # включая upload файла
         return result
 
     async def _call(self, payload: dict[str, Any], *, model: str) -> LLMResult:
         t0 = time.monotonic()
-        response = await self._client.achat(payload)
+        async with self._semaphore:
+            response = await self._client.achat(payload)
         latency = time.monotonic() - t0
         usage = response.usage
         return LLMResult(
