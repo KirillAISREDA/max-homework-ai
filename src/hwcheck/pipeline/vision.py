@@ -5,13 +5,24 @@
 нашла задания. Лишние vision-вызовы тратятся только на проблемных фото.
 """
 
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
 from pydantic import ValidationError
 
-from hwcheck.llm.base import VisionClient, extract_json
+from hwcheck.llm.base import (
+    ChatMessage,
+    LLMResult,
+    StructuredOutputError,
+    VisionClient,
+    chat_structured,
+    extract_json,
+)
 from hwcheck.pipeline.normalize import normalize_image, rotate_image
 from hwcheck.pipeline.schemas import VisionPage
+from hwcheck.prompts import load_prompt
 
 # 270° (поворот кадра влево при съёмке) у телефонов чаще, чем 90°
 ORIENTATIONS = (0, 270, 90, 180)
@@ -71,3 +82,78 @@ def _try_parse(content: str) -> VisionPage | None:
         return VisionPage.model_validate_json(extract_json(content))
     except ValidationError:
         return None
+
+
+# --- Двухэтапное распознавание: транскрипция → структурирование текстом ---
+# Vision в JSON-режиме массово отказывает на рукописи («неразборчивый почерк»),
+# а свободную транскрипцию той же страницы выдаёт. Структурирует транскрипцию
+# уже текстовая модель — надёжный chat_structured, без vision-бюджета.
+
+_MATH_CHARS = re.compile(r"[=+\-*:×·]")
+_DIGITS = re.compile(r"\d")
+
+MIN_DIGITS = 5
+
+
+class VisionAndChatClient(VisionClient, Protocol):
+    async def chat(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        model: str,
+        temperature: float = 0.1,
+    ) -> LLMResult: ...
+
+
+def looks_like_math(transcript: str) -> bool:
+    """Дешёвая проверка транскрипции до траты вызова структуризации."""
+    return len(_DIGITS.findall(transcript)) >= MIN_DIGITS and bool(_MATH_CHARS.search(transcript))
+
+
+async def recognize_page_two_stage(
+    client: VisionAndChatClient,
+    image: bytes,
+    *,
+    vision_model: str,
+    structure_model: str,
+    transcribe_version: str = "v3",
+    structure_version: str = "v1",
+) -> RecognizedPage:
+    transcribe_prompt = load_prompt("vision", transcribe_version)
+    structure_prompt = load_prompt("vision_structure", structure_version)
+    normalized = normalize_image(image)
+    tokens_in = tokens_out = 0
+    latency = 0.0
+    last_raw = ""
+
+    for attempts, degrees in enumerate(ORIENTATIONS, start=1):
+        data = normalized if degrees == 0 else rotate_image(normalized, degrees)
+        result = await client.analyze_image(
+            data, prompt=transcribe_prompt, model=vision_model, filename="page.jpg"
+        )
+        tokens_in += result.tokens_in
+        tokens_out += result.tokens_out
+        latency += result.latency_s
+        last_raw = result.content
+        if not looks_like_math(result.content):
+            continue
+
+        messages = [
+            ChatMessage(role="system", content=structure_prompt),
+            ChatMessage(role="user", content=result.content),
+        ]
+        try:
+            page, structure_result = await chat_structured(
+                client, messages, VisionPage, model=structure_model
+            )
+        except StructuredOutputError:
+            continue
+        tokens_in += structure_result.tokens_in
+        tokens_out += structure_result.tokens_out
+        latency += structure_result.latency_s
+        if page.tasks:
+            return RecognizedPage(
+                page, degrees, attempts, tokens_in, tokens_out, latency, result.content
+            )
+
+    return RecognizedPage(None, 0, len(ORIENTATIONS), tokens_in, tokens_out, latency, last_raw)

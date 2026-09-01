@@ -14,7 +14,7 @@ from hwcheck.pipeline.grade import grade
 from hwcheck.pipeline.normalize import ImageDecodeError
 from hwcheck.pipeline.solver import FileCache, solve_task
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
-from hwcheck.pipeline.vision import recognize_page
+from hwcheck.pipeline.vision import recognize_page, recognize_page_two_stage
 from hwcheck.prompts import load_prompt
 
 
@@ -27,12 +27,18 @@ def main(argv: list[str] | None = None) -> None:
     vision = sub.add_parser("vision", help="Распознать одно фото домашней работы")
     vision.add_argument("image", type=Path)
     vision.add_argument("--prompt-version", default="v1")
+    vision.add_argument(
+        "--two-stage", action="store_true", help="Транскрипция + структурирование текстом"
+    )
 
     ev = sub.add_parser("eval", help="Офлайн-прогон Vision по датасету фото")
     ev.add_argument("dataset", type=Path, help="Папка с .jpg/.png")
     ev.add_argument("--out", type=Path, default=Path("data/eval/vision_results.jsonl"))
     ev.add_argument("--prompt-version", default="v1")
     ev.add_argument("--limit", type=int, default=None)
+    ev.add_argument(
+        "--two-stage", action="store_true", help="Транскрипция + структурирование текстом"
+    )
 
     solve = sub.add_parser("solve", help="Эталонное решение задания (Solver + самопроверка)")
     solve.add_argument("task", help="Текст задания")
@@ -71,11 +77,19 @@ async def _run(args: argparse.Namespace) -> None:
             print(f"{result.model}: {result.content!r}")
             print(f"tokens={result.tokens_in}+{result.tokens_out}, latency={result.latency_s:.2f}s")
         elif args.command == "vision":
-            prompt = load_prompt("vision", args.prompt_version)
             try:
-                rec = await recognize_page(
-                    client, args.image.read_bytes(), prompt=prompt, model=settings.vision_model
-                )
+                if args.two_stage:
+                    rec = await recognize_page_two_stage(
+                        client,
+                        args.image.read_bytes(),
+                        vision_model=settings.vision_model,
+                        structure_model=settings.tutor_model,
+                    )
+                else:
+                    prompt = load_prompt("vision", args.prompt_version)
+                    rec = await recognize_page(
+                        client, args.image.read_bytes(), prompt=prompt, model=settings.vision_model
+                    )
             except ImageDecodeError as exc:
                 raise SystemExit(f"{args.image}: {exc}") from exc
             if rec.page is not None:
@@ -96,6 +110,8 @@ async def _run(args: argparse.Namespace) -> None:
                 prompt=prompt,
                 prompt_version=args.prompt_version,
                 limit=args.limit,
+                two_stage=args.two_stage,
+                structure_model=settings.tutor_model,
             )
             print(f"\nПодробности: {args.out} ({len(results)} записей)")
             print(json.dumps({"done": len(results)}, ensure_ascii=False))
