@@ -37,3 +37,6 @@ build/
 
 # Local caches
 .cache/
+
+# runtime: журнал событий, marker long polling
+var/

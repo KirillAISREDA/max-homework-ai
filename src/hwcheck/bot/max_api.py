@@ -5,9 +5,11 @@ marker) — для разработки; webhook (POST /subscriptions) доба�
 """
 
 import logging
+import ssl
 from types import TracebackType
 from typing import Any, Self
 
+import certifi
 import httpx
 
 from hwcheck.bot.models import MaxUpdate
@@ -17,16 +19,41 @@ logger = logging.getLogger(__name__)
 Buttons = list[list[dict[str, str]]]
 
 
+def ssl_verify(extra_ca: str | None) -> ssl.SSLContext | bool:
+    """Контекст TLS для httpx: корни certifi плюс дополнительный CA.
+
+    platform-api2.max.ru подписан НУЦ Минцифры, которого нет в certifi; медиа же
+    могут отдаваться с хостов под публичными CA — поэтому корень добавляется, а не
+    подменяет хранилище. Без extra_ca — дефолт httpx (True). Отсутствующий файл —
+    FileNotFoundError сразу, а не туманная ошибка TLS на первом запросе.
+    """
+    if extra_ca is None:
+        return True
+    context = ssl.create_default_context(cafile=certifi.where())
+    context.load_verify_locations(cafile=extra_ca)
+    return context
+
+
 class MaxClient:
-    def __init__(self, token: str, base_url: str = "https://platform-api2.max.ru") -> None:
+    def __init__(
+        self,
+        token: str,
+        base_url: str = "https://platform-api2.max.ru",
+        *,
+        ca_bundle: str | None = None,
+    ) -> None:
+        verify = ssl_verify(ca_bundle)
         self._http = httpx.AsyncClient(
             base_url=base_url,
             headers={"Authorization": token},
             timeout=httpx.Timeout(100.0),  # long polling до 90 с
+            verify=verify,
         )
         # для скачивания медиа по абсолютным URL из апдейтов: токен бота
         # не должен уходить на сторонний (CDN-) хост
-        self._files = httpx.AsyncClient(timeout=httpx.Timeout(60.0), follow_redirects=True)
+        self._files = httpx.AsyncClient(
+            timeout=httpx.Timeout(60.0), follow_redirects=True, verify=verify
+        )
 
     async def __aenter__(self) -> Self:
         return self

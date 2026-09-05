@@ -28,8 +28,14 @@ def grade(student_steps: list[str], student_answer: str | None, ref: RefSolution
     mismatch_lines = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
     answers_match = compare_answers(student_answer, ref.answer)
 
-    if answers_match is None:
-        verdict: Verdict = "uncertain"
+    if answers_match is None and mismatch_lines:
+        # ответа нет или он не читается, но арифметика доказуемо неверна (SymPy —
+        # источник истины): «803 + 169 = 753» — ошибка, а не «не уверен»
+        verdict: Verdict = "wrong"
+        first_error = mismatch_lines[0]
+        slips: list[int] = []
+    elif answers_match is None:
+        verdict = "uncertain"
         first_error = None
         slips = []
     elif answers_match:

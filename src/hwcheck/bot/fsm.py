@@ -29,6 +29,10 @@ class ChatState(BaseModel):
     tutor: TutorSession | None = None
     tutoring_index: int | None = None
     resolved_indices: list[int] = Field(default_factory=list)  # разобранные ошибки
+    # условия со страниц учебника по номеру задания: фото тетради может прийти
+    # следующим сообщением (сценарий «учебник + тетрадь», сессия 9)
+    textbook_tasks: list[VisionTask] = Field(default_factory=list)
+    textbook_saved_at: float | None = None  # время сохранения условий (TTL в pages.py)
 
 
 class StateStore(Protocol):

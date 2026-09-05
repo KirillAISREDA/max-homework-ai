@@ -27,6 +27,13 @@ _DECIMAL_COMMA = re.compile(r"(?<=\d),(?=\d)")
 _DIVISION_COLON = re.compile(r"(?<=[\d)])\s*:\s*(?=[-\d(])")
 _SQRT_BARE = re.compile(r"√\s*(\d+(?:[.,]\d+)?)")
 _ALLOWED = re.compile(r"^[\d+\-*/(). ]*$")
+# школьная запись результата: «Ответ: 300 человек», «= 300 (чел.) - отдохнуло в августе»
+# «-» перед цифрой — знак числа («Ответ -5»), а не разделитель после метки
+_ANSWER_LABEL = re.compile(r"^\s*ответ\s*(?:[:.—–]|-(?!\d))?\s*", re.IGNORECASE)
+_UNIT_PARENS = re.compile(r"\(\s*[^\d()]*\)")  # скобки без цифр: «(чел.)», «(км)»
+_LEADING_VALUE = re.compile(
+    r"^\s*(?P<value>-?\d+(?:[.,]\d+)?(?:\s+\d+\s*/\s*\d+|\s*/\s*\d+)?)(?P<tail>.*)$", re.S
+)
 _LONG_NUMBER = re.compile(rf"\d{{{MAX_NUMBER_DIGITS + 1},}}")
 # показатель степени — только «голое» число: составной показатель 2**(1+999999999)
 # невидим для проверки величины и школе не нужен
@@ -56,6 +63,10 @@ def parse_line(line: str) -> ParsedLine | None:
     segments = [s.strip() for s in normalized.split("=")]
     if len(segments) < 2 or not all(segments):
         return None
+    # у результата отбрасываем школьный хвост: «300 (чел.) - отдохнуло в августе» → «300»
+    result = _leading_value(segments[-1])
+    if result is not None:
+        segments[-1] = result
 
     values = []
     for segment in segments:
@@ -67,8 +78,15 @@ def parse_line(line: str) -> ParsedLine | None:
 
 
 def parse_value(text: str) -> Any | None:
-    """Одиночное значение (ответ): «3 6/7», «4,5», «90 км/ч» → число или None."""
-    stripped = _strip_units(text)
+    """Одиночное значение (ответ): «3 6/7», «4,5», «90 км/ч», «Ответ: 300 человек» → число.
+
+    None — не парсится (→ uncertain).
+    """
+    if len(text) > MAX_LINE_LENGTH:
+        return None
+    text = _ANSWER_LABEL.sub("", text)
+    leading = _leading_value(text)
+    stripped = leading if leading is not None else _strip_units(text)
     if not stripped or len(stripped) > MAX_LINE_LENGTH or "=" in stripped:
         return None
     return _eval_segment(_normalize(stripped))
@@ -110,6 +128,18 @@ def _eval_segment(segment: str) -> Any | None:
     if not isinstance(value, sympy.Expr) or value.free_symbols:
         return None
     return value
+
+
+def _leading_value(text: str) -> str | None:
+    """Число в начале записи, если дальше только слова/единицы: «300 (чел.) - отдохну-» → «300».
+
+    None, когда хвост содержит другие числа («2 км 300 м», «220 + 180»): такую запись
+    честнее не понять (uncertain), чем обрезать и выдать ложную ошибку.
+    """
+    match = _LEADING_VALUE.match(_UNIT_PARENS.sub(" ", text))
+    if match is None or re.search(r"\d", match.group("tail")):
+        return None
+    return match.group("value")
 
 
 def _strip_units(text: str) -> str:

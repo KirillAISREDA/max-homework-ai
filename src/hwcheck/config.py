@@ -16,6 +16,8 @@ class Settings(BaseSettings):
 
     max_token: str = ""
     max_base_url: str = "https://platform-api2.max.ru"
+    # platform-api2.max.ru подписан НУЦ Минцифры: корень добавляется к certifi
+    max_ca_bundle: str | None = None
 
     # dev-события не попадают в конкурсные метрики (антифрод, Положение п. 2.2)
     environment: str = "dev"

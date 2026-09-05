@@ -5,17 +5,27 @@
 """
 
 import logging
+import time
 from pathlib import Path
 
 from hwcheck.bot.fsm import ChatState, CheckedTask, StateStore
 from hwcheck.bot.max_api import MaxClient, callback_button
 from hwcheck.bot.models import MaxUpdate
+from hwcheck.bot.pages import (
+    MAX_PHOTOS,
+    PageRole,
+    attach_conditions,
+    format_numbers,
+    merge_textbook,
+    page_role,
+    textbook_is_fresh,
+)
 from hwcheck.config import Settings
 from hwcheck.events import EventLog
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.grade import GradeResult, grade
-from hwcheck.pipeline.schemas import VisionTask
+from hwcheck.pipeline.schemas import VisionPage, VisionTask
 from hwcheck.pipeline.solver import FileCache, RefSolution, StructuredOutputError, solve_task
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
 from hwcheck.pipeline.validator import check_steps
@@ -33,6 +43,10 @@ UNREADABLE = (
     "вертикально, при хорошем свете."
 )
 RETRY = "Что-то пошло не так с моей стороны 😔 Попробуй ещё раз через минуту."
+TEXTBOOK_ONLY = (
+    "Вижу страницу учебника ({numbers}) 📖 Пришли фото тетради с решением — "
+    "проверю по этим условиям."
+)
 
 
 class Bot:
@@ -61,7 +75,7 @@ class Bot:
             await self._max.send_message(chat_id, WELCOME)
         elif update.update_type == "message_created" and update.message is not None:
             if update.message.image_urls:
-                await self._on_photo(chat_id, user_id, update.message.image_urls[0])
+                await self._on_photo(chat_id, user_id, update.message.image_urls)
             elif update.message.body and update.message.body.text:
                 await self._on_text(chat_id, user_id, update.message.body.text)
         elif update.update_type == "message_callback" and update.callback is not None:
@@ -69,18 +83,26 @@ class Bot:
                 chat_id, user_id, update.callback.payload or "", update.callback.callback_id or ""
             )
 
-    async def _on_photo(self, chat_id: int, user_id: int | None, url: str) -> None:
-        self._events.log("homework_uploaded", user_id=user_id, user_initiated=True)
-        await self._max.send_message(chat_id, CHECKING)
+    async def _on_photo(self, chat_id: int, user_id: int | None, urls: list[str]) -> None:
+        dropped = max(0, len(urls) - MAX_PHOTOS)
+        self._events.log(
+            "homework_uploaded",
+            user_id=user_id,
+            user_initiated=True,
+            n_photos=len(urls),
+            n_dropped=dropped,
+        )
+        hint = f" Фото больше {MAX_PHOTOS} — возьму первые {MAX_PHOTOS}." if dropped else ""
+        await self._max.send_message(chat_id, CHECKING + hint)
         try:
-            await self._process_photo(chat_id, user_id, url)
+            await self._process_photos(chat_id, user_id, urls[:MAX_PHOTOS])
         except Exception:
             # ребёнок не должен остаться наедине с «Проверяю...» и тишиной
             logger.exception("photo processing failed")
             self._events.log("check_failed", user_id=user_id)
             await self._max.send_message(chat_id, RETRY)
 
-    async def _process_photo(self, chat_id: int, user_id: int | None, url: str) -> None:
+    async def _recognize(self, user_id: int | None, url: str) -> tuple[VisionPage | None, PageRole]:
         image = await self._max.download(url)
         rec = await recognize_page_two_stage(
             self._llm,
@@ -88,6 +110,21 @@ class Bot:
             vision_model=self._settings.vision_model,
             structure_model=self._settings.tutor_model,
         )
+        role = page_role(rec.page)
+        # структура страницы без содержимого — чтобы разбирать спорные роли по логу;
+        # сама транскрипция (текст ребёнка) — только в dev
+        summary = [
+            (
+                t.number,
+                bool(t.task_text.strip()),
+                len(t.student_solution_steps),
+                t.student_answer is not None,
+            )
+            for t in (rec.page.tasks if rec.page else [])
+        ]
+        logger.info("page role=%s tasks(number, has_text, n_steps, has_answer)=%s", role, summary)
+        if self._settings.environment == "dev":
+            logger.info("transcript: %s", rec.raw)
         self._events.log(
             "vision_recognized",
             user_id=user_id,
@@ -95,20 +132,71 @@ class Bot:
             calls=rec.attempts + 1,
             tokens=rec.tokens_in + rec.tokens_out,
             n_tasks=len(rec.page.tasks) if rec.page else 0,
+            role=role,
         )
-        if rec.page is None or not rec.page.tasks:
-            comment = rec.page.page_comment if rec.page else None
-            await self._max.send_message(
-                chat_id, UNREADABLE + (f"\n({comment})" if comment else "")
-            )
-            return
+        return rec.page, role
 
-        checked = []
-        for task in rec.page.tasks:
-            checked.append(await self._check_task(user_id, task))
-        state = ChatState(phase="review", tasks=checked)
-        await self._store.set(chat_id, state)
-        await self._send_review(chat_id, state)
+    async def _recognize_all(
+        self, user_id: int | None, urls: list[str]
+    ) -> list[tuple[VisionPage | None, PageRole]]:
+        """Сбой одного фото (сеть, vision) не теряет остальные; упали все — наверх."""
+        results: list[tuple[VisionPage | None, PageRole]] = []
+        failed = 0
+        for url in urls:
+            try:
+                results.append(await self._recognize(user_id, url))
+            except Exception:
+                failed += 1
+                logger.exception("photo failed: %s", url.split("?")[0])
+        if urls and failed == len(urls):
+            raise RuntimeError("all photos failed")
+        return results
+
+    async def _process_photos(self, chat_id: int, user_id: int | None, urls: list[str]) -> None:
+        """Все фото сообщения: учебник даёт условия, тетрадь — решения.
+
+        Проверяются только задания тетради; условия учебника запоминаются в
+        состоянии чата (TTL), так что тетрадь может прийти и следующим сообщением.
+        """
+        state = await self._store.get(chat_id)
+        textbook = list(state.textbook_tasks) if textbook_is_fresh(state.textbook_saved_at) else []
+        notebook: list[VisionTask] = []
+        new_numbers: list[int] = []
+        comment: str | None = None
+        for page, role in await self._recognize_all(user_id, urls):
+            if page is None:
+                continue
+            if role == "textbook":
+                new_numbers.extend(t.number for t in merge_textbook([], page.tasks))
+                textbook = merge_textbook(textbook, page.tasks)
+            elif role == "notebook":
+                notebook.extend(page.tasks)
+            elif page.page_comment:
+                comment = page.page_comment
+        if not notebook:
+            if new_numbers:
+                remembered = state.model_copy(
+                    update={"textbook_tasks": textbook, "textbook_saved_at": time.time()}
+                )
+                await self._store.set(chat_id, remembered)
+                numbers = format_numbers(new_numbers)
+                await self._max.send_message(chat_id, TEXTBOOK_ONLY.format(numbers=numbers))
+            else:
+                await self._max.send_message(
+                    chat_id, UNREADABLE + (f"\n({comment})" if comment else "")
+                )
+            return
+        checked = [
+            await self._check_task(user_id, task) for task in attach_conditions(notebook, textbook)
+        ]
+        new_state = ChatState(
+            phase="review",
+            tasks=checked,
+            textbook_tasks=textbook,
+            textbook_saved_at=time.time() if textbook else None,
+        )
+        await self._store.set(chat_id, new_state)
+        await self._send_review(chat_id, new_state)
 
     async def _check_task(self, user_id: int | None, task: VisionTask) -> CheckedTask:
         ref: RefSolution | None = None
