@@ -41,7 +41,9 @@ async def run_polling(settings: Settings) -> None:
     # весь бэклог (дубли ответов и токены), либо потерял бы сообщения
     marker_path = Path(settings.events_path).parent / "max_marker.txt"
     async with (
-        MaxClient(settings.max_token, settings.max_base_url) as max_client,
+        MaxClient(
+            settings.max_token, settings.max_base_url, ca_bundle=settings.max_ca_bundle
+        ) as max_client,
         GigaChatClient(settings) as llm,
     ):
         me = await max_client.me()

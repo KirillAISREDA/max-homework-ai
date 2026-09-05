@@ -166,6 +166,7 @@ name = "hwcheck"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "certifi" },
     { name = "gigachat" },
     { name = "httpx" },
     { name = "pillow" },
@@ -184,6 +185,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "certifi", specifier = ">=2024.2.2" },
     { name = "gigachat", specifier = ">=0.1.42" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pillow", specifier = ">=12.3.0" },

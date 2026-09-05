@@ -39,11 +39,22 @@ class MaxMessageBody(_Model):
     attachments: list[MaxAttachment] = []
 
 
+class MaxLink(_Model):
+    """Пересланное (forward) или отвеченное (reply) сообщение.
+
+    При пересылке фото боту body внешнего сообщения приходит пустым — вложения
+    лежат здесь (живой тест, сессия 9)."""
+
+    type: str = ""
+    message: MaxMessageBody | None = None
+
+
 class MaxMessage(_Model):
     sender: MaxUser | None = None
     recipient: MaxRecipient | None = None
     timestamp: int | None = None
     body: MaxMessageBody | None = None
+    link: MaxLink | None = None
 
     @property
     def chat_id(self) -> int | None:
@@ -51,9 +62,15 @@ class MaxMessage(_Model):
 
     @property
     def image_urls(self) -> list[str]:
-        if self.body is None:
-            return []
-        return [a.url for a in self.body.attachments if a.type == "image" and a.url]
+        """Свои вложения первыми, затем из пересланного/отвеченного сообщения."""
+        bodies = [self.body, self.link.message if self.link else None]
+        return [
+            a.url
+            for body in bodies
+            if body is not None
+            for a in body.attachments
+            if a.type == "image" and a.url
+        ]
 
 
 class MaxCallback(_Model):
