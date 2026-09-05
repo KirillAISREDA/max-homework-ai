@@ -217,3 +217,49 @@
 Проверка 05.09 15:56 (тетрадь №19 + учебник) — correct, солвер из кэша. 166 тестов. Фото тестера сохранены в `data/hw4_*.jpg`.
 
 **Открыто**: «все строки верны, ответа нет» остаётся uncertain — можно сверять значение последней строки с эталоном; confidence распознавания в вердикт не входит (арх. §3.3: < 0.7 → переснять).
+
+---
+
+## 2026-09-05 — Сессия 10: бот переехал с ПК в контейнер на VPS
+
+Вопрос «где крутится бот» — ответ был «на ПК Кирилла, long polling, сейчас остановлен». Решение
+Кирилла: развернуть в отдельном контейнере на VPS `193.247.73.243`, предварительно проверив ресурсы и порты.
+
+**Проверка VPS (до деплоя):** Ubuntu 22.04, 4 vCPU (EPYC), 7.7 ГБ RAM (4.8 свободно), 53 ГБ диска
+свободно, load 0.4, swap нет. Docker 29 + Compose v5, ~25 чужих контейнеров (priomych, ai-builder,
+razvodov, healthcoach, hostess, nocodb, portainer), системный Caddy на 80/443, Tailscale. Наружу
+открыты только 22/80/443/8090/9000 — нам порты не нужны (polling). Egress к platform-api2.max.ru,
+ngw/gigachat.devices.sberbank.ru, PyPI, Docker Hub — есть. SSH к GitHub с VPS нет, но репо публичный —
+клонируем по HTTPS. Побочно: build cache Docker 38 ГБ (35 ГБ reclaimable), два чужих контейнера
+в restart-loop (healthcoach_bot, razbordolgov-bot-1) — не трогал.
+
+**Сделано:**
+- `Dockerfile` (python:3.12-slim + uv 0.12.7, `uv sync --locked --no-dev`, editable-установка —
+  `prompts/` и `certs/` лежат рядом с `src/`, как ждёт `PROMPTS_DIR`; non-root uid 1000),
+  `.dockerignore`, `docker-compose.yml` (restart unless-stopped, лимит 1 ГБ, тома `var/` и `.cache/`,
+  healthcheck по mtime `max_marker.txt` — окно 5 минут, т.к. альбом из 4 фото обрабатывается до
+  пары минут между опросами).
+- На VPS: `/opt/max-homework-ai` = git-клон main + файлы деплоя + `.env` + перенесённые с ПК
+  `var/max_marker.txt`, `var/events.jsonl`, `.cache/solver`. Образ 581 МБ, сборка ~1 мин.
+- Runbook: `docs/deploy.md` (обновление, диагностика, переключение dev→prod, ограничения).
+
+**Живая проверка:** контейнер healthy, 134 МБ RAM. Сразу после старта подхватил сообщение тестера,
+пришедшее пока бот лежал (marker с ПК продолжился без дублей и потерь): тетрадь «803 + 169 = 972»
++ страница учебника → №17 по числам → солвер из кэша → **correct**. Полный цикл в контейнере работает.
+
+**Решения:** остаёмся на polling (webhook не нужен, пока один поллер справляется); `ENVIRONMENT=dev`
+на VPS до первого реального пользователя; Cloud.ru — позже, VPS общий и хватает с запасом.
+Инвариант: **один поллер на токен** — локально `hwcheck bot` больше не запускать, пока жив контейнер.
+
+**Ревью деплой-файлов (code-reviewer):** HIGH «`deploy.resources.limits` не действует без Swarm» — снято
+фактом: `docker inspect` показывает Memory=1 GiB (Compose v2+ применяет лимит). Два MEDIUM закрыты:
+(1) bind-тома `var/`, `.cache/` должны принадлежать uid 1000 — шаг первого запуска в `docs/deploy.md`
+и комментарий в compose; (2) остановка: `stop_grace_period: 150s` бесполезен без обработки сигнала —
+раннер теперь ловит SIGTERM (`signal.signal`, работает и на Windows): простаивающий long poll отменяется
+сразу (marker не сдвинут, апдейты придут после рестарта), а уже полученный батч дообрабатывается
+(marker к нему сохранён — иначе сообщения потерялись бы). Три теста на `_poll_loop`/хендлер, 169 тестов.
+Подводный камень: `stop.set()` прямо из сигнального хендлера не будит loop, спящий в select(), — первый замер дал рестарт 14.7 с (ждали конца long poll); через `loop.call_soon_threadsafe(stop.set)` (self-pipe) — **650 мс**. В логах «SIGTERM: finishing current batch» → «bot stopped».
+
+**Открыто:** FSM диалога in-memory — рестарт контейнера сбрасывает открытые разборы (Redis StateStore
+в TODO); файлы деплоя ещё не закоммичены — на VPS они лежат поверх клона, после коммита `git pull`
+попросит их убрать (`rm Dockerfile .dockerignore docker-compose.yml && git pull`).
