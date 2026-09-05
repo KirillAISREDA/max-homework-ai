@@ -170,3 +170,94 @@ async def test_callback_out_of_range_is_safe(tmp_path: Path, payload: str) -> No
     await bot.handle_update(MaxUpdate.model_validate(update))
     assert fake_max.callbacks == ["cb1"]
     assert fake_max.sent == []
+
+
+# --- graceful shutdown раннера (docker stop → SIGTERM) ---
+
+
+class FakeBotSink:
+    def __init__(self) -> None:
+        self.handled: list[str] = []
+
+    async def handle_update(self, update: MaxUpdate) -> None:
+        self.handled.append(update.update_type)
+
+
+async def test_poll_loop_finishes_fetched_batch_after_stop(tmp_path: Path) -> None:
+    """Marker сдвинут вместе с полученным батчем — батч дообрабатывается даже при stop."""
+    import asyncio
+
+    from hwcheck.bot.runner import _load_marker, _poll_loop
+
+    stop = asyncio.Event()
+
+    class Poller:
+        calls = 0
+
+        async def get_updates(
+            self, marker: int | None, *, timeout: int = 30
+        ) -> tuple[list[MaxUpdate], int | None]:
+            self.calls += 1
+            stop.set()  # SIGTERM пришёл, пока ответ уже в пути
+            return [MaxUpdate.model_validate(u) for u in (UNKNOWN_UPDATE, TEXT_UPDATE)], 777
+
+    poller, sink = Poller(), FakeBotSink()
+    marker_path = tmp_path / "marker.txt"
+    await asyncio.wait_for(
+        _poll_loop(poller, sink, marker_path, stop),  # type: ignore[arg-type]
+        timeout=5,
+    )
+    assert poller.calls == 1
+    assert sink.handled == ["chat_title_changed", "message_created"]
+    assert _load_marker(marker_path) == 777
+
+
+async def test_poll_loop_cancels_idle_long_poll_on_stop(tmp_path: Path) -> None:
+    """Простаивающий long poll (до 30 с) не задерживает остановку; marker не трогаем."""
+    import asyncio
+
+    from hwcheck.bot.runner import _poll_loop
+
+    stop = asyncio.Event()
+
+    class Poller:
+        cancelled = False
+
+        async def get_updates(
+            self, marker: int | None, *, timeout: int = 30
+        ) -> tuple[list[MaxUpdate], int | None]:
+            try:
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+            return [], 1
+
+    poller, sink = Poller(), FakeBotSink()
+    marker_path = tmp_path / "marker.txt"
+    task = asyncio.create_task(_poll_loop(poller, sink, marker_path, stop))  # type: ignore[arg-type]
+    await asyncio.sleep(0.05)
+    stop.set()
+    await asyncio.wait_for(task, timeout=2)
+    assert poller.cancelled
+    assert sink.handled == []
+    assert not marker_path.exists()
+
+
+async def test_stop_handler_wakes_loop_and_sets_event() -> None:
+    import asyncio
+    import signal
+
+    from hwcheck.bot.runner import _install_stop_handler
+
+    stop = asyncio.Event()
+    previous = signal.getsignal(signal.SIGTERM)
+    try:
+        _install_stop_handler(stop, asyncio.get_running_loop())
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+        handler(signal.SIGTERM, None)
+        # set() приходит через call_soon_threadsafe — ждём его, а не крутим цикл вручную
+        await asyncio.wait_for(stop.wait(), timeout=1)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
