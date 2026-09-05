@@ -261,5 +261,5 @@ ngw/gigachat.devices.sberbank.ru, PyPI, Docker Hub — есть. SSH к GitHub �
 Подводный камень: `stop.set()` прямо из сигнального хендлера не будит loop, спящий в select(), — первый замер дал рестарт 14.7 с (ждали конца long poll); через `loop.call_soon_threadsafe(stop.set)` (self-pipe) — **650 мс**. В логах «SIGTERM: finishing current batch» → «bot stopped».
 
 **Открыто:** FSM диалога in-memory — рестарт контейнера сбрасывает открытые разборы (Redis StateStore
-в TODO); файлы деплоя ещё не закоммичены — на VPS они лежат поверх клона, после коммита `git pull`
-попросит их убрать (`rm Dockerfile .dockerignore docker-compose.yml && git pull`).
+в TODO); коммит `bff0231` в ветке `feat/vps-deploy`, PR #11. Каталог на VPS переведён на эту же ветку
+(`.env`, `var/`, `.cache/` не тронуты, контейнер не пересобирался). После merge: `git checkout main && git pull`.
