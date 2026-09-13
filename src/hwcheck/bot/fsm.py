@@ -2,17 +2,24 @@
 
 idle → checking (фото в обработке) → review (результаты + кнопки «Разобрать»)
 → tutoring (диалог по одному заданию) → review → … Хранилище за протоколом:
-in-memory сейчас, Redis (TTL 24 ч) при деплое без смены кода обработчиков.
+Redis (арх. §6.2, TTL 24 ч) на сервере, in-memory — локально и в тестах.
 """
 
+import logging
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+from redis.asyncio import Redis
 
+from hwcheck.events import anonymize
 from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.tutor import TutorSession
+
+logger = logging.getLogger(__name__)
+
+STATE_TTL_S = 24 * 3600
 
 DialogPhase = Literal["idle", "checking", "review", "tutoring"]
 
@@ -50,3 +57,30 @@ class InMemoryStateStore:
 
     async def set(self, chat_id: int, state: ChatState) -> None:
         self._states[chat_id] = state
+
+
+class RedisStateStore:
+    """Состояние чата — JSON в `fsm:<обезличенный chat_id>` с TTL, продлевается при записи."""
+
+    def __init__(self, client: Redis, *, ttl_s: int = STATE_TTL_S) -> None:
+        self._client = client
+        self._ttl_s = ttl_s
+
+    async def get(self, chat_id: int) -> ChatState:
+        raw = await self._client.get(_key(chat_id))
+        if raw is None:
+            return ChatState()
+        try:
+            return ChatState.model_validate_json(raw)
+        except ValidationError:
+            # схема ChatState поменялась между деплоями: чат начинает заново, а не падает
+            logger.warning("chat state unreadable, reset to idle")
+            return ChatState()
+
+    async def set(self, chat_id: int, state: ChatState) -> None:
+        await self._client.set(_key(chat_id), state.model_dump_json(), ex=self._ttl_s)
+
+
+def _key(chat_id: int) -> str:
+    # 152-ФЗ: сырой id MAX не хранится нигде, включая ключи Redis
+    return f"fsm:{anonymize(chat_id)}"

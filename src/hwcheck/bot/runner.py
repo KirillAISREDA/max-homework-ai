@@ -16,12 +16,15 @@ import signal
 from pathlib import Path
 from types import FrameType
 
-from hwcheck.bot.fsm import InMemoryStateStore
+from redis.asyncio import Redis
+
+from hwcheck.bot.fsm import InMemoryStateStore, RedisStateStore, StateStore
 from hwcheck.bot.handlers import Bot
 from hwcheck.bot.max_api import MaxClient
 from hwcheck.config import Settings
 from hwcheck.events import EventLog
 from hwcheck.llm.gigachat_client import GigaChatClient
+from hwcheck.photos import PhotoStore
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +53,21 @@ def _install_stop_handler(stop: asyncio.Event, loop: asyncio.AbstractEventLoop) 
         loop.call_soon_threadsafe(stop.set)
 
     signal.signal(signal.SIGTERM, _on_term)
+
+
+def _make_state_store(settings: Settings) -> tuple[StateStore, Redis | None]:
+    """Redis, если задан REDIS_URL; клиент возвращается, чтобы закрыть его при остановке."""
+    if not settings.redis_url:
+        return InMemoryStateStore(), None
+    # таймауты: зависший Redis даёт быстрое исключение, а не останавливает весь polling
+    client = Redis.from_url(settings.redis_url, socket_timeout=5, socket_connect_timeout=5)
+    return RedisStateStore(client), client
+
+
+def _make_photo_store(settings: Settings) -> PhotoStore | None:
+    if settings.photos_ttl_days <= 0:
+        return None
+    return PhotoStore(Path(settings.photos_dir), settings.photos_ttl_days)
 
 
 async def _poll_loop(
@@ -89,13 +107,18 @@ async def _poll_loop(
 async def run_polling(settings: Settings) -> None:
     if not settings.max_token:
         raise SystemExit("Не задан MAX_TOKEN (токен бота MAX, см. .env.example)")
-    events = EventLog(Path(settings.events_path), settings.environment)
-    store = InMemoryStateStore()
+    events = EventLog(
+        Path(settings.events_path), settings.environment, test_users=settings.test_user_hashes
+    )
+    store, redis_client = _make_state_store(settings)
     # marker переживает рестарт: без него после падения бот либо перечитал бы
     # весь бэклог (дубли ответов и токены), либо потерял бы сообщения
     marker_path = Path(settings.events_path).parent / "max_marker.txt"
     stop = asyncio.Event()
     _install_stop_handler(stop, asyncio.get_running_loop())
+    if redis_client is not None:
+        # Redis недоступен — лучше не стартовать (health покажет), чем терять диалоги молча
+        await redis_client.ping()
     async with (
         MaxClient(
             settings.max_token, settings.max_base_url, ca_bundle=settings.max_ca_bundle
@@ -105,6 +128,10 @@ async def run_polling(settings: Settings) -> None:
         me = await max_client.me()
         logger.info("bot started: %s", me.get("name") or me)
         print(f"Бот запущен: {me.get('name', me)}. Ctrl+C — остановка.")
-        bot = Bot(max_client, llm, store, events, settings)
-        await _poll_loop(max_client, bot, marker_path, stop)
+        bot = Bot(max_client, llm, store, events, settings, photos=_make_photo_store(settings))
+        try:
+            await _poll_loop(max_client, bot, marker_path, stop)
+        finally:
+            if redis_client is not None:
+                await redis_client.aclose()
         logger.info("bot stopped")
