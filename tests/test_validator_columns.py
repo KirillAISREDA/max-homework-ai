@@ -23,7 +23,7 @@ def statuses(steps: list[str]) -> list[str]:
         ["1000", "-", "358", "642"],
         ["1000", "− 358", "642"],
         ["4,5", "+3,25", "7,75"],
-        ["45", "× 3", "135"],
+        ["45", "× 3", "---", "135"],
     ],
 )
 def test_correct_column_result_is_ok(steps: list[str]) -> None:
@@ -54,6 +54,18 @@ def test_two_columns_in_a_row() -> None:
 def test_not_a_column(steps: list[str]) -> None:
     checks = check_steps(steps)
     assert [c.status for c in checks if c.line in ("972", "1035")] in (["skipped"], [])
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        ["5", "-3", "3"],  # три отдельных ответа, не столбик (ревью)
+        ["45", "× 3", "130"],  # однозначный операнд без черты — не узнаём
+        ["12", "+7", "20"],
+    ],
+)
+def test_short_operands_without_rule_are_not_a_column(steps: list[str]) -> None:
+    assert set(statuses(steps)) == {"skipped"}
 
 
 def test_column_error_makes_task_wrong() -> None:

@@ -94,6 +94,8 @@ def grade_by_lines(checks: list[LineCheck]) -> GradeResult:
     mismatches = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
     if mismatches:
         verdict: Verdict = "wrong"
+    elif any(c.doubtful for c in checks):
+        verdict = "uncertain"
     elif any(c.status == "ok" for c in checks):
         verdict = "correct"
     else:

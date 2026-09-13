@@ -66,6 +66,52 @@ def test_not_checkable_lines_stay_skipped(line: str) -> None:
     assert statuses([line]) == ["skipped"]
 
 
+# --- ревью: корень не должен перетекать между несвязанными уравнениями ---
+
+
+def test_independent_one_line_equations_are_not_an_error() -> None:
+    # два разных уравнения без решения между ними: новое это уравнение или ошибка
+    # преобразования — не знаем, поэтому «не уверен», а не ложная «ошибка»
+    steps = ["2x + 4 = 18", "x - 3 = 5"]
+    assert "mismatch" not in statuses(steps)
+    assert _validator_only_grade(steps).verdict == "uncertain"
+
+
+def test_formula_letter_reused_across_items_is_not_an_error() -> None:
+    assert statuses(["S = 6 * 4", "S = 5 * 5", "S = 3 * 3"]) == ["ok", "ok", "ok"]
+    assert _validator_only_grade(["S = 6 * 4", "S = 5 * 5"]).verdict == "correct"
+    ref = RefSolution(steps=[], answer="25")
+    condition = "Найди площадь: а) 6 и 4; б) 5 и 5"
+    steps = ["а) S = 6 * 4", "б) S = 5 * 5 = 25"]
+    assert grade(steps, None, ref, condition=condition).verdict == "correct"
+
+
+def test_transformation_sharing_numbers_is_still_checked() -> None:
+    checks = check_steps(["3x + 4 = 19", "3x = 19 + 4", "3x = 23"])
+    assert [c.status for c in checks] == ["ok", "mismatch", "ok"]
+    assert checks[1].values[0] == "5"
+
+
+def test_item_marker_starts_a_new_equation() -> None:
+    assert statuses(["а) 2x + 4 = 18", "б) x - 3 = 5"]) == ["ok", "ok"]
+
+
+def test_formula_with_numbers_is_computed_work_not_equation() -> None:
+    check = check_steps(["S = 6 * 4 = 24"])[0]
+    assert (check.status, check.equation) == ("ok", False)
+
+
+def test_letter_with_dot_is_not_an_item_marker() -> None:
+    assert statuses(["x.x = 1"]) == ["skipped"]
+
+
+def test_variable_whitelist_rejects_non_variable_x() -> None:
+    from hwcheck.pipeline.mathparse import _eval_segment
+
+    for segment in ("x.x", "0x1f", "xx", "x.real"):
+        assert _eval_segment(segment, allow_variable=True) is None
+
+
 def test_answer_with_variable_is_parsed() -> None:
     assert parse_value("x = 7") == 7
     assert parse_value("Ответ: х = 7") == 7

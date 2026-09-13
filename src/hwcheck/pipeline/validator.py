@@ -5,6 +5,7 @@ LLM не является источником истины: и шаги уче�
 """
 
 import re
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import sympy
@@ -26,11 +27,25 @@ class LineCheck(BaseModel):
     line: str
     status: LineStatus
     values: list[str] = []  # вычисленные значения сегментов между «=» (ok и mismatch)
-    # строка уравнения: values — корень ([верный, записанный] при mismatch)
+    # уравнение («3x + 4 = 19»): values — корень ([верный, записанный] при mismatch);
+    # присваивание «S = 6 * 4» и ответ «x = 7» — посчитанная работа, не уравнение
     equation: bool = False
+    # корень сменился, но это может быть новое уравнение, а не ошибка → «не уверен»
+    doubtful: bool = False
 
 
-_Root = tuple[str, Any]  # (буква переменной, корень) последней строки цепочки уравнения
+@dataclass
+class _Chain:
+    """Открытая цепочка преобразований одного уравнения."""
+
+    variable: str
+    root: Any
+    origin: Literal["equation", "assignment"]  # чем цепочка началась
+    numbers: frozenset[str]  # числа последней строки цепочки
+
+
+# столько общих чисел с предыдущей строкой — и новая строка точно её преобразует
+TRANSFORMATION_SHARED_NUMBERS = 2
 
 # строки столбика: число; знак с числом («+169», «− 358»); знак отдельно; черта
 _COLUMN_NUMBER = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*$")
@@ -51,7 +66,7 @@ def check_steps(steps: list[str], *, condition: str | None = None) -> list[LineC
     """
     checks = []
     tail: str | None = None  # посчитанная правая часть предыдущей строки
-    root: _Root | None = None  # корень предыдущей строки уравнения в текущей цепочке
+    chain: _Chain | None = None  # открытая цепочка преобразований уравнения
     columns = _column_results(steps)
     for index, line in enumerate(steps):
         continues = line.lstrip().startswith("=") and tail is not None
@@ -60,7 +75,7 @@ def check_steps(steps: list[str], *, condition: str | None = None) -> list[LineC
         parsed = parse_line(expression)
         equation = parse_equation(line) if parsed is None else None
         if equation is not None:
-            check, root = _check_equation(line, equation, root)
+            check, chain = _check_equation(line, equation, chain)
             checks.append(check)
             tail = None
             continue
@@ -154,8 +169,16 @@ def _match_column(steps: list[str], kinds: list[str], start: int) -> tuple[int, 
             left, op, right = _number(lines[0]), lines[1].strip(), _number(lines[2])
         if op in _MULTIPLY and min(len(left), len(right)) > 1:
             return None
+        if result == end and min(_digits(left), _digits(right)) < 2:
+            # без черты «5 / -3 / 3» — скорее три отдельных ответа, чем столбик (ревью):
+            # столбиком считают многозначные числа, однозначные — только под чертой
+            continue
         return result, f"{left} {op} {right} = {_number(steps[result])}"
     return None
+
+
+def _digits(number: str) -> int:
+    return sum(ch.isdigit() for ch in number)
 
 
 def _number(line: str) -> str:
@@ -171,17 +194,22 @@ def _signed(line: str) -> tuple[str, str]:
 
 
 def _check_equation(
-    line: str, equation: EquationLine, previous: _Root | None
-) -> tuple[LineCheck, _Root | None]:
+    line: str, equation: EquationLine, chain: _Chain | None
+) -> tuple[LineCheck, _Chain | None]:
     """Преобразование уравнения сохраняет корень (живые логи 07.09, №462).
 
     Корень считается по каждой паре соседних сегментов с переменной; числовые пары
-    («x = 12 - 5 = 8») проверяются как обычная арифметика. Корень поменялся по сравнению
-    с предыдущей строкой той же переменной — ошибка на этой строке; дальше цепочка
-    сверяется с новым корнем, чтобы не размножать одну ошибку. Строка «x = число»
-    закрывает цепочку: следующее уравнение того же задания начинается заново.
+    («x = 12 - 5 = 8») проверяются как обычная арифметика. Смена корня относительно
+    открытой цепочки той же переменной — ошибка, только когда строка точно продолжает
+    цепочку: выделение переменной («x = 12 + 5», «x = 17») после уравнения, либо
+    уравнение, преобразующее предыдущую строку (общие числа). Уравнение без связи с
+    предыдущим («2x + 4 = 18», затем «x - 3 = 5») может быть новым заданием — это
+    «не уверен», а не ложная ошибка (ревью). Присваивания подряд («S = 6 * 4»,
+    «S = 5 * 5») — разные вычисления. «x = число» и маркер пункта закрывают цепочку.
     Нет единственного корня (два корня, тождество, степень > 2) — строка не проверяется.
     """
+    if equation.item_marker:
+        chain = None
     segments = equation.segments
     roots = []
     numeric_ok = True
@@ -195,17 +223,40 @@ def _check_equation(
             numeric_ok = False
     root = roots[0]
     consistent = numeric_ok and all(sympy.simplify(r - root) == 0 for r in roots[1:])
-    expected = previous[1] if previous and previous[0] == equation.variable else None
-    if expected is not None and sympy.simplify(root - expected) != 0:
-        consistent = False
-    values = [str(expected if expected is not None else root)]
-    if not consistent:
-        values.append(str(root))
+    if chain is not None and chain.variable != equation.variable:
+        chain = None
+    wrong_step, doubtful = _root_change(equation, root, chain)
+
+    # при ошибке шага values[0] — верный корень цепочки (цель разбора для тьютора)
+    values = [str(chain.root), str(root)] if wrong_step and chain is not None else [str(root)]
+    status: LineStatus = "mismatch" if wrong_step or not consistent else "ok"
     check = LineCheck(
-        line=line, status="ok" if consistent else "mismatch", values=values, equation=True
+        line=line,
+        status="skipped" if doubtful and status == "ok" else status,
+        values=values,
+        equation=equation.kind == "equation",
+        doubtful=doubtful,
     )
-    next_root = None if equation.solved_form else (equation.variable, root)
-    return check, next_root
+    if equation.kind == "answer":
+        return check, None
+    continues = chain is not None and chain.origin == "equation" and not doubtful
+    origin: Literal["equation", "assignment"] = (
+        "equation" if equation.kind == "equation" or continues else "assignment"
+    )
+    return check, _Chain(equation.variable, root, origin, equation.numbers)
+
+
+def _root_change(equation: EquationLine, root: Any, chain: _Chain | None) -> tuple[bool, bool]:
+    """(ошибка шага, сомнение), когда корень строки отличается от корня цепочки."""
+    if chain is None or sympy.simplify(root - chain.root) == 0:
+        return False, False
+    after_equation = chain.origin == "equation"
+    if equation.kind == "equation":
+        shared = len(equation.numbers & chain.numbers)
+        transforms = after_equation and shared >= TRANSFORMATION_SHARED_NUMBERS
+        return transforms, not transforms
+    # «x = 17» или «x = 12 + 5» после уравнения — выделение переменной из него
+    return equation.kind == "answer" or after_equation, False
 
 
 def last_value_matches(checks: list[LineCheck], ref_answer: str | None) -> bool:

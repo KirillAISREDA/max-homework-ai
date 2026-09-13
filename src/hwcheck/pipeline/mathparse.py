@@ -11,7 +11,7 @@ float-погрешностей) или None, если строка не явля
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import sympy
 from sympy.parsing.sympy_parser import parse_expr, rationalize, standard_transformations
@@ -56,6 +56,11 @@ _VARIABLE = re.compile(r"(?<![A-Za-zА-Яа-яЁё])([A-Za-z]|х)(?![A-Za-zА-Я
 _IMPLICIT_MUL_BEFORE = re.compile(r"(?<=[\d)])\s*(?=x)")  # «3x», «(2+1)x» → «3*x»
 _IMPLICIT_MUL_AFTER = re.compile(r"(?<=x)\s*(?=[\d(])")  # «x(» , «x2» → «x*(»
 _NUMBER_LITERAL = re.compile(r"^-?\d+(?:\.\d+)?(?:/\d+)?$")
+_NUMBER_TOKEN = re.compile(r"\d+(?:\.\d+)?")
+# «x» как переменная для whitelist: не часть «x.x», «0x1f», «xx» — только отдельный символ
+_VARIABLE_TOKEN = re.compile(r"(?<![\w.])x(?![\w.])")
+# маркер пункта для уравнений: буква — только со скобкой («а)»), «x.» — не маркер
+_EQUATION_ITEM = re.compile(r"^\s*(№\s*\d+[.)]?|[а-яёa-z]\)|\d{1,2}\)|\d{1,2}\.\s)\s*")
 _ANSWER_VARIABLE = re.compile(r"^\s*(?:[A-Za-z]|х)\s*=\s*(?=[-\d])")  # «x = 7» → «7»
 MAX_EQUATION_DEGREE = 2
 
@@ -94,20 +99,31 @@ def parse_line(line: str) -> ParsedLine | None:
     return ParsedLine(values=values)
 
 
+EquationKind = Literal["equation", "assignment", "answer"]
+
+
 @dataclass
 class EquationLine:
-    """Строка уравнения с одной переменной (приведена к символу X)."""
+    """Строка с одной переменной (приведена к символу X).
+
+    kind: «equation» — переменная внутри выражения («3x + 4 = 19»); «assignment» —
+    переменная слева, справа вычисление («x = 12 - 5», «S = 6 * 4 = 24»); «answer» —
+    переменная равна числу («x = 7»).
+    """
 
     variable: str
     segments: list[Any]  # sympy-выражения сегментов между «=», свободный символ — только X
-    solved_form: bool  # «x = число»: цепочка преобразований на этой строке закончилась
+    kind: EquationKind
+    numbers: frozenset[str]  # числа строки — признак того, что строка преобразует предыдущую
+    item_marker: bool  # «а)», «2)», «№3» в начале — новый пункт задания
 
 
 def parse_equation(line: str) -> EquationLine | None:
     """None — не уравнение с ровно одной переменной (текст, формула с двумя буквами)."""
     if len(line) > MAX_LINE_LENGTH or "=" not in line or "sqrt" in line:
         return None
-    text = _normalize(_ITEM_MARKER.sub("", line))
+    item_marker = _EQUATION_ITEM.match(line) is not None
+    text = _normalize(_EQUATION_ITEM.sub("", line))
     letters = {m.group(1) for m in _VARIABLE.finditer(text)}
     if len(letters) != 1:
         return None
@@ -125,8 +141,17 @@ def parse_equation(line: str) -> EquationLine | None:
         segments.append(value)
     if not any(s.free_symbols for s in segments):
         return None
-    solved_form = raw_segments[0] == "x" and bool(_NUMBER_LITERAL.match(raw_segments[-1]))
-    return EquationLine(variable=variable, segments=segments, solved_form=solved_form)
+    kind: EquationKind = "equation"
+    if raw_segments[0] == "x" and not any(s.free_symbols for s in segments[1:]):
+        literal = all(_NUMBER_LITERAL.match(s) for s in raw_segments[1:])
+        kind = "answer" if literal else "assignment"
+    return EquationLine(
+        variable=variable,
+        segments=segments,
+        kind=kind,
+        numbers=frozenset(_NUMBER_TOKEN.findall(text)),
+        item_marker=item_marker,
+    )
 
 
 def solve_single_root(left: Any, right: Any) -> Any | None:
@@ -191,7 +216,7 @@ def _eval_segment(segment: str, *, allow_variable: bool = False) -> Any | None:
     segment = _school_division(segment)
     without_functions = segment.replace("sqrt", "").replace("**", "*")
     if allow_variable:
-        without_functions = without_functions.replace("x", "")
+        without_functions = _VARIABLE_TOKEN.sub("", without_functions)
     if not _ALLOWED.match(without_functions):
         return None
     if _LONG_NUMBER.search(segment):
