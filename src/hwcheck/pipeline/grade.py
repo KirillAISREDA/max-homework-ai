@@ -28,8 +28,15 @@ class GradeResult(BaseModel):
     line_checks: list[LineCheck]
 
 
-def grade(student_steps: list[str], student_answer: str | None, ref: RefSolution) -> GradeResult:
-    checks = check_steps(student_steps)
+def grade(
+    student_steps: list[str],
+    student_answer: str | None,
+    ref: RefSolution,
+    *,
+    condition: str | None = None,
+) -> GradeResult:
+    """`condition` — печатное условие задания: помогает перечитать знаки, спутанные OCR."""
+    checks = check_steps(student_steps, condition=condition)
     mismatch_lines = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
     answers_match = compare_answers(student_answer, ref.answer)
     if answers_match is None and not mismatch_lines and last_value_matches(checks, ref.answer):

@@ -274,9 +274,11 @@ class Bot:
             except StructuredOutputError:
                 logger.warning("solver failed for task %s", task.number)
         if ref is not None:
-            result = grade(task.student_solution_steps, task.student_answer, ref)
+            result = grade(
+                task.student_solution_steps, task.student_answer, ref, condition=task.task_text
+            )
         else:
-            result = _validator_only_grade(task.student_solution_steps)
+            result = _validator_only_grade(task.student_solution_steps, condition=task.task_text)
         self._events.log(
             "task_checked",
             user_id=user_id,
@@ -437,9 +439,9 @@ def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:
     return index if index < n_tasks else None
 
 
-def _validator_only_grade(steps: list[str]) -> GradeResult:
+def _validator_only_grade(steps: list[str], *, condition: str | None = None) -> GradeResult:
     """Столбик примеров без условия: проверка — только детерминированный пересчёт."""
-    checks = check_steps(steps)
+    checks = check_steps(steps, condition=condition or None)
     mismatches = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
     parseable = any(c.status == "ok" for c in checks) or bool(mismatches)
     if not parseable:

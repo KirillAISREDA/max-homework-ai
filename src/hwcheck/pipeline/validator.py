@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from hwcheck.pipeline.mathparse import (
     EquationLine,
+    ParsedLine,
     parse_equation,
     parse_line,
     parse_value,
@@ -37,13 +38,16 @@ _COLUMN_SIGNED = re.compile(r"^\s*([+\-−×*·])\s*(\d+(?:[.,]\d+)?)\s*$")
 _COLUMN_SIGN = re.compile(r"^\s*([+\-−×*·])\s*$")
 _COLUMN_RULE = re.compile(r"^\s*[-_—–=]{2,}\s*$")
 _MULTIPLY = "×*·"
+# бинарный оператор между числами/скобками: «Вычисли: 15» — не оператор, «(-12)» — знак
+_OPERATOR = re.compile(r"(?<=[\d)])\s*([+\-−*·×:/])\s*(?=[\d(])")
 
 
-def check_steps(steps: list[str]) -> list[LineCheck]:
+def check_steps(steps: list[str], *, condition: str | None = None) -> list[LineCheck]:
     """Строка «= (-12)/2 + (-12)/3 = -10» продолжает предыдущую (живые логи 08.09).
 
     Левой частью становится хвост предыдущей строки после последнего «=», но только
     если та строка сама посчиталась: хвост «b=3» из «Дано: a=5, b=3» — не выражение.
+    `condition` — печатное условие: по нему «:» на месте «·» перечитывается (`_reread`).
     """
     checks = []
     tail: str | None = None  # посчитанная правая часть предыдущей строки
@@ -64,10 +68,39 @@ def check_steps(steps: list[str]) -> list[LineCheck]:
             checks.append(LineCheck(line=line, status="skipped"))
             tail = line if "=" not in line and parse_value(line) is not None else None
             continue
+        if not parsed.consistent and condition:
+            reread = _reread(expression, condition)
+            parsed = reread if reread is not None and reread.consistent else parsed
         status: LineStatus = "ok" if parsed.consistent else "mismatch"
         checks.append(LineCheck(line=line, status=status, values=[str(v) for v in parsed.values]))
         tail = expression.rsplit("=", 1)[-1].strip()
     return checks
+
+
+def _reread(expression: str, condition: str) -> ParsedLine | None:
+    """«:» ученика там, где в печатном условии «·», — умножение (OCR путает знаки).
+
+    Живые логи 06.09, 08.09: учебник «15 · 10 + (30 − 20) · 5», транскрипция тетради
+    «15 * 10 + (30 - 20) : 5». Операторы первого сегмента сверяются с операторами
+    условия по позициям, поэтому только строка, переписывающая условие целиком;
+    «:» на месте печатного «:» не трогается. Настоящая ошибка не маскируется: строка
+    станет верной, только если записанный результат совпал с умножением.
+    """
+    first, rest = expression.split("=", 1)
+    line_ops = list(_OPERATOR.finditer(first))
+    printed = [m.group(1) for m in _OPERATOR.finditer(condition.split("=", 1)[0])]
+    if len(line_ops) != len(printed):
+        return None
+    swaps = [
+        m for m, op in zip(line_ops, printed, strict=True) if m.group(1) == ":" and op in _MULTIPLY
+    ]
+    if not swaps:
+        return None
+    rebuilt = first
+    for match in reversed(swaps):
+        start, end = match.span(1)
+        rebuilt = rebuilt[:start] + "*" + rebuilt[end:]
+    return parse_line(f"{rebuilt}={rest}")
 
 
 def _column_results(steps: list[str]) -> dict[int, str]:
