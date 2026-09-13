@@ -28,7 +28,7 @@ from hwcheck.events import EventLog, anonymize, trace
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.classifier import classify_error
-from hwcheck.pipeline.grade import GradeResult, grade
+from hwcheck.pipeline.grade import GradeResult, grade, grade_by_lines
 from hwcheck.pipeline.schemas import VisionPage, VisionTask
 from hwcheck.pipeline.solver import FileCache, RefSolution, StructuredOutputError, solve_task
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
@@ -370,6 +370,7 @@ class Bot:
             ref=ref,
             error=error,
             first_error_line=item.grade.first_error_line,
+            expected=_error_line_value(item.grade),
         )
 
     async def _on_text(self, chat_id: int, user_id: int | None, text: str) -> None:
@@ -441,22 +442,15 @@ def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:
 
 def _validator_only_grade(steps: list[str], *, condition: str | None = None) -> GradeResult:
     """Столбик примеров без условия: проверка — только детерминированный пересчёт."""
-    checks = check_steps(steps, condition=condition or None)
-    mismatches = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
-    parseable = any(c.status == "ok" for c in checks) or bool(mismatches)
-    if not parseable:
-        verdict = "uncertain"
-    elif mismatches:
-        verdict = "wrong"
-    else:
-        verdict = "correct"
-    return GradeResult(
-        verdict=verdict,  # type: ignore[arg-type]
-        answers_match=None,
-        first_error_line=mismatches[0] if mismatches else None,
-        slip_lines=[],
-        line_checks=checks,
-    )
+    return grade_by_lines(check_steps(steps, condition=condition or None))
+
+
+def _error_line_value(result: GradeResult) -> str | None:
+    """Верное значение первой ошибочной строки (SymPy) — цель разбора для тьютора."""
+    if result.first_error_line is None:
+        return None
+    check = result.line_checks[result.first_error_line - 1]
+    return check.values[0] if check.status == "mismatch" and check.values else None
 
 
 def _pseudo_ref(result: GradeResult) -> RefSolution:

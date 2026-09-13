@@ -43,6 +43,9 @@ class TutorSession(BaseModel):
     ref: RefSolution
     error: ErrorAnalysis | None = None
     first_error_line: int | None = None
+    # верное значение ошибочной строки (SymPy): разбор закрывается им, а не общим ответом
+    # эталона — у задания из нескольких пунктов эталон один на всё (живые логи 06.09)
+    expected: str | None = None
     hint_level: int = 0
     resolved: bool = False
     # history никогда не мутируется на месте — только пересборка списком:
@@ -61,7 +64,7 @@ async def tutor_reply(
     # compare_answers: True → решено; False и None (реплика — не ответ, «не знаю» /
     # непарсящийся текст) одинаково тратят уровень — любая реплика без верного
     # ответа считается запросом следующей подсказки
-    solved_now = compare_answers(student_message, session.ref.answer) is True
+    solved_now = _solves(student_message, session.expected or session.ref.answer)
     if solved_now:
         session = session.model_copy(update={"resolved": True})
     else:
@@ -129,6 +132,18 @@ async def _guard_leak(
     return turn.reply if not _leaks(turn.reply, secrets) else SAFE_REDIRECT
 
 
+def _solves(message: str, target: str) -> bool:
+    """«72» или пересчитанная строка «90 - 18 = 72» — обе формы закрывают разбор."""
+    if compare_answers(message, target) is True:
+        return True
+    parsed = parse_line(message)
+    return (
+        parsed is not None
+        and parsed.consistent
+        and compare_answers(str(parsed.values[-1]), target) is True
+    )
+
+
 def _numeric_values(text: str) -> set[Any]:
     values = set()
     for token in _NUMBER_TOKEN.findall(text):
@@ -147,9 +162,10 @@ def _secret_values(session: TutorSession) -> set[Any]:
         known |= _numeric_values(session.student_answer)
 
     secrets = set()
-    answer = parse_value(session.ref.answer)
-    if answer is not None:
-        secrets.add(answer)
+    for value in (session.ref.answer, session.expected):
+        parsed_value = parse_value(value) if value else None
+        if parsed_value is not None:
+            secrets.add(parsed_value)
     for step in session.ref.steps:
         parsed = parse_line(step)
         if parsed is not None:
@@ -192,4 +208,9 @@ def _context(session: TutorSession, solved_now: bool) -> str:
             + f"\nОтвет: {session.ref.answer}"
             + (f" {session.ref.units}" if session.ref.units else "")
         )
+        if session.expected is not None and session.first_error_line is not None:
+            parts.append(
+                f"Верный результат шага {session.first_error_line}: {session.expected}. "
+                "Разбирай именно этот шаг."
+            )
     return "\n\n".join(parts)
