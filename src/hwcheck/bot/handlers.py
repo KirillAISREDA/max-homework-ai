@@ -16,10 +16,11 @@ from hwcheck.bot.pages import (
     MAX_PHOTOS,
     PageRole,
     attach_conditions,
-    format_numbers,
+    describe_tasks,
     mark_written_numbers,
     merge_textbook,
     page_role,
+    task_label,
     textbook_is_fresh,
 )
 from hwcheck.config import Settings
@@ -214,25 +215,25 @@ class Bot:
         state = await self._store.get(chat_id)
         textbook = list(state.textbook_tasks) if textbook_is_fresh(state.textbook_saved_at) else []
         notebook: list[VisionTask] = []
-        new_numbers: list[int] = []
+        new_textbook: list[VisionTask] = []
         comment: str | None = None
         for page, role in await self._recognize_all(user_id, urls):
             if page is None:
                 continue
             if role == "textbook":
-                new_numbers.extend(t.number for t in merge_textbook([], page.tasks))
+                new_textbook.extend(merge_textbook([], page.tasks))
                 textbook = merge_textbook(textbook, page.tasks)
             elif role == "notebook":
                 notebook.extend(page.tasks)
             elif page.page_comment:
                 comment = page.page_comment
         if not notebook:
-            if new_numbers:
+            if new_textbook:
                 remembered = state.model_copy(
                     update={"textbook_tasks": textbook, "textbook_saved_at": time.time()}
                 )
                 await self._store.set(chat_id, remembered)
-                numbers = format_numbers(new_numbers)
+                numbers = describe_tasks(new_textbook)
                 await self._max.send_message(chat_id, TEXTBOOK_ONLY.format(numbers=numbers))
             else:
                 await self._max.send_message(
@@ -288,19 +289,19 @@ class Bot:
         lines = []
         buttons = []
         for i, item in enumerate(state.tasks):
-            number = item.task.number
+            label = task_label(item.task)
             if item.grade.verdict == "correct":
-                lines.append(f"№{number} — верно ✅")
+                lines.append(f"{label} — верно ✅")
             elif item.grade.verdict == "wrong":
                 where = (
                     f" (строка {item.grade.first_error_line})"
                     if item.grade.first_error_line
                     else ""
                 )
-                lines.append(f"№{number} — есть ошибка{where} ❌")
-                buttons.append([callback_button(f"Разобрать №{number}", f"tutor:{i}")])
+                lines.append(f"{label} — есть ошибка{where} ❌")
+                buttons.append([callback_button(f"Разобрать {_lower(label)}", f"tutor:{i}")])
             else:
-                lines.append(f"№{number} — не уверен, лучше показать взрослому 🤔")
+                lines.append(f"{label} — не уверен, лучше показать взрослому 🤔")
         correct = sum(1 for t in state.tasks if t.grade.verdict == "correct")
         header = f"Проверил! {correct} из {len(state.tasks)} верно.\n"
         await self._max.send_message(chat_id, header + "\n".join(lines), buttons=buttons or None)
@@ -317,7 +318,9 @@ class Bot:
             await self._max.answer_callback(callback_id)
             return
         item = state.tasks[index]
-        await self._max.answer_callback(callback_id, notification=f"Разбираем №{item.task.number}")
+        await self._max.answer_callback(
+            callback_id, notification=f"Разбираем {_lower(task_label(item.task))}"
+        )
         try:
             session = await self._start_tutoring(user_id, item)
             reply, session = await tutor_reply(
@@ -419,7 +422,7 @@ class Bot:
 def _remaining_buttons(state: ChatState) -> list[list[dict[str, str]]]:
     """Кнопки для ещё не разобранных ошибок."""
     return [
-        [callback_button(f"Разобрать №{t.task.number}", f"tutor:{i}")]
+        [callback_button(f"Разобрать {_lower(task_label(t.task))}", f"tutor:{i}")]
         for i, t in enumerate(state.tasks)
         if t.grade.verdict == "wrong" and i not in state.resolved_indices
     ]
@@ -460,3 +463,8 @@ def _pseudo_ref(result: GradeResult) -> RefSolution:
         if check.status == "mismatch" and check.values:
             return RefSolution(steps=[], answer=check.values[0], units=None)
     return RefSolution(steps=[], answer="", units=None)
+
+
+def _lower(label: str) -> str:
+    """«Задание 1» посреди фразы: «Разобрать задание 1»; «№19» не меняется."""
+    return label[:1].lower() + label[1:]

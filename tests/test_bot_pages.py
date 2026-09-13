@@ -146,7 +146,17 @@ async def test_synthetic_numbers_do_not_attach_unrelated_textbook_condition(
     bot, fake_max, _store, solved_texts = harness
     await bot.handle_update(photo_update("fractions", "geometry"))
     assert solved_texts == []
-    assert "1 из 1 верно" in fake_max.sent[-1][1]
+    review = fake_max.sent[-1][1]
+    assert "1 из 1 верно" in review
+    # номера на странице нет — «№1» путал бы ребёнка
+    assert "Задание 1 — верно" in review
+    assert "№1" not in review
+
+
+async def test_textbook_without_numbers_is_described_by_count(harness: Harness) -> None:
+    bot, fake_max, _store, _solved = harness
+    await bot.handle_update(photo_update("geometry"))
+    assert "Вижу страницу учебника (2 задания)" in fake_max.sent[-1][1]
 
 
 async def test_textbook_only_is_remembered_and_used_for_next_notebook(harness: Harness) -> None:

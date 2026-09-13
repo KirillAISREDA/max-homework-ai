@@ -80,19 +80,27 @@ def _condition_of(task: VisionTask) -> str:
 
 
 def merge_textbook(known: list[VisionTask], new: list[VisionTask]) -> list[VisionTask]:
-    """Условия по номеру; новая страница учебника перекрывает старую по тем же номерам."""
-    by_number = {t.number: t for t in known}
+    """Напечатанный номер — ключ: новая страница перекрывает условие с тем же номером.
+
+    Придуманный структуризатором номер («нумеруй с 1») ключом быть не может: у любых
+    двух страниц без номеров есть «№1», и страница «1.124» затирала запомненное
+    «Отметьте точки» (живые логи 13.09). Такие условия копятся рядом до TTL учебника,
+    повтор того же текста не дублируется; сопоставляются они только по содержанию.
+    """
+    written = {t.number: t for t in known if t.number_on_page}
+    synthetic = [t for t in known if not t.number_on_page]
     for task in new:
         condition = _condition_of(task)
-        if condition:
-            by_number[task.number] = task.model_copy(
-                update={
-                    "task_text": condition,
-                    "student_solution_steps": [],
-                    "student_answer": None,
-                }
-            )
-    return [by_number[n] for n in sorted(by_number)]
+        if not condition:
+            continue
+        cleaned = task.model_copy(
+            update={"task_text": condition, "student_solution_steps": [], "student_answer": None}
+        )
+        if task.number_on_page:
+            written[task.number] = cleaned
+        elif all(t.task_text != condition for t in synthetic):
+            synthetic.append(cleaned)
+    return sorted([*written.values(), *synthetic], key=lambda t: (t.number, not t.number_on_page))
 
 
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
@@ -103,21 +111,21 @@ def _numbers(*texts: str) -> set[str]:
     return {m.group(0).replace(",", ".") for text in texts for m in _NUMBER.finditer(text)}
 
 
-def _distinctive_numbers(textbook: list[VisionTask]) -> dict[int, set[str]]:
+def _distinctive_numbers(textbook: list[VisionTask]) -> list[set[str]]:
     """Числа-«подписи» условия: от двух цифр и встречаются ровно в одном условии страницы.
 
     «2» и «10» есть в половине задач начальной школы — по ним сопоставлять нельзя;
-    «220», «180», «700» из одной задачи — надёжная подпись.
+    «220», «180», «700» из одной задачи — надёжная подпись. Индексы — как у `textbook`:
+    номера условий могут повторяться (напечатанный №1 и придуманный №1).
     """
-    per_task = {
-        t.number: {n for n in _numbers(t.task_text) if len(n.replace(".", "")) >= 2}
-        for t in textbook
-    }
+    per_task = [
+        {n for n in _numbers(t.task_text) if len(n.replace(".", "")) >= 2} for t in textbook
+    ]
     counts: dict[str, int] = {}
-    for numbers in per_task.values():
+    for numbers in per_task:
         for n in numbers:
             counts[n] = counts.get(n, 0) + 1
-    return {number: {n for n in numbers if counts[n] == 1} for number, numbers in per_task.items()}
+    return [{n for n in numbers if counts[n] == 1} for numbers in per_task]
 
 
 def attach_conditions(notebook: list[VisionTask], textbook: list[VisionTask]) -> list[VisionTask]:
@@ -132,29 +140,59 @@ def attach_conditions(notebook: list[VisionTask], textbook: list[VisionTask]) ->
     """
     candidates = [t for t in textbook if t.task_text.strip()]
     distinctive = _distinctive_numbers(candidates)
-    scored: list[tuple[int, int, int, VisionTask]] = []
+    scored: list[tuple[int, int, int, int]] = []  # (балл, точный номер, тетрадь, учебник)
     for i, task in enumerate(notebook):
         student = _numbers(task.task_text, *task.student_solution_steps)
-        for candidate in candidates:
+        for j, candidate in enumerate(candidates):
             exact = int(
                 candidate.number == task.number and candidate.number_on_page and task.number_on_page
             )
-            score = 2 * exact + len(student & distinctive[candidate.number])
+            score = 2 * exact + len(student & distinctive[j])
             if score >= CONTENT_MATCH_MIN:
-                scored.append((score, exact, i, candidate))
+                scored.append((score, exact, i, j))
     chosen: dict[int, VisionTask] = {}
     taken: set[int] = set()
-    for _score, exact, i, candidate in sorted(scored, key=lambda x: (-x[0], -x[1], x[2])):
-        if i in chosen or (candidate.number in taken and not exact):
+    for _score, exact, i, j in sorted(scored, key=lambda x: (-x[0], -x[1], x[2])):
+        if i in chosen or (j in taken and not exact):
             continue
-        chosen[i] = candidate
-        taken.add(candidate.number)
+        chosen[i] = candidates[j]
+        taken.add(j)
     return [
-        task.model_copy(update={"task_text": chosen[i].task_text, "number": chosen[i].number})
-        if i in chosen
-        else task
-        for i, task in enumerate(notebook)
+        _with_condition(task, chosen[i]) if i in chosen else task for i, task in enumerate(notebook)
     ]
+
+
+def _with_condition(task: VisionTask, condition: VisionTask) -> VisionTask:
+    """Напечатанный номер учебника надёжнее рукописного; придуманный — не лучше номера тетради."""
+    update: dict[str, object] = {"task_text": condition.task_text}
+    if condition.number_on_page:
+        update |= {"number": condition.number, "number_on_page": True}
+    return task.model_copy(update=update)
+
+
+def task_label(task: VisionTask) -> str:
+    """«№19» — номер со страницы; «Задание 1» — порядковый, чтобы не искать №1 в учебнике."""
+    return f"№{task.number}" if task.number_on_page else f"Задание {task.number}"
+
+
+def describe_tasks(tasks: list[VisionTask]) -> str:
+    """«№16–22», «3 задания», «№5 и ещё 1 задание» — для ответа на страницу учебника."""
+    written = [t.number for t in tasks if t.number_on_page]
+    unnumbered = len(tasks) - len(written)
+    if not written:
+        return _count_tasks(unnumbered)
+    numbers = format_numbers(written)
+    return f"{numbers} и ещё {_count_tasks(unnumbered)}" if unnumbered else numbers
+
+
+def _count_tasks(n: int) -> str:
+    if n % 10 == 1 and n % 100 != 11:
+        word = "задание"
+    elif n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        word = "задания"
+    else:
+        word = "заданий"
+    return f"{n} {word}"
 
 
 def format_numbers(numbers: list[int]) -> str:
