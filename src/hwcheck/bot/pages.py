@@ -81,8 +81,15 @@ def textbook_is_fresh(saved_at: float | None) -> bool:
 
 
 def _condition_of(task: VisionTask) -> str:
-    """У печатного задания вроде «21. 15 · 10 + (30 − 20) · 5» условие — само выражение."""
-    return task.task_text.strip() or "; ".join(task.student_solution_steps).strip()
+    """Условие = текст и выражения под ним.
+
+    «21. 15 · 10 + (30 − 20) · 5» — условие само выражение; «46. Объясни записи на полях.
+    Вычисли.» и под ним «304 · 3 …» — без выражений солвер решал бы только текст
+    (живой альбом 13.09).
+    """
+    text = task.task_text.strip()
+    expressions = "; ".join(s.strip() for s in task.student_solution_steps if s.strip())
+    return f"{text} {expressions}" if text and expressions else text or expressions
 
 
 def merge_textbook(known: list[VisionTask], new: list[VisionTask]) -> list[VisionTask]:
@@ -148,7 +155,10 @@ def attach_conditions(notebook: list[VisionTask], textbook: list[VisionTask]) ->
     distinctive = _distinctive_numbers(candidates)
     scored: list[tuple[int, int, int, int]] = []  # (балл, точный номер, тетрадь, учебник)
     for i, task in enumerate(notebook):
-        student = _numbers(task.task_text, *task.student_solution_steps)
+        # из строк решения — только левые части: результат «150 + 154 = 304» может случайно
+        # совпасть с числом чужого условия («304 · 3»), а операнды переписаны из условия (ревью)
+        operands = (step.split("=", 1)[0] for step in task.student_solution_steps)
+        student = _numbers(task.task_text, *operands)
         for j, candidate in enumerate(candidates):
             exact = int(
                 candidate.number == task.number and candidate.number_on_page and task.number_on_page

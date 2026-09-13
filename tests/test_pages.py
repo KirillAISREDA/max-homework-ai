@@ -84,6 +84,26 @@ def test_merge_textbook_overrides_by_number_and_sorts() -> None:
     assert merged[1].task_text == "новое условие"
 
 
+def test_textbook_condition_keeps_expressions_listed_under_text() -> None:
+    # живой альбом 13.09: «46. Объясни записи на полях. Вычисли.» и под ним «304 · 3 …» —
+    # в условие попадал только текст, солвер решал «Объясни записи» без выражений
+    task = _task(46, "Объясни записи на полях. Вычисли.", ["304 · 3", "481 · 2"])
+    merged = merge_textbook([], [task])
+    assert merged[0].task_text == "Объясни записи на полях. Вычисли. 304 · 3; 481 · 2"
+
+
+def test_results_of_unrelated_work_do_not_attach_textbook_expressions() -> None:
+    # ревью: числа выражений «304 · 3», «481 · 2» совпали с промежуточными результатами
+    # другого задания — тетрадь №52 проверялась бы по условию №46
+    textbook = merge_textbook(
+        [], [_task(46, "Объясни записи на полях. Вычисли.", ["304 · 3", "481 · 2"])]
+    )
+    unrelated = [_task(52, "", ["150 + 154 = 304", "1000 - 519 = 481"], on_page=False)]
+    assert attach_conditions(unrelated, textbook) == unrelated
+    related = [_task(1, "", ["304 * 3 = 912", "481 * 2 = 962"], on_page=False)]
+    assert attach_conditions(related, textbook)[0].number == 46
+
+
 def test_attach_conditions_prefers_textbook_over_notebook_notes() -> None:
     merged = attach_conditions(NOTEBOOK_19, TEXTBOOK)
     assert merged[0].task_text.startswith("В загородном лагере")

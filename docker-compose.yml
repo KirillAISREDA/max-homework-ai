@@ -12,6 +12,8 @@ services:
     environment:
       # состояние диалога (FSM) — в Redis: рестарт бота не сбрасывает разборы тьютора
       REDIS_URL: redis://redis:6379/0
+      # лог бота на томе var/ (ротация 5 МБ × 3): docker logs пропадают при пересборке
+      LOG_PATH: var/bot.log
     depends_on:
       redis:
         condition: service_healthy
