@@ -324,6 +324,12 @@ MEDIUM: debug-лог при падении `parse_expr`; сверка с эта�
 на нём: https://github.com/ai-forever/ReadingPipeline, веса https://huggingface.co/ai-forever/ReadingPipeline-notebooks,
 демо https://huggingface.co/spaces/sberbank-ai/NotebooksRecognition. Есть и `ai-forever/school_notebooks_EN` (90 фото).
 
+**Конкурс:** 13.09 проект допущен к первому этапу Sber500xDisrupt. Дедлайн этапа — 15.10 (MVP + 30 интервью +
+70 реальных пользователей), до первого реального пользователя на VPS нужно переключить `ENVIRONMENT=prod`.
+
+**Выкат:** коммит `941025c`, PR #12 (поверх #11). VPS `/opt/max-homework-ai` переведён на `fix/validator-live-bugs`,
+`docker compose up -d --build`; внутри контейнера проверено `4/5 : 9/10 = 8/9` → ok, «40 . 40» → skipped.
+
 **Новые предметы (Кирилл):** будут русский, английский, окружающий мир и др. Датасет тетрадей для них полезнее, чем
 для математики: там рукописный текст. Главный риск для русского — LLM-vision может «исправлять» орфографию ученика
 при транскрипции; посимвольный OCR (ReadingPipeline без языковой модели) этого не делает. Пункты — в TODO.
