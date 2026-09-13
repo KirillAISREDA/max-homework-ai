@@ -62,7 +62,12 @@ CONDITION_52 = "651 + 126; 379 − 253; 306 − 138; 402 − 243; 453 · 2; 321 
 
 @pytest.mark.parametrize(
     "condition",
-    [CONDITION_52, "651 + 126 306 − 138 453 · 2", "Вычисли. 3 · 196   2 · 438"],
+    [
+        CONDITION_52,
+        "651 + 126 306 − 138 453 · 2",
+        "Вычисли. 3 · 196   2 · 438",
+        "Объясни записи на полях. Вычисли. 304 · 3; 481 · 2",
+    ],
 )
 def test_several_expressions_in_condition_are_multipart(condition: str) -> None:
     assert is_multipart(condition, [])
@@ -77,6 +82,11 @@ def test_several_expressions_in_condition_are_multipart(condition: str) -> None:
         "4/5 : 9/10",
         "Купили 30 кг белой краски, а синей — в 7 раз больше",
         "Реши уравнение 180 − x = 100",
+        # ревью: время, диапазоны и смешанные числа внутри текстовой задачи — не список примеров
+        "Поезд отправляется в 8:15, а прибывает в 10:45. Сколько часов он был в пути?",
+        "Купили ручку за 15-20 рублей и тетрадь за 25-30 рублей. Сколько стоила покупка?",
+        "У Пети было 8 3/7 яблока, он отдал 4 4/7. Сколько осталось?",
+        "Вычисли 15 · 10 + (30 − 20) · 5 и сравни с 200",
     ],
 )
 def test_single_expression_or_word_problem_is_not_multipart(condition: str) -> None:
@@ -89,6 +99,13 @@ def test_all_correct_list_of_examples_is_correct() -> None:
     wrong = ["651 + 126 = 850", *NOTEBOOK_52[1:]]
     result = grade(wrong, None, first_only, condition=CONDITION_52)
     assert (result.verdict, result.first_error_line) == ("wrong", 1)
+
+
+def test_word_problem_with_times_is_still_compared_with_reference() -> None:
+    # ревью: иначе неверный ход с верной арифметикой получал ложное «верно»
+    ref = RefSolution(steps=["165 - 15 = 150"], answer="150")
+    condition = "Поезд отправляется в 8:15, а прибывает в 10:45. Сколько минут он был в пути?"
+    assert grade(["10 - 8 = 2"], "2", ref, condition=condition).verdict == "wrong"
 
 
 def make_session(**update: object) -> TutorSession:

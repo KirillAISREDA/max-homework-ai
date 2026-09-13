@@ -93,6 +93,13 @@ def configure_bot_logging(settings: Settings) -> None:
         handler.setFormatter(formatter)
         root.addHandler(handler)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    if settings.log_path and settings.environment != "prod":
+        # в dev в лог пишутся транскрипции страниц — текст детских тетрадей (ревью)
+        logging.getLogger(__name__).warning(
+            "ENVIRONMENT=%s: транскрипции страниц пишутся в %s; на сервере с пользователями — prod",
+            settings.environment,
+            settings.log_path,
+        )
 
 
 async def _run(args: argparse.Namespace) -> None:

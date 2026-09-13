@@ -155,7 +155,10 @@ def attach_conditions(notebook: list[VisionTask], textbook: list[VisionTask]) ->
     distinctive = _distinctive_numbers(candidates)
     scored: list[tuple[int, int, int, int]] = []  # (балл, точный номер, тетрадь, учебник)
     for i, task in enumerate(notebook):
-        student = _numbers(task.task_text, *task.student_solution_steps)
+        # из строк решения — только левые части: результат «150 + 154 = 304» может случайно
+        # совпасть с числом чужого условия («304 · 3»), а операнды переписаны из условия (ревью)
+        operands = (step.split("=", 1)[0] for step in task.student_solution_steps)
+        student = _numbers(task.task_text, *operands)
         for j, candidate in enumerate(candidates):
             exact = int(
                 candidate.number == task.number and candidate.number_on_page and task.number_on_page
