@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from hwcheck.bot.runner import run_polling
@@ -67,13 +68,40 @@ def main(argv: list[str] | None = None) -> None:
     asyncio.run(_run(args))
 
 
+LOG_MAX_BYTES = 5_000_000
+LOG_BACKUPS = 3
+
+
+def configure_bot_logging(settings: Settings) -> None:
+    """stderr + файл с ротацией (том var/ переживает пересборку контейнера).
+
+    httpx пишет строку на каждый long poll — в лог только его предупреждения.
+    """
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if settings.log_path:
+        path = Path(settings.log_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(
+            RotatingFileHandler(
+                path, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUPS, encoding="utf-8"
+            )
+        )
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    for handler in handlers:
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 async def _run(args: argparse.Namespace) -> None:
     settings = load_settings()
     if not settings.gigachat_credentials:
         raise SystemExit("Не задан GIGACHAT_CREDENTIALS (см. .env.example)")
 
     if args.command == "bot":
-        logging.basicConfig(level=logging.INFO)
+        configure_bot_logging(settings)
         await run_polling(settings)
         return
 

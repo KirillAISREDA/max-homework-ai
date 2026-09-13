@@ -23,6 +23,10 @@ Verdict = Literal["correct", "wrong", "uncertain"]
 # пункт задания: «а)», «б)» в условии или в начале строки решения
 _ITEM = re.compile(r"(?:^|[\s;:,.])([а-еa-e])\)", re.IGNORECASE)
 _STEP_ITEM = re.compile(r"^\s*([а-еa-e])\)", re.IGNORECASE)
+# отдельное арифметическое выражение: числа (со скобками, смешанные «8 3/7»), соединённые
+# знаками; «651 + 126 306 − 138» — два выражения, «15 · 10 + (30 − 20) · 5» — одно
+_NUM = r"\(*\s*\d+(?:[.,]\d+)?(?:\s+\d+\s*/\s*\d+)?\s*\)*"
+_EXPRESSION = re.compile(rf"{_NUM}(?:\s*[+\-−·×*:/]\s*{_NUM})+")
 
 
 class GradeResult(BaseModel):
@@ -83,10 +87,12 @@ def grade(
 
 
 def is_multipart(condition: str | None, steps: list[str]) -> bool:
-    """Два и больше пунктов «а)», «б)» — в условии или в начале строк решения."""
+    """Два и больше пунктов «а)», «б)» (в условии или строках решения) или несколько
+    отдельных примеров в условии: «№52. 651 + 126; 379 − 253; …» (живой альбом 13.09)."""
     labels = {m.group(1).lower() for m in _ITEM.finditer(condition or "")}
     step_labels = {m.group(1).lower() for s in steps if (m := _STEP_ITEM.match(s))}
-    return len(labels) >= 2 or len(step_labels) >= 2
+    expressions = len(_EXPRESSION.findall(condition or ""))
+    return len(labels) >= 2 or len(step_labels) >= 2 or expressions >= 2
 
 
 def grade_by_lines(checks: list[LineCheck]) -> GradeResult:

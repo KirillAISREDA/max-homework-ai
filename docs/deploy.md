@@ -17,7 +17,7 @@
 | Журнал событий / marker | `/opt/max-homework-ai/var/` (том, переживает пересборку) |
 | Фото домашек | `/opt/max-homework-ai/var/photos/<дата UTC>/<хэш user>-<id>.jpg`, удаляются через 30 дней (`PHOTOS_TTL_DAYS`); ключ фото — поле `photo` в `vision_recognized`/`photo_failed` |
 | Кэш солвера | `/opt/max-homework-ai/.cache/solver/` (том) |
-| Логи | `docker compose logs -f` (json-file, ротация 30 МБ × 3 — настройка демона) |
+| Логи | `var/bot.log` (ротация 5 МБ × 3, переживает пересборку) и `docker compose logs -f` (только текущий контейнер) |
 | Health | marker обновляется после каждого GET /updates; «unhealthy» = нет записи 5 минут |
 | Остановка | `docker compose stop`: SIGTERM → бот дообрабатывает полученный батч и выходит (grace 150 с); простаивающий long poll отменяется сразу |
 
@@ -51,7 +51,7 @@ docker compose logs --tail 50
 ```bash
 docker ps --filter name=homework                # статус и health бота и Redis
 docker stats --no-stream homework-bot           # CPU/память (в норме ~130–300 МБ)
-docker compose logs --no-log-prefix | grep -v INFO:httpx | tail -50
+tail -50 var/bot.log                            # роли страниц, ошибки (переживает пересборку)
 tail -5 var/events.jsonl                        # последние события пайплайна (trace_id связывает события апдейта)
 docker exec homework-redis redis-cli --scan --pattern 'fsm:*' | wc -l   # открытые диалоги
 du -sh var/photos                               # объём сохранённых фото

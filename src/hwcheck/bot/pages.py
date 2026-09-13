@@ -81,8 +81,15 @@ def textbook_is_fresh(saved_at: float | None) -> bool:
 
 
 def _condition_of(task: VisionTask) -> str:
-    """У печатного задания вроде «21. 15 · 10 + (30 − 20) · 5» условие — само выражение."""
-    return task.task_text.strip() or "; ".join(task.student_solution_steps).strip()
+    """Условие = текст и выражения под ним.
+
+    «21. 15 · 10 + (30 − 20) · 5» — условие само выражение; «46. Объясни записи на полях.
+    Вычисли.» и под ним «304 · 3 …» — без выражений солвер решал бы только текст
+    (живой альбом 13.09).
+    """
+    text = task.task_text.strip()
+    expressions = "; ".join(s.strip() for s in task.student_solution_steps if s.strip())
+    return f"{text} {expressions}" if text and expressions else text or expressions
 
 
 def merge_textbook(known: list[VisionTask], new: list[VisionTask]) -> list[VisionTask]:

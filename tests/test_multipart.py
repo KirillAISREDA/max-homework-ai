@@ -7,10 +7,12 @@
 
 import json
 
+import pytest
+
 from conftest import FakeLLMClient
 from hwcheck.bot.fsm import CheckedTask
 from hwcheck.bot.handlers import Bot, _validator_only_grade
-from hwcheck.pipeline.grade import grade
+from hwcheck.pipeline.grade import grade, is_multipart
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
@@ -42,6 +44,51 @@ def test_multipart_detected_by_student_item_markers() -> None:
 def test_single_task_still_compares_with_reference_answer() -> None:
     ref = RefSolution(steps=["40 + 35 = 75"], answer="75")
     assert grade(["40 + 35 = 75"], "76", ref, condition="Вычисли 40 + 35").verdict == "wrong"
+
+
+# живой альбом 13.09: №52 — восемь примеров без «а)», «б)»
+NOTEBOOK_52 = [
+    "651 + 126 = 777",
+    "379 - 253 = 126",
+    "306 - 138 = 168",
+    "402 - 243 = 159",
+    "453 * 2 = 906",
+    "321 * 3 = 963",
+    "5 * 171 = 855",
+    "6 * 98 = 588",
+]
+CONDITION_52 = "651 + 126; 379 − 253; 306 − 138; 402 − 243; 453 · 2; 321 · 3; 5 · 171; 6 · 98"
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [CONDITION_52, "651 + 126 306 − 138 453 · 2", "Вычисли. 3 · 196   2 · 438"],
+)
+def test_several_expressions_in_condition_are_multipart(condition: str) -> None:
+    assert is_multipart(condition, [])
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        "15 · 10 + (30 − 20) · 5",
+        "446 − (46 + 4 · 8)",
+        "8 3/7 − 4 4/7",
+        "4/5 : 9/10",
+        "Купили 30 кг белой краски, а синей — в 7 раз больше",
+        "Реши уравнение 180 − x = 100",
+    ],
+)
+def test_single_expression_or_word_problem_is_not_multipart(condition: str) -> None:
+    assert not is_multipart(condition, [])
+
+
+def test_all_correct_list_of_examples_is_correct() -> None:
+    first_only = RefSolution(steps=["651 + 126 = 777"], answer="777")  # солвер ответил на один
+    assert grade(NOTEBOOK_52, None, first_only, condition=CONDITION_52).verdict == "correct"
+    wrong = ["651 + 126 = 850", *NOTEBOOK_52[1:]]
+    result = grade(wrong, None, first_only, condition=CONDITION_52)
+    assert (result.verdict, result.first_error_line) == ("wrong", 1)
 
 
 def make_session(**update: object) -> TutorSession:

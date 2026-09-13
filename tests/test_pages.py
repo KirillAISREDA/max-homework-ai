@@ -84,6 +84,14 @@ def test_merge_textbook_overrides_by_number_and_sorts() -> None:
     assert merged[1].task_text == "новое условие"
 
 
+def test_textbook_condition_keeps_expressions_listed_under_text() -> None:
+    # живой альбом 13.09: «46. Объясни записи на полях. Вычисли.» и под ним «304 · 3 …» —
+    # в условие попадал только текст, солвер решал «Объясни записи» без выражений
+    task = _task(46, "Объясни записи на полях. Вычисли.", ["304 · 3", "481 · 2"])
+    merged = merge_textbook([], [task])
+    assert merged[0].task_text == "Объясни записи на полях. Вычисли. 304 · 3; 481 · 2"
+
+
 def test_attach_conditions_prefers_textbook_over_notebook_notes() -> None:
     merged = attach_conditions(NOTEBOOK_19, TEXTBOOK)
     assert merged[0].task_text.startswith("В загородном лагере")
