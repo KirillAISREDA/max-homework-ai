@@ -27,7 +27,8 @@ MAX_EXPONENT = 40
 _ITEM_MARKER = re.compile(r"^\s*(№\s*\d+[.)]?|[а-яёa-z][).]|\d{1,2}\)|\d{1,2}\.\s)\s*")
 _MIXED_NUMBER = re.compile(r"(?<![\d/.])(\d+)\s+(\d+)\s*/\s*(\d+)")
 _DECIMAL_COMMA = re.compile(r"(?<=\d),(?=\d)")
-_DIVISION_COLON = re.compile(r"(?<=[\d)])\s*:\s*(?=[-\d(])")
+# x — переменная уравнения («96 : x = 8»); в числовых строках её не бывает
+_DIVISION_COLON = re.compile(r"(?<=[\dx)])\s*:\s*(?=[-\dx(])")
 _FRACTION = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)(?![\d.])")
 _SQRT_BARE = re.compile(r"√\s*(\d+(?:[.,]\d+)?)")
 _ALLOWED = re.compile(r"^[\d+\-*/(). ]*$")
@@ -48,6 +49,15 @@ _COMPOSITE_EXPONENT = re.compile(r"\*\*\s*[-(]")
 _EXPONENT = re.compile(r"\*\*\s*(\d+)")
 
 _TRANSFORMATIONS = (*standard_transformations, rationalize)
+
+X = sympy.Symbol("x")
+# переменная уравнения — одиночная буква, не часть слова: «x», «y», кириллическая «х»
+_VARIABLE = re.compile(r"(?<![A-Za-zА-Яа-яЁё])([A-Za-z]|х)(?![A-Za-zА-Яа-яЁё])")
+_IMPLICIT_MUL_BEFORE = re.compile(r"(?<=[\d)])\s*(?=x)")  # «3x», «(2+1)x» → «3*x»
+_IMPLICIT_MUL_AFTER = re.compile(r"(?<=x)\s*(?=[\d(])")  # «x(» , «x2» → «x*(»
+_NUMBER_LITERAL = re.compile(r"^-?\d+(?:\.\d+)?(?:/\d+)?$")
+_ANSWER_VARIABLE = re.compile(r"^\s*(?:[A-Za-z]|х)\s*=\s*(?=[-\d])")  # «x = 7» → «7»
+MAX_EQUATION_DEGREE = 2
 
 
 @dataclass
@@ -84,6 +94,57 @@ def parse_line(line: str) -> ParsedLine | None:
     return ParsedLine(values=values)
 
 
+@dataclass
+class EquationLine:
+    """Строка уравнения с одной переменной (приведена к символу X)."""
+
+    variable: str
+    segments: list[Any]  # sympy-выражения сегментов между «=», свободный символ — только X
+    solved_form: bool  # «x = число»: цепочка преобразований на этой строке закончилась
+
+
+def parse_equation(line: str) -> EquationLine | None:
+    """None — не уравнение с ровно одной переменной (текст, формула с двумя буквами)."""
+    if len(line) > MAX_LINE_LENGTH or "=" not in line or "sqrt" in line:
+        return None
+    text = _normalize(_ITEM_MARKER.sub("", line))
+    letters = {m.group(1) for m in _VARIABLE.finditer(text)}
+    if len(letters) != 1:
+        return None
+    variable = letters.pop()
+    text = _VARIABLE.sub("x", text)
+    text = _IMPLICIT_MUL_AFTER.sub("*", _IMPLICIT_MUL_BEFORE.sub("*", text))
+    raw_segments = [s.strip() for s in text.split("=")]
+    if len(raw_segments) < 2 or not all(raw_segments):
+        return None
+    segments = []
+    for segment in raw_segments:
+        value = _eval_segment(segment, allow_variable=True)
+        if value is None:
+            return None
+        segments.append(value)
+    if not any(s.free_symbols for s in segments):
+        return None
+    solved_form = raw_segments[0] == "x" and bool(_NUMBER_LITERAL.match(raw_segments[-1]))
+    return EquationLine(variable=variable, segments=segments, solved_form=solved_form)
+
+
+def solve_single_root(left: Any, right: Any) -> Any | None:
+    """Единственный корень уравнения left = right; None — корней нет, два и больше, тождество.
+
+    Степень числителя ограничена: sympy.solve на произвольном вводе ребёнка может думать долго.
+    """
+    difference = sympy.together(left - right)
+    try:
+        degree = sympy.Poly(sympy.numer(difference), X).degree()
+    except sympy.PolynomialError:
+        return None
+    if degree < 1 or degree > MAX_EQUATION_DEGREE:
+        return None
+    roots = [r for r in sympy.solve(sympy.Eq(left, right), X) if r.is_real]
+    return roots[0] if len(roots) == 1 else None
+
+
 def parse_value(text: str) -> Any | None:
     """Одиночное значение (ответ): «3 6/7», «4,5», «90 км/ч», «Ответ: 300 человек» → число.
 
@@ -91,7 +152,7 @@ def parse_value(text: str) -> Any | None:
     """
     if len(text) > MAX_LINE_LENGTH:
         return None
-    text = _ANSWER_LABEL.sub("", text)
+    text = _ANSWER_VARIABLE.sub("", _ANSWER_LABEL.sub("", text))
     leading = _leading_value(text)
     stripped = leading if leading is not None else _strip_units(text)
     if not stripped or len(stripped) > MAX_LINE_LENGTH or "=" in stripped:
@@ -126,9 +187,11 @@ def _school_division(segment: str) -> str:
     return _DIVISION_COLON.sub("/", _FRACTION.sub(wrap, segment))
 
 
-def _eval_segment(segment: str) -> Any | None:
+def _eval_segment(segment: str, *, allow_variable: bool = False) -> Any | None:
     segment = _school_division(segment)
     without_functions = segment.replace("sqrt", "").replace("**", "*")
+    if allow_variable:
+        without_functions = without_functions.replace("x", "")
     if not _ALLOWED.match(without_functions):
         return None
     if _LONG_NUMBER.search(segment):
@@ -144,7 +207,7 @@ def _eval_segment(segment: str) -> Any | None:
         # rationalize: 4.7 → 47/10, арифметика точная, без float-погрешностей
         value = parse_expr(
             segment,
-            local_dict={"sqrt": sympy.sqrt},
+            local_dict={"sqrt": sympy.sqrt, "x": X},
             transformations=_TRANSFORMATIONS,
             evaluate=True,
         )
@@ -154,7 +217,9 @@ def _eval_segment(segment: str) -> Any | None:
         # падала обработка всего фото). Контракт один: не парсится → None
         logger.debug("parse_expr failed (%s) on %r", type(exc).__name__, segment)
         return None
-    if not isinstance(value, sympy.Expr) or value.free_symbols:
+    if not isinstance(value, sympy.Expr):
+        return None
+    if value.free_symbols - ({X} if allow_variable else set()):
         return None
     return value
 

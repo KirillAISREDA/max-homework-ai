@@ -23,8 +23,14 @@ TEXTBOOK_TTL_S = 60 * 60
 
 
 def _computed(task: VisionTask) -> bool:
-    """Есть строка «число = число», которую валидатор смог пересчитать."""
-    return any(c.status in ("ok", "mismatch") for c in check_steps(task.student_solution_steps))
+    """Есть строка «число = число», которую валидатор смог пересчитать.
+
+    Уравнение («x + 5 = 12») не в счёт: в учебнике оно — условие «Реши уравнения».
+    """
+    return any(
+        c.status in ("ok", "mismatch") and not c.equation
+        for c in check_steps(task.student_solution_steps)
+    )
 
 
 def page_role(page: VisionPage | None) -> PageRole:
