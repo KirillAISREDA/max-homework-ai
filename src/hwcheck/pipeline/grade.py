@@ -10,7 +10,12 @@ from typing import Literal
 from pydantic import BaseModel
 
 from hwcheck.pipeline.solver import RefSolution
-from hwcheck.pipeline.validator import LineCheck, check_steps, compare_answers
+from hwcheck.pipeline.validator import (
+    LineCheck,
+    check_steps,
+    compare_answers,
+    last_value_matches,
+)
 
 Verdict = Literal["correct", "wrong", "uncertain"]
 
@@ -27,6 +32,11 @@ def grade(student_steps: list[str], student_answer: str | None, ref: RefSolution
     checks = check_steps(student_steps)
     mismatch_lines = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
     answers_match = compare_answers(student_answer, ref.answer)
+    if answers_match is None and not mismatch_lines and last_value_matches(checks, ref.answer):
+        # ответа нет или он фразой с несколькими числами («Отв.: на 10 яблок надо 160»),
+        # но вся арифметика верна и последняя строка даёт эталон (живые логи 07.09).
+        # Несовпадение не значит ошибку — строка могла быть промежуточной → uncertain
+        answers_match = True
 
     if answers_match is None and mismatch_lines:
         # ответа нет или он не читается, но арифметика доказуемо неверна (SymPy —

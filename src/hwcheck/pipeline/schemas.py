@@ -11,6 +11,9 @@ class VisionTask(BaseModel):
     )
     student_answer: str | None = Field(default=None, description="Итоговый ответ ученика")
     confidence: float = Field(ge=0.0, le=1.0, description="Уверенность распознавания задания")
+    # проставляет код по транскрипции (bot/pages.py), не модель: структуризатор
+    # нумерует задания без номера с 1, и такой номер нельзя сопоставлять с учебником
+    number_on_page: bool = True
 
 
 class VisionPage(BaseModel):

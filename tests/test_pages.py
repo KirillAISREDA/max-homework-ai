@@ -1,7 +1,14 @@
 """Роли страниц и сопоставление «учебник + тетрадь» (сессия 9, живой тест):
 альбом из фото учебника и тетради; условие №19 берётся из учебника."""
 
-from hwcheck.bot.pages import attach_conditions, format_numbers, merge_textbook, page_role
+from hwcheck.bot.pages import (
+    attach_conditions,
+    format_numbers,
+    mark_written_numbers,
+    merge_textbook,
+    page_role,
+    written_numbers,
+)
 from hwcheck.pipeline.schemas import VisionPage, VisionTask
 
 
@@ -10,6 +17,8 @@ def _task(
     text: str = "",
     steps: list[str] | None = None,
     answer: str | None = None,
+    *,
+    on_page: bool = True,
 ) -> VisionTask:
     return VisionTask(
         number=number,
@@ -17,6 +26,7 @@ def _task(
         student_solution_steps=steps or [],
         student_answer=answer,
         confidence=0.9,
+        number_on_page=on_page,
     )
 
 
@@ -181,3 +191,48 @@ def test_half_of_tasks_with_work_is_a_notebook() -> None:
     for i in range(4):
         tasks[i] = _task(16 + i, f"Краткая запись {16 + i}", ["2 + 2 = 4"])
     assert page_role(_page(tasks)) == "notebook"
+
+
+def test_notebook_with_continuation_lines_is_notebook() -> None:
+    # живые логи 08.09: тетрадь «Стр. 5 № 4» определилась как учебник, бот ответил
+    # «Вижу страницу учебника»
+    steps = [
+        "(1/2 + 1/3)*(-12)",
+        "= (-12)/2 + (-12)/3 = -6 + (-4) = -10",
+        "(1/3 - 1/4)*(-24)",
+        "= (-24)/3 - (-24)/4 = -8 - (-6) = -2",
+    ]
+    assert page_role(_page([_task(4, "(1/2 + 1/3)*(-12)", steps)])) == "notebook"
+
+
+class TestSyntheticNumbers:
+    """Живые логи 13.09: структуризатор нумерует задания без номера с 1, и совпадение
+    «номеров» склеивало деление дробей из тетради с «Отметьте точки K, L и M»."""
+
+    def test_task_numbers_are_read_from_transcript(self) -> None:
+        transcript = (
+            "Д/з № 13\nN 462 vcevee.ru\nN° 35 (2)\n23. Вычисли и сделай проверку\n"
+            "Стр. 5 № 4\n1.124 Выполните действия\nI способ\n1) 312\n"
+            "4/5 : 9/10 = 4/5 * 10/9 = 40/45 = 8/9\nЗадание 7\n"
+        )
+        assert written_numbers(transcript) == {13, 462, 35, 23, 4, 7}
+
+    def test_numbers_missing_from_transcript_are_marked_synthetic(self) -> None:
+        page = _page([_task(1, "", ["4/5 : 9/10 = 8/9"]), _task(23, "Вычисли")])
+        marked = mark_written_numbers(page, "4/5 : 9/10 = 8/9\n23. Вычисли")
+        assert [t.number_on_page for t in marked.tasks] == [False, True]
+
+    def test_synthetic_numbers_do_not_attach_an_unrelated_condition(self) -> None:
+        notebook = [_task(1, "", ["4/5 : 9/10 = 4/5 * 10/9 = 40/45 = 8/9"], on_page=False)]
+        textbook = [_task(1, "Отметьте точки K, L и M, лежащие на луче FE", on_page=False)]
+        assert attach_conditions(notebook, textbook) == notebook
+
+    def test_number_written_on_one_side_only_is_not_a_match(self) -> None:
+        notebook = [_task(2, "", ["9/10 : 4/5 = 9/8"])]
+        textbook = [_task(2, "Проведите прямую SR", on_page=False)]
+        assert attach_conditions(notebook, textbook) == notebook
+
+    def test_content_match_still_works_for_synthetic_numbers(self) -> None:
+        notebook = [_task(1, "", ["700 - (220 + 180) = 300"], "300", on_page=False)]
+        merged = attach_conditions(notebook, TEXTBOOK)
+        assert merged[0].number == 19

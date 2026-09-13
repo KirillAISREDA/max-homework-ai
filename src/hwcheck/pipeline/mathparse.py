@@ -8,12 +8,15 @@ float-погрешностей) или None, если строка не явля
 и лимиты на размер чисел/степеней (sympy парсит через eval).
 """
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
 
 import sympy
 from sympy.parsing.sympy_parser import parse_expr, rationalize, standard_transformations
+
+logger = logging.getLogger(__name__)
 
 MAX_LINE_LENGTH = 200
 MAX_NUMBER_DIGITS = 12
@@ -25,12 +28,16 @@ _ITEM_MARKER = re.compile(r"^\s*(№\s*\d+[.)]?|[а-яёa-z][).]|\d{1,2}\)|\d{1,
 _MIXED_NUMBER = re.compile(r"(?<![\d/.])(\d+)\s+(\d+)\s*/\s*(\d+)")
 _DECIMAL_COMMA = re.compile(r"(?<=\d),(?=\d)")
 _DIVISION_COLON = re.compile(r"(?<=[\d)])\s*:\s*(?=[-\d(])")
+_FRACTION = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)(?![\d.])")
 _SQRT_BARE = re.compile(r"√\s*(\d+(?:[.,]\d+)?)")
 _ALLOWED = re.compile(r"^[\d+\-*/(). ]*$")
 # школьная запись результата: «Ответ: 300 человек», «= 300 (чел.) - отдохнуло в августе»
 # «-» перед цифрой — знак числа («Ответ -5»), а не разделитель после метки
-_ANSWER_LABEL = re.compile(r"^\s*ответ\s*(?:[:.—–]|-(?!\d))?\s*", re.IGNORECASE)
+_ANSWER_LABEL = re.compile(r"^\s*отв(?:ет)?\s*(?:[:.—–]+|-(?!\d))?\s*", re.IGNORECASE)
 _UNIT_PARENS = re.compile(r"\(\s*[^\d()]*\)")  # скобки без цифр: «(чел.)», «(км)»
+# пояснение после тире начинается со слова и может содержать числа: «- на 16 яблок»;
+# «300 - 2 яблока» (тире перед числом) — по-прежнему выражение, не пояснение
+_EXPLANATION = re.compile(r"\s[-–—]\s*[а-яёА-ЯЁ].*$", re.S)
 _LEADING_VALUE = re.compile(
     r"^\s*(?P<value>-?\d+(?:[.,]\d+)?(?:\s+\d+\s*/\s*\d+|\s*/\s*\d+)?)(?P<tail>.*)$", re.S
 )
@@ -95,14 +102,32 @@ def parse_value(text: str) -> Any | None:
 def _normalize(text: str) -> str:
     text = text.replace("−", "-").replace("·", "*").replace("×", "*").replace("∙", "*")
     text = _DECIMAL_COMMA.sub(".", text)
-    text = _DIVISION_COLON.sub("/", text)
     text = _MIXED_NUMBER.sub(r"(\1+\2/\3)", text)
     text = _SQRT_BARE.sub(r"sqrt(\1)", text)
     text = text.replace("^", "**")
     return text.strip()
 
 
+def _school_division(segment: str) -> str:
+    """«:» делит с приоритетом умножения, но дробная черта связывает сильнее.
+
+    «4/5 : 9/10» — это (4/5):(9/10); простая замена «:» на «/» давала 4/5/9/10 = 2/225
+    и ложную «ошибку» на верном делении дробей (живые логи 13.09). Поэтому дробь
+    становится атомом в скобках, и только потом «:» → «/». Рядом со «/» и «**» дробь
+    не оборачивается: «12/6/2», «2**3/4» и «4/2**3» = 4/(2**3) — обычный приоритет.
+    """
+
+    def wrap(match: re.Match[str]) -> str:
+        before = segment[: match.start()].rstrip()
+        if before.endswith(("/", "**")) or segment[match.end() :].lstrip().startswith("**"):
+            return match.group(0)
+        return f"({match.group(1)}/{match.group(2)})"
+
+    return _DIVISION_COLON.sub("/", _FRACTION.sub(wrap, segment))
+
+
 def _eval_segment(segment: str) -> Any | None:
+    segment = _school_division(segment)
     without_functions = segment.replace("sqrt", "").replace("**", "*")
     if not _ALLOWED.match(without_functions):
         return None
@@ -123,7 +148,11 @@ def _eval_segment(segment: str) -> Any | None:
             transformations=_TRANSFORMATIONS,
             evaluate=True,
         )
-    except (SyntaxError, TypeError, ValueError, ZeroDivisionError, sympy.SympifyError):
+    except Exception as exc:
+        # parse_expr исполняет преобразованный код через eval, и мусор из тетради
+        # роняет его чем угодно: «40 . 40» → AttributeError (живые логи 06.09 —
+        # падала обработка всего фото). Контракт один: не парсится → None
+        logger.debug("parse_expr failed (%s) on %r", type(exc).__name__, segment)
         return None
     if not isinstance(value, sympy.Expr) or value.free_symbols:
         return None
@@ -136,7 +165,7 @@ def _leading_value(text: str) -> str | None:
     None, когда хвост содержит другие числа («2 км 300 м», «220 + 180»): такую запись
     честнее не понять (uncertain), чем обрезать и выдать ложную ошибку.
     """
-    match = _LEADING_VALUE.match(_UNIT_PARENS.sub(" ", text))
+    match = _LEADING_VALUE.match(_EXPLANATION.sub("", _UNIT_PARENS.sub(" ", text)))
     if match is None or re.search(r"\d", match.group("tail")):
         return None
     return match.group("value")
