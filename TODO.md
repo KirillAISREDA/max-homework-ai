@@ -70,7 +70,7 @@
 - [x] Comparator + Error Classifier (таксономия, confidence<0.6 → unclear)
 - [x] Tutor: FSM подсказок 0→3, ответ в промпт только на уровне 3, resolved по детерминированной сверке
 - [x] Exercise Generator + валидация эталона Validator'ом (1 retry → отброс)
-- [ ] Всё в одном контейнере воркера (Dockerfile)
+- [x] Всё в одном контейнере воркера (Dockerfile) — сессия 10
 
 ## Неделя 4 — интеграция с MAX
 
@@ -82,9 +82,12 @@
 - [x] CLI `hwcheck bot` — long polling, без публичного URL
 - [x] Живой тест с реальным ботом MAX: альбом учебник+тетрадь → №19 correct (сессия 9)
 - [ ] Живой тест диалога тьютора (кнопка «Разобрать») и повторной ошибки
-- [ ] Webhook-режим (FastAPI) + дедуп update_id — при деплое на Cloud.ru
+- [ ] Webhook-режим (FastAPI) + дедуп update_id — когда polling перестанет справляться (сейчас не нужен)
 - [ ] PostgreSQL-схема (миграции), Object Storage для фото
-- [ ] Деплой на Cloud.ru (Container Apps), Dockerfile
+- [x] Dockerfile + docker-compose, бот развёрнут в контейнере на VPS 193.247.73.243 (`docs/deploy.md`, сессия 10)
+- [ ] Redis `StateStore` вместо in-memory: рестарт контейнера сбрасывает открытые диалоги тьютора
+- [ ] `ENVIRONMENT=prod` на VPS перед первым реальным пользователем (сейчас dev — события не в зачёт)
+- [ ] Переезд на Cloud.ru (Container Apps) — когда потребуется по условиям конкурса/нагрузке; VPS общий с другими проектами
 
 ## Неделя 5 — student model, отчёты, admin
 

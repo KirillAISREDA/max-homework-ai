@@ -1,0 +1,29 @@
+# VPS: docker compose up -d --build
+# Бот ходит к MAX и GigaChat сам (long polling) — портов наружу нет.
+services:
+  bot:
+    build: .
+    image: max-homework-ai-bot
+    container_name: homework-bot
+    restart: unless-stopped
+    # SIGTERM: раннер дообрабатывает уже полученный батч (альбом — до пары минут) и выходит
+    stop_grace_period: 150s
+    env_file: .env
+    # Контейнер работает от uid 1000: перед первым запуском на хосте
+    #   mkdir -p var .cache && chown -R 1000:1000 var .cache
+    # иначе Docker создаст каталоги от root и бот не сможет писать marker/журнал/кэш
+    volumes:
+      - ./var:/app/var          # events.jsonl (конкурсная метрика/антифрод) + max_marker.txt
+      - ./.cache:/app/.cache    # кэш ответов солвера — не перегонять одни и те же задания
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    # marker пишется после каждого GET /updates (long poll ≤30 с); обработка альбома
+    # из 4 фото может занять минуту-две — потому окно 5 минут
+    healthcheck:
+      test: ["CMD-SHELL", "find /app/var/max_marker.txt -mmin -5 | grep -q ."]
+      interval: 60s
+      timeout: 5s
+      start_period: 120s
+      retries: 3
