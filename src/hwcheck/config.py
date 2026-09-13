@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     # dev-события не попадают в конкурсные метрики (антифрод, Положение п. 2.2)
     environment: str = "dev"
     events_path: str = "var/events.jsonl"
+    # обезличенные id тестеров (поле "user" в events.jsonl) через запятую: в prod их
+    # события пишутся с env=test и не попадают в зачёт
+    test_users: str = ""
+
+    # состояние диалога: пусто — в памяти процесса (локально), иначе Redis (сервер)
+    redis_url: str | None = None
+    # фото домашек для разбора спорных проверок; 0 — не сохранять
+    photos_dir: str = "var/photos"
+    photos_ttl_days: int = 30
 
     # Роутинг по моделям (арх. §4): Max — vision и сложная математика, Pro — тьютор,
     # Lite — короткие реплики. Идентификаторы сверять с актуальной линейкой GigaChat.
@@ -29,6 +38,10 @@ class Settings(BaseSettings):
     solver_model: str = "GigaChat-2-Max"
     tutor_model: str = "GigaChat-2-Pro"
     lite_model: str = "GigaChat-2"
+
+    @property
+    def test_user_hashes(self) -> frozenset[str]:
+        return frozenset(u.strip() for u in self.test_users.split(",") if u.strip())
 
 
 def load_settings() -> Settings:

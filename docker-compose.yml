@@ -1,5 +1,5 @@
 # VPS: docker compose up -d --build
-# Бот ходит к MAX и GigaChat сам (long polling) — портов наружу нет.
+# Бот ходит к MAX и GigaChat сам (long polling) — портов наружу нет, у Redis тоже.
 services:
   bot:
     build: .
@@ -9,11 +9,17 @@ services:
     # SIGTERM: раннер дообрабатывает уже полученный батч (альбом — до пары минут) и выходит
     stop_grace_period: 150s
     env_file: .env
+    environment:
+      # состояние диалога (FSM) — в Redis: рестарт бота не сбрасывает разборы тьютора
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
     # Контейнер работает от uid 1000: перед первым запуском на хосте
     #   mkdir -p var .cache && chown -R 1000:1000 var .cache
     # иначе Docker создаст каталоги от root и бот не сможет писать marker/журнал/кэш
     volumes:
-      - ./var:/app/var          # events.jsonl (конкурсная метрика/антифрод) + max_marker.txt
+      - ./var:/app/var          # events.jsonl (метрика/антифрод), max_marker.txt, photos/ (TTL 30 дней)
       - ./.cache:/app/.cache    # кэш ответов солвера — не перегонять одни и те же задания
     deploy:
       resources:
@@ -27,3 +33,25 @@ services:
       timeout: 5s
       start_period: 120s
       retries: 3
+
+  redis:
+    image: redis:8-alpine
+    container_name: homework-redis
+    restart: unless-stopped
+    # AOF — диалоги переживают и рестарт самого Redis; ключи fsm:* с TTL 24 ч,
+    # потолок памяти — VPS общий с другими проектами
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-ttl"]
+    volumes:
+      - redis-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:

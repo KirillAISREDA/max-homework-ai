@@ -5,11 +5,12 @@ from typing import Any
 import pytest
 
 from hwcheck.bot.fsm import InMemoryStateStore
-from hwcheck.bot.handlers import Bot, _pseudo_ref, _validator_only_grade
+from hwcheck.bot.handlers import RETRY, Bot, _pseudo_ref, _validator_only_grade
 from hwcheck.bot.max_api import Buttons
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.config import Settings
 from hwcheck.events import EventLog, anonymize
+from hwcheck.photos import PhotoStore
 
 PHOTO_UPDATE = {
     "update_type": "message_created",
@@ -52,7 +53,7 @@ class FakeMax:
         return b"fake-image"
 
 
-def make_bot(tmp_path: Path) -> tuple[Bot, FakeMax, Path]:
+def make_bot(tmp_path: Path, photos: PhotoStore | None = None) -> tuple[Bot, FakeMax, Path]:
     events_path = tmp_path / "events.jsonl"
     fake_max = FakeMax()
     settings = Settings(_env_file=None)
@@ -62,8 +63,13 @@ def make_bot(tmp_path: Path) -> tuple[Bot, FakeMax, Path]:
         InMemoryStateStore(),
         EventLog(events_path, "dev"),
         settings,
+        photos=photos,
     )
     return bot, fake_max, events_path
+
+
+def read_events(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
 def test_update_parsing_tolerates_unknown_fields() -> None:
@@ -88,6 +94,73 @@ async def test_text_in_idle_sends_welcome(tmp_path: Path) -> None:
     assert record["env"] == "dev"
     assert record["user"] == anonymize(42)
     assert record["user"] != "42"
+
+
+async def test_photo_saved_before_recognition_and_failure_traced(tmp_path: Path) -> None:
+    """Фото сохраняется до vision (упавшие случаи — самые ценные для разбора),
+    все события апдейта связаны одним trace_id, у сбоев есть код ошибки."""
+    photos_root = tmp_path / "photos"
+    bot, fake_max, events_path = make_bot(tmp_path, photos=PhotoStore(photos_root, ttl_days=30))
+    await bot.handle_update(MaxUpdate.model_validate(PHOTO_UPDATE))  # LLM нет → vision падает
+
+    events = read_events(events_path)
+    assert [e["type"] for e in events] == ["homework_uploaded", "photo_failed", "check_failed"]
+    trace_ids = {e["trace_id"] for e in events}
+    assert len(trace_ids) == 1 and None not in trace_ids
+    failed = events[1]
+    assert failed["error"]
+    assert (photos_root / failed["photo"]).read_bytes() == b"fake-image"
+    assert failed["photo"].split("/")[1].startswith(f"{anonymize(42)}-")
+    assert events[2]["error"] == "RuntimeError"
+    assert fake_max.sent[-1][1] == RETRY
+
+
+async def test_photo_store_failure_does_not_break_check(tmp_path: Path) -> None:
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("файл вместо каталога", encoding="utf-8")
+    bot, fake_max, events_path = make_bot(tmp_path, photos=PhotoStore(blocker, ttl_days=30))
+    await bot.handle_update(MaxUpdate.model_validate(PHOTO_UPDATE))
+
+    events = read_events(events_path)
+    failed = next(e for e in events if e["type"] == "photo_failed")
+    assert failed["photo"] is None  # фото не сохранилось, но распознавание всё равно пробовали
+    assert fake_max.sent[-1][1] == RETRY
+
+
+class BrokenStore:
+    """Redis недоступен посреди диалога."""
+
+    async def get(self, chat_id: int) -> Any:
+        raise ConnectionError("redis down")
+
+    async def set(self, chat_id: int, state: Any) -> None:
+        raise ConnectionError("redis down")
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        TEXT_UPDATE,
+        {
+            "update_type": "message_callback",
+            "chat_id": 7,
+            "callback": {"callback_id": "cb1", "payload": "tutor:0", "user": {"user_id": 42}},
+        },
+    ],
+)
+async def test_store_failure_in_dialog_replies_retry(
+    tmp_path: Path, update: dict[str, Any]
+) -> None:
+    """Сбой хранилища на тексте/кнопке: ребёнок получает «попробуй ещё раз», а не тишину."""
+    bot, fake_max, events_path = make_bot(tmp_path)
+    bot._store = BrokenStore()  # type: ignore[assignment]
+    await bot.handle_update(MaxUpdate.model_validate(update))
+
+    assert fake_max.sent[-1][1] == RETRY
+    if update["update_type"] == "message_callback":
+        assert fake_max.callbacks == ["cb1"]  # кнопка в MAX не «крутится» бесконечно
+    failed = [e for e in read_events(events_path) if e["type"] == "update_failed"]
+    assert len(failed) == 1 and failed[0]["error"] == "ConnectionError"
 
 
 async def test_unknown_update_ignored(tmp_path: Path) -> None:

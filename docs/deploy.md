@@ -1,6 +1,6 @@
 # Деплой бота (VPS, Docker)
 
-Бот работает в одном контейнере на VPS `193.247.73.243` (Ubuntu 22.04, Docker 29, Compose v5),
+Бот работает в контейнере на VPS `193.247.73.243` (рядом — Redis для состояния диалогов) (Ubuntu 22.04, Docker 29, Compose v5),
 каталог `/opt/max-homework-ai`. Режим — long polling: бот сам ходит к MAX и GigaChat,
 входящих портов нет, Caddy/webhook не нужны. VPS общий с другими проектами (~25 контейнеров).
 
@@ -13,7 +13,9 @@
 |---|---|
 | Код | `/opt/max-homework-ai` — git-клон `main` + `.env` (не в git) |
 | Контейнер | `homework-bot`, образ `max-homework-ai-bot`, `restart: unless-stopped`, лимит 1 ГБ |
+| Состояние диалогов | контейнер `homework-redis` (`redis:8-alpine`, AOF, том `redis-data`, без портов), ключи `fsm:<хэш chat_id>` с TTL 24 ч |
 | Журнал событий / marker | `/opt/max-homework-ai/var/` (том, переживает пересборку) |
+| Фото домашек | `/opt/max-homework-ai/var/photos/<дата UTC>/<хэш user>-<id>.jpg`, удаляются через 30 дней (`PHOTOS_TTL_DAYS`); ключ фото — поле `photo` в `vision_recognized`/`photo_failed` |
 | Кэш солвера | `/opt/max-homework-ai/.cache/solver/` (том) |
 | Логи | `docker compose logs -f` (json-file, ротация 30 МБ × 3 — настройка демона) |
 | Health | marker обновляется после каждого GET /updates; «unhealthy» = нет записи 5 минут |
@@ -47,21 +49,28 @@ docker compose logs --tail 50
 ## Диагностика
 
 ```bash
-docker ps --filter name=homework-bot            # статус и health
+docker ps --filter name=homework                # статус и health бота и Redis
 docker stats --no-stream homework-bot           # CPU/память (в норме ~130–300 МБ)
 docker compose logs --no-log-prefix | grep -v INFO:httpx | tail -50
-tail -5 var/events.jsonl                        # последние события пайплайна
+tail -5 var/events.jsonl                        # последние события пайплайна (trace_id связывает события апдейта)
+docker exec homework-redis redis-cli --scan --pattern 'fsm:*' | wc -l   # открытые диалоги
+du -sh var/photos                               # объём сохранённых фото
 docker compose restart
 ```
 
+Разобрать спорную проверку: найти в `var/events.jsonl` событие `task_checked` с нужным вердиктом,
+по его `trace_id` — `vision_recognized` с полем `photo`, открыть `var/photos/<photo>`.
+
 ## Переключение dev → prod
 
-В `.env` на VPS: `ENVIRONMENT=prod`, затем `docker compose up -d`. С этого момента события
-идут в конкурсный зачёт (антифрод, Положение п. 2.2) — переключать только на реальный трафик.
+В `.env` на VPS: `ENVIRONMENT=prod` и `TEST_USERS=<хэш>,<хэш>` — обезличенные id команды и
+тестеров (поле `user` в `var/events.jsonl`), затем `docker compose up -d`. С этого момента события
+идут в конкурсный зачёт (антифрод, Положение п. 2.2), а события тестеров пишутся с `env=test` и
+в зачёт не попадают. Новый тестер — добавить его хэш в `TEST_USERS` и `docker compose up -d`.
 
 ## Ограничения текущей схемы
 
-- Состояние диалога (FSM) — в памяти процесса: рестарт контейнера сбрасывает открытые диалоги
-  тьютора. Redis `StateStore` — в TODO.
+- Фото хранятся на диске VPS, а не в Object Storage; удаление по запросу пользователя — вручную
+  по хэшу в имени файла (`rm var/photos/*/<хэш>-*`).
 - Апдейты обрабатываются последовательно (PERS-тариф GigaChat = 1 поток). При росте трафика —
   webhook + очередь (арх. §8).

@@ -4,6 +4,7 @@
 Каждый вызов компонента логируется в EventLog (конкурсная метрика + антифрод).
 """
 
+import contextlib
 import logging
 import time
 from pathlib import Path
@@ -22,8 +23,9 @@ from hwcheck.bot.pages import (
     textbook_is_fresh,
 )
 from hwcheck.config import Settings
-from hwcheck.events import EventLog
+from hwcheck.events import EventLog, anonymize, trace
 from hwcheck.llm.gigachat_client import GigaChatClient
+from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.grade import GradeResult, grade
 from hwcheck.pipeline.schemas import VisionPage, VisionTask
@@ -58,15 +60,42 @@ class Bot:
         store: StateStore,
         events: EventLog,
         settings: Settings,
+        *,
+        photos: PhotoStore | None = None,
     ) -> None:
         self._max = max_client
         self._llm = llm
         self._store = store
         self._events = events
         self._settings = settings
+        self._photos = photos
         self._cache = FileCache(Path(".cache/solver"))
 
     async def handle_update(self, update: MaxUpdate) -> None:
+        # один trace_id на все вызовы компонентов по апдейту (антифрод, Прил. 2 п. 5)
+        with trace():
+            try:
+                await self._dispatch(update)
+            except Exception as exc:
+                # сбой хранилища/сети посреди диалога: «попробуй ещё раз», а не тишина
+                logger.exception("update failed: %s", update.update_type)
+                self._events.log(
+                    "update_failed", user_id=update.effective_user_id, error=type(exc).__name__
+                )
+                await self._reply_retry(update)
+
+    async def _reply_retry(self, update: MaxUpdate) -> None:
+        try:
+            if update.callback is not None and update.callback.callback_id:
+                # без ответа на callback кнопка в MAX «крутится» у ребёнка бесконечно
+                with contextlib.suppress(Exception):
+                    await self._max.answer_callback(update.callback.callback_id)
+            if update.effective_chat_id is not None:
+                await self._max.send_message(update.effective_chat_id, RETRY)
+        except Exception:
+            logger.exception("retry reply failed")
+
+    async def _dispatch(self, update: MaxUpdate) -> None:
         chat_id = update.effective_chat_id
         if chat_id is None:
             return
@@ -97,14 +126,25 @@ class Bot:
         await self._max.send_message(chat_id, CHECKING + hint)
         try:
             await self._process_photos(chat_id, user_id, urls[:MAX_PHOTOS])
-        except Exception:
+        except Exception as exc:
             # ребёнок не должен остаться наедине с «Проверяю...» и тишиной
             logger.exception("photo processing failed")
-            self._events.log("check_failed", user_id=user_id)
+            self._events.log("check_failed", user_id=user_id, error=type(exc).__name__)
             await self._max.send_message(chat_id, RETRY)
 
-    async def _recognize(self, user_id: int | None, url: str) -> tuple[VisionPage | None, PageRole]:
-        image = await self._max.download(url)
+    def _save_photo(self, user_id: int | None, image: bytes) -> str | None:
+        """Сбой диска не должен ломать проверку: без фото разбор хуже, но ребёнок получит ответ."""
+        if self._photos is None:
+            return None
+        try:
+            return self._photos.save(anonymize(user_id), image)
+        except OSError:
+            logger.exception("photo save failed")
+            return None
+
+    async def _recognize(
+        self, user_id: int | None, image: bytes, photo: str | None
+    ) -> tuple[VisionPage | None, PageRole]:
         rec = await recognize_page_two_stage(
             self._llm,
             image,
@@ -138,6 +178,7 @@ class Bot:
             tokens=rec.tokens_in + rec.tokens_out,
             n_tasks=len(page.tasks) if page else 0,
             role=role,
+            photo=photo,
         )
         return page, role
 
@@ -148,11 +189,18 @@ class Bot:
         results: list[tuple[VisionPage | None, PageRole]] = []
         failed = 0
         for url in urls:
+            photo: str | None = None
             try:
-                results.append(await self._recognize(user_id, url))
-            except Exception:
+                image = await self._max.download(url)
+                # до vision: фото, на которых распознавание упало, — самые ценные для разбора
+                photo = self._save_photo(user_id, image)
+                results.append(await self._recognize(user_id, image, photo))
+            except Exception as exc:
                 failed += 1
                 logger.exception("photo failed: %s", url.split("?")[0])
+                self._events.log(
+                    "photo_failed", user_id=user_id, error=type(exc).__name__, photo=photo
+                )
         if urls and failed == len(urls):
             raise RuntimeError("all photos failed")
         return results
