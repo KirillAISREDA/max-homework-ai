@@ -16,10 +16,11 @@ from hwcheck.bot.pages import (
     MAX_PHOTOS,
     PageRole,
     attach_conditions,
-    format_numbers,
+    describe_tasks,
     mark_written_numbers,
     merge_textbook,
     page_role,
+    task_label,
     textbook_is_fresh,
 )
 from hwcheck.config import Settings
@@ -27,7 +28,7 @@ from hwcheck.events import EventLog, anonymize, trace
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.classifier import classify_error
-from hwcheck.pipeline.grade import GradeResult, grade
+from hwcheck.pipeline.grade import GradeResult, grade, grade_by_lines
 from hwcheck.pipeline.schemas import VisionPage, VisionTask
 from hwcheck.pipeline.solver import FileCache, RefSolution, StructuredOutputError, solve_task
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
@@ -214,25 +215,25 @@ class Bot:
         state = await self._store.get(chat_id)
         textbook = list(state.textbook_tasks) if textbook_is_fresh(state.textbook_saved_at) else []
         notebook: list[VisionTask] = []
-        new_numbers: list[int] = []
+        new_textbook: list[VisionTask] = []
         comment: str | None = None
         for page, role in await self._recognize_all(user_id, urls):
             if page is None:
                 continue
             if role == "textbook":
-                new_numbers.extend(t.number for t in merge_textbook([], page.tasks))
+                new_textbook.extend(merge_textbook([], page.tasks))
                 textbook = merge_textbook(textbook, page.tasks)
             elif role == "notebook":
                 notebook.extend(page.tasks)
             elif page.page_comment:
                 comment = page.page_comment
         if not notebook:
-            if new_numbers:
+            if new_textbook:
                 remembered = state.model_copy(
                     update={"textbook_tasks": textbook, "textbook_saved_at": time.time()}
                 )
                 await self._store.set(chat_id, remembered)
-                numbers = format_numbers(new_numbers)
+                numbers = describe_tasks(new_textbook)
                 await self._max.send_message(chat_id, TEXTBOOK_ONLY.format(numbers=numbers))
             else:
                 await self._max.send_message(
@@ -273,9 +274,11 @@ class Bot:
             except StructuredOutputError:
                 logger.warning("solver failed for task %s", task.number)
         if ref is not None:
-            result = grade(task.student_solution_steps, task.student_answer, ref)
+            result = grade(
+                task.student_solution_steps, task.student_answer, ref, condition=task.task_text
+            )
         else:
-            result = _validator_only_grade(task.student_solution_steps)
+            result = _validator_only_grade(task.student_solution_steps, condition=task.task_text)
         self._events.log(
             "task_checked",
             user_id=user_id,
@@ -288,19 +291,19 @@ class Bot:
         lines = []
         buttons = []
         for i, item in enumerate(state.tasks):
-            number = item.task.number
+            label = task_label(item.task)
             if item.grade.verdict == "correct":
-                lines.append(f"№{number} — верно ✅")
+                lines.append(f"{label} — верно ✅")
             elif item.grade.verdict == "wrong":
                 where = (
                     f" (строка {item.grade.first_error_line})"
                     if item.grade.first_error_line
                     else ""
                 )
-                lines.append(f"№{number} — есть ошибка{where} ❌")
-                buttons.append([callback_button(f"Разобрать №{number}", f"tutor:{i}")])
+                lines.append(f"{label} — есть ошибка{where} ❌")
+                buttons.append([callback_button(f"Разобрать {_lower(label)}", f"tutor:{i}")])
             else:
-                lines.append(f"№{number} — не уверен, лучше показать взрослому 🤔")
+                lines.append(f"{label} — не уверен, лучше показать взрослому 🤔")
         correct = sum(1 for t in state.tasks if t.grade.verdict == "correct")
         header = f"Проверил! {correct} из {len(state.tasks)} верно.\n"
         await self._max.send_message(chat_id, header + "\n".join(lines), buttons=buttons or None)
@@ -317,7 +320,9 @@ class Bot:
             await self._max.answer_callback(callback_id)
             return
         item = state.tasks[index]
-        await self._max.answer_callback(callback_id, notification=f"Разбираем №{item.task.number}")
+        await self._max.answer_callback(
+            callback_id, notification=f"Разбираем {_lower(task_label(item.task))}"
+        )
         try:
             session = await self._start_tutoring(user_id, item)
             reply, session = await tutor_reply(
@@ -365,6 +370,7 @@ class Bot:
             ref=ref,
             error=error,
             first_error_line=item.grade.first_error_line,
+            expected=_error_line_value(item.grade),
         )
 
     async def _on_text(self, chat_id: int, user_id: int | None, text: str) -> None:
@@ -419,7 +425,7 @@ class Bot:
 def _remaining_buttons(state: ChatState) -> list[list[dict[str, str]]]:
     """Кнопки для ещё не разобранных ошибок."""
     return [
-        [callback_button(f"Разобрать №{t.task.number}", f"tutor:{i}")]
+        [callback_button(f"Разобрать {_lower(task_label(t.task))}", f"tutor:{i}")]
         for i, t in enumerate(state.tasks)
         if t.grade.verdict == "wrong" and i not in state.resolved_indices
     ]
@@ -434,24 +440,17 @@ def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:
     return index if index < n_tasks else None
 
 
-def _validator_only_grade(steps: list[str]) -> GradeResult:
+def _validator_only_grade(steps: list[str], *, condition: str | None = None) -> GradeResult:
     """Столбик примеров без условия: проверка — только детерминированный пересчёт."""
-    checks = check_steps(steps)
-    mismatches = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
-    parseable = any(c.status == "ok" for c in checks) or bool(mismatches)
-    if not parseable:
-        verdict = "uncertain"
-    elif mismatches:
-        verdict = "wrong"
-    else:
-        verdict = "correct"
-    return GradeResult(
-        verdict=verdict,  # type: ignore[arg-type]
-        answers_match=None,
-        first_error_line=mismatches[0] if mismatches else None,
-        slip_lines=[],
-        line_checks=checks,
-    )
+    return grade_by_lines(check_steps(steps, condition=condition or None))
+
+
+def _error_line_value(result: GradeResult) -> str | None:
+    """Верное значение первой ошибочной строки (SymPy) — цель разбора для тьютора."""
+    if result.first_error_line is None:
+        return None
+    check = result.line_checks[result.first_error_line - 1]
+    return check.values[0] if check.status == "mismatch" and check.values else None
 
 
 def _pseudo_ref(result: GradeResult) -> RefSolution:
@@ -460,3 +459,8 @@ def _pseudo_ref(result: GradeResult) -> RefSolution:
         if check.status == "mismatch" and check.values:
             return RefSolution(steps=[], answer=check.values[0], units=None)
     return RefSolution(steps=[], answer="", units=None)
+
+
+def _lower(label: str) -> str:
+    """«Задание 1» посреди фразы: «Разобрать задание 1»; «№19» не меняется."""
+    return label[:1].lower() + label[1:]

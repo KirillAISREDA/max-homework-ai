@@ -3,10 +3,12 @@
 
 from hwcheck.bot.pages import (
     attach_conditions,
+    describe_tasks,
     format_numbers,
     mark_written_numbers,
     merge_textbook,
     page_role,
+    task_label,
     written_numbers,
 )
 from hwcheck.pipeline.schemas import VisionPage, VisionTask
@@ -236,3 +238,62 @@ class TestSyntheticNumbers:
         notebook = [_task(1, "", ["700 - (220 + 180) = 300"], "300", on_page=False)]
         merged = attach_conditions(notebook, TEXTBOOK)
         assert merged[0].number == 19
+
+    def test_synthetic_textbook_numbers_do_not_overwrite_known_conditions(self) -> None:
+        # живые логи 13.09: страница «1.124» (без номеров, пронумерована с 1) затёрла
+        # запомненное условие «Отметьте точки» — у него тоже был придуманный №1
+        known = merge_textbook([], [_task(1, "Отметьте точки K, L и M", on_page=False)])
+        new = [
+            _task(1, "Выполните действия 1.124", on_page=False),
+            _task(2, "Найдите значение выражения", on_page=False),
+        ]
+        texts = [t.task_text for t in merge_textbook(known, new)]
+        assert sorted(texts) == [
+            "Выполните действия 1.124",
+            "Найдите значение выражения",
+            "Отметьте точки K, L и M",
+        ]
+
+    def test_written_number_replaces_only_written_condition(self) -> None:
+        known = merge_textbook([], [_task(19, "старое"), _task(1, "без номера", on_page=False)])
+        merged = merge_textbook(known, [_task(19, "новое"), _task(1, "напечатан №1")])
+        assert sorted((t.number, t.number_on_page, t.task_text) for t in merged) == [
+            (1, False, "без номера"),
+            (1, True, "напечатан №1"),
+            (19, True, "новое"),
+        ]
+
+    def test_same_synthetic_condition_is_not_duplicated(self) -> None:
+        page = [_task(1, "Отметьте точки", on_page=False)]
+        assert len(merge_textbook(merge_textbook([], page), page)) == 1
+
+    def test_content_match_picks_synthetic_condition_among_equal_numbers(self) -> None:
+        textbook = [
+            _task(1, "Отметьте точки K и M", on_page=True),
+            _task(1, "Денис бежал 10 мин со скоростью 110 м/мин", on_page=False),
+        ]
+        notebook = [_task(3, "", ["110 * 10 = 1100"], on_page=False)]
+        merged = attach_conditions(notebook, textbook)
+        assert merged[0].task_text.startswith("Денис")
+        # придуманный номер учебника ничего не говорит ребёнку — остаётся номер тетради
+        assert (merged[0].number, merged[0].number_on_page) == (3, False)
+
+    def test_attached_condition_brings_its_number_origin(self) -> None:
+        # придуманный №1 тетради совпал по числам с напечатанным №19 — это уже «№19»
+        notebook = [_task(1, "", ["700 - (220 + 180) = 300"], on_page=False)]
+        merged = attach_conditions(notebook, [TEXTBOOK[3]])
+        assert (merged[0].number, merged[0].number_on_page) == (19, True)
+
+
+def test_task_label_hides_synthetic_number_sign() -> None:
+    assert task_label(_task(19)) == "№19"
+    assert task_label(_task(1, on_page=False)) == "Задание 1"
+
+
+def test_describe_tasks() -> None:
+    assert describe_tasks([_task(16), _task(17), _task(18)]) == "№16–18"
+    assert describe_tasks([_task(1, on_page=False), _task(2, on_page=False)]) == "2 задания"
+    assert describe_tasks([_task(5), _task(1, on_page=False)]) == "№5 и ещё 1 задание"
+    assert describe_tasks([_task(n, on_page=False) for n in range(1, 6)]) == "5 заданий"
+    assert describe_tasks([_task(n, on_page=False) for n in range(1, 12)]) == "11 заданий"
+    assert describe_tasks([_task(n, on_page=False) for n in range(1, 23)]) == "22 задания"

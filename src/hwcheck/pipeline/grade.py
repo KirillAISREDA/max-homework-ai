@@ -5,6 +5,7 @@
 а не наказание ребёнка ложной «ошибкой».
 """
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel
@@ -19,6 +20,10 @@ from hwcheck.pipeline.validator import (
 
 Verdict = Literal["correct", "wrong", "uncertain"]
 
+# пункт задания: «а)», «б)» в условии или в начале строки решения
+_ITEM = re.compile(r"(?:^|[\s;:,.])([а-еa-e])\)", re.IGNORECASE)
+_STEP_ITEM = re.compile(r"^\s*([а-еa-e])\)", re.IGNORECASE)
+
 
 class GradeResult(BaseModel):
     verdict: Verdict
@@ -28,8 +33,19 @@ class GradeResult(BaseModel):
     line_checks: list[LineCheck]
 
 
-def grade(student_steps: list[str], student_answer: str | None, ref: RefSolution) -> GradeResult:
-    checks = check_steps(student_steps)
+def grade(
+    student_steps: list[str],
+    student_answer: str | None,
+    ref: RefSolution,
+    *,
+    condition: str | None = None,
+) -> GradeResult:
+    """`condition` — печатное условие задания: помогает перечитать знаки, спутанные OCR."""
+    checks = check_steps(student_steps, condition=condition)
+    if is_multipart(condition, student_steps):
+        # эталон солвера — один ответ на несколько пунктов (живые логи 06.09: «80» на
+        # четыре выражения); сверять с ним нечего, судим по арифметике каждой строки
+        return grade_by_lines(checks)
     mismatch_lines = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
     answers_match = compare_answers(student_answer, ref.answer)
     if answers_match is None and not mismatch_lines and last_value_matches(checks, ref.answer):
@@ -62,5 +78,32 @@ def grade(student_steps: list[str], student_answer: str | None, ref: RefSolution
         answers_match=answers_match,
         first_error_line=first_error,
         slip_lines=slips,
+        line_checks=checks,
+    )
+
+
+def is_multipart(condition: str | None, steps: list[str]) -> bool:
+    """Два и больше пунктов «а)», «б)» — в условии или в начале строк решения."""
+    labels = {m.group(1).lower() for m in _ITEM.finditer(condition or "")}
+    step_labels = {m.group(1).lower() for s in steps if (m := _STEP_ITEM.match(s))}
+    return len(labels) >= 2 or len(step_labels) >= 2
+
+
+def grade_by_lines(checks: list[LineCheck]) -> GradeResult:
+    """Без эталонного ответа: только детерминированный пересчёт строк."""
+    mismatches = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
+    if mismatches:
+        verdict: Verdict = "wrong"
+    elif any(c.doubtful for c in checks):
+        verdict = "uncertain"
+    elif any(c.status == "ok" for c in checks):
+        verdict = "correct"
+    else:
+        verdict = "uncertain"
+    return GradeResult(
+        verdict=verdict,
+        answers_match=None,
+        first_error_line=mismatches[0] if mismatches else None,
+        slip_lines=[],
         line_checks=checks,
     )

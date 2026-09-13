@@ -209,6 +209,13 @@ def test_remaining_buttons_exclude_resolved() -> None:
     # разобранное задание №4 (индекс 0) не предлагается повторно
     assert len(buttons) == 1
     assert buttons[0][0]["payload"] == "tutor:1"
+    assert buttons[0][0]["text"] == "Разобрать №7"
+
+    unnumbered = state.tasks[1].model_copy(
+        update={"task": state.tasks[1].task.model_copy(update={"number_on_page": False})}
+    )
+    state = state.model_copy(update={"tasks": [state.tasks[0], unnumbered]})
+    assert _remaining_buttons(state)[0][0]["text"] == "Разобрать задание 7"
 
 
 def test_parse_tutor_index_rejects_garbage() -> None:
