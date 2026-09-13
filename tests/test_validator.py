@@ -54,3 +54,25 @@ class TestCompareAnswers:
 
     def test_empty_returns_none(self) -> None:
         assert compare_answers("", "90") is None
+
+
+class TestContinuationLines:
+    """Живые логи 08.09: запись переносится на строку «= …», и такие строки не
+    пересчитывались — тетрадь с ними определялась как страница учебника."""
+
+    def test_line_starting_with_equals_continues_previous_expression(self) -> None:
+        checks = check_steps(["(1/2 + 1/3)*(-12)", "= (-12)/2 + (-12)/3 = -6 + (-4) = -10"])
+        assert [c.status for c in checks] == ["skipped", "ok"]
+
+    def test_continuation_of_an_equality_checks_against_its_result(self) -> None:
+        checks = check_steps(["15 * 10 + 5 = 150 + 5", "= 156"])
+        assert [c.status for c in checks] == ["ok", "mismatch"]
+        assert checks[1].line == "= 156"
+
+    def test_text_line_with_equals_is_not_continued(self) -> None:
+        # «Дано: a=5, b=3» — не выражение; хвост «3» не должен стать левой частью
+        checks = check_steps(["Дано: a=5, b=3", "= 5 - 3 = 2"])
+        assert [c.status for c in checks] == ["skipped", "skipped"]
+
+    def test_ok_line_keeps_computed_values(self) -> None:
+        assert check_steps(["16 * 10 = 160"])[0].values == ["160", "160"]

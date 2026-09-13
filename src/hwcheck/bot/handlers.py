@@ -16,6 +16,7 @@ from hwcheck.bot.pages import (
     PageRole,
     attach_conditions,
     format_numbers,
+    mark_written_numbers,
     merge_textbook,
     page_role,
     textbook_is_fresh,
@@ -110,19 +111,23 @@ class Bot:
             vision_model=self._settings.vision_model,
             structure_model=self._settings.tutor_model,
         )
-        role = page_role(rec.page)
+        page = mark_written_numbers(rec.page, rec.raw) if rec.page else None
+        role = page_role(page)
         # структура страницы без содержимого — чтобы разбирать спорные роли по логу;
         # сама транскрипция (текст ребёнка) — только в dev
         summary = [
             (
                 t.number,
+                t.number_on_page,
                 bool(t.task_text.strip()),
                 len(t.student_solution_steps),
                 t.student_answer is not None,
             )
-            for t in (rec.page.tasks if rec.page else [])
+            for t in (page.tasks if page else [])
         ]
-        logger.info("page role=%s tasks(number, has_text, n_steps, has_answer)=%s", role, summary)
+        logger.info(
+            "page role=%s tasks(number, on_page, has_text, n_steps, has_answer)=%s", role, summary
+        )
         if self._settings.environment == "dev":
             logger.info("transcript: %s", rec.raw)
         self._events.log(
@@ -131,10 +136,10 @@ class Bot:
             component="vision_two_stage",
             calls=rec.attempts + 1,
             tokens=rec.tokens_in + rec.tokens_out,
-            n_tasks=len(rec.page.tasks) if rec.page else 0,
+            n_tasks=len(page.tasks) if page else 0,
             role=role,
         )
-        return rec.page, role
+        return page, role
 
     async def _recognize_all(
         self, user_id: int | None, urls: list[str]

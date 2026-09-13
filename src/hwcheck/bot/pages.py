@@ -50,6 +50,26 @@ def page_role(page: VisionPage | None) -> PageRole:
     return "textbook" if n_cond else "empty"
 
 
+# номер задания в транскрипции: «№ 13», «N 462», «N° 35», «Задание 7», «Упр. 5» или
+# «23.» в начале строки. «1.124» — не номер 1, «1)» — пункт задания, а не номер
+_TASK_NUMBER = re.compile(
+    r"(?:(?<![A-Za-zА-Яа-яЁё])(?:№|N[°º]?|задани[ея]|упр(?:ажнение)?\.?)\s*(\d{1,4})\b"
+    r"|^\s*(\d{1,4})\.(?!\d))",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def written_numbers(transcript: str) -> set[int]:
+    return {int(m.group(1) or m.group(2)) for m in _TASK_NUMBER.finditer(transcript)}
+
+
+def mark_written_numbers(page: VisionPage, transcript: str) -> VisionPage:
+    """Номер, которого нет в транскрипции, придумал структуризатор («нумеруй с 1»)."""
+    written = written_numbers(transcript)
+    tasks = [t.model_copy(update={"number_on_page": t.number in written}) for t in page.tasks]
+    return page.model_copy(update={"tasks": tasks})
+
+
 def textbook_is_fresh(saved_at: float | None) -> bool:
     return saved_at is not None and time.time() - saved_at < TEXTBOOK_TTL_S
 
@@ -104,7 +124,9 @@ def attach_conditions(notebook: list[VisionTask], textbook: list[VisionTask]) ->
     """Заданию тетради подставляется печатное условие учебника.
 
     Балл кандидата: совпадение номера — 2, каждое общее отличительное число — 1;
-    порог CONTENT_MATCH_MIN. Рукописный номер читается ненадёжно («№19» → 29), поэтому
+    порог CONTENT_MATCH_MIN. Номер считается, только если он записан на обеих
+    страницах: придуманные структуризатором «1, 2, 3» совпадают у любых двух страниц
+    (живые логи 13.09). Рукописный номер читается ненадёжно («№19» → 29), поэтому
     совпадение по числам условия допустимо, но одно условие достаётся только одному
     заданию тетради (кроме точного совпадения номера); при равенстве баллов — номер.
     """
@@ -114,7 +136,9 @@ def attach_conditions(notebook: list[VisionTask], textbook: list[VisionTask]) ->
     for i, task in enumerate(notebook):
         student = _numbers(task.task_text, *task.student_solution_steps)
         for candidate in candidates:
-            exact = int(candidate.number == task.number)
+            exact = int(
+                candidate.number == task.number and candidate.number_on_page and task.number_on_page
+            )
             score = 2 * exact + len(student & distinctive[candidate.number])
             if score >= CONTENT_MATCH_MIN:
                 scored.append((score, exact, i, candidate))

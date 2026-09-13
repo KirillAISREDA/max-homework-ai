@@ -50,3 +50,17 @@ class TestStepResultAnnotation:
 
     def test_tail_with_digits_is_not_cut(self) -> None:
         assert check_steps(["10 = 2 км 300 м"])[0].status == "skipped"
+
+    def test_explanation_after_dash_may_contain_numbers(self) -> None:
+        # живые логи 07.09: «16 * 10 = 160 (л.) - на 16 яблок.» — пояснение, а не выражение
+        assert check_steps(["16 * 10 = 160 (л.) - на 16 яблок."])[0].status == "ok"
+        assert check_steps(["16 * 10 = 150 (л.) - на 16 яблок."])[0].status == "mismatch"
+
+    def test_dash_before_a_number_is_still_arithmetic(self) -> None:
+        assert check_steps(["10 = 300 - 2 яблока"])[0].status == "skipped"
+
+
+class TestShortAnswerLabel:
+    def test_abbreviated_label(self) -> None:
+        assert compare_answers("Отв.: 160 л", "160") is True
+        assert compare_answers("Отв: 150", "160") is False

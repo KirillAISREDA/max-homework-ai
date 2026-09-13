@@ -47,7 +47,34 @@ def test_arithmetic_error_without_written_answer_is_wrong() -> None:
     assert result.first_error_line == 1
 
 
-def test_unparseable_answer_with_consistent_steps_stays_uncertain() -> None:
+def test_no_answer_but_last_computed_line_matches_reference_is_correct() -> None:
     ref = RefSolution(steps=["220 + 180 = 400", "700 - 400 = 300"], answer="300", units=None)
     result = grade(["220 + 180 = 400", "700 - 400 = 300"], None, ref)
+    assert result.verdict == "correct"
+
+
+def test_no_answer_and_last_line_differs_from_reference_stays_uncertain() -> None:
+    # последняя строка может быть промежуточным шагом — это не доказанная ошибка
+    ref = RefSolution(steps=["220 + 180 = 400", "700 - 400 = 300"], answer="300", units=None)
+    result = grade(["220 + 180 = 400"], None, ref)
     assert result.verdict == "uncertain"
+
+
+def test_unreadable_final_equality_blocks_fallback_to_earlier_line() -> None:
+    # итоговая строка не прочиталась — совпадение промежуточной с эталоном не доказывает верность
+    ref = RefSolution(steps=["220 + 180 = 400", "700 - 400 = 300"], answer="400", units=None)
+    result = grade(["220 + 180 = 400", "700 - 400 = <неразборчиво>"], None, ref)
+    assert result.verdict == "uncertain"
+
+
+def test_answer_sentence_with_several_numbers_falls_back_to_last_line() -> None:
+    # живые логи 07.09 №26: верное решение получало «не уверен»
+    ref = RefSolution(steps=["16 * 10 = 160"], answer="160", units="ведер")
+    steps = [
+        "Всего - 16 яблок.",
+        "1 д. - 10 ведёр.",
+        "Всего - ? л.",
+        "16 * 10 = 160 (л.) - на 16 яблок.",
+    ]
+    result = grade(steps, "на 10 яблок надо 160", ref)
+    assert result.verdict == "correct"

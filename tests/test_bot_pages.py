@@ -14,7 +14,7 @@ from hwcheck.bot.handlers import Bot
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.config import Settings
 from hwcheck.events import EventLog
-from hwcheck.pipeline.schemas import VisionPage
+from hwcheck.pipeline.schemas import VisionPage, VisionTask
 from hwcheck.pipeline.solver import RefSolution, SolvedTask
 from hwcheck.pipeline.vision import RecognizedPage
 from test_bot import FakeMax
@@ -25,6 +25,35 @@ PAGES: dict[bytes, VisionPage] = {
     b"notebook": VisionPage(tasks=NOTEBOOK_19, page_ok=True),
     b"blank": VisionPage(tasks=[], page_ok=False, page_comment="пусто"),
     b"bare": VisionPage(tasks=[NOTEBOOK_19[0].model_copy(update={"task_text": ""})], page_ok=True),
+    # живые логи 13.09: ни на одной странице номеров нет, структуризатор пронумеровал с 1
+    b"fractions": VisionPage(
+        tasks=[
+            VisionTask(
+                number=1,
+                task_text="",
+                student_solution_steps=[
+                    "4/5 : 9/10 = 4/5 * 10/9 = 40/45 = 8/9",
+                    "9/10 : 4/5 = 9/10 * 5/4 = 45/40 = 9/8",
+                ],
+                confidence=0.9,
+            )
+        ],
+        page_ok=True,
+    ),
+    b"geometry": VisionPage(
+        tasks=[
+            VisionTask(number=1, task_text="Отметьте точки K, L и M на луче FE", confidence=0.9),
+            VisionTask(number=2, task_text="Проведите прямую SR", confidence=0.9),
+        ],
+        page_ok=True,
+    ),
+}
+TRANSCRIPTS: dict[bytes, str] = {
+    b"textbook": "\n".join(f"{n}. условие" for n in range(16, 23)),
+    b"notebook": "№ 19\n700 - (220 + 180) = 300",
+    b"bare": "№ 19\n700 - (220 + 180) = 300",
+    b"fractions": "4/5 : 9/10 = 4/5 * 10/9 = 40/45 = 8/9\n9/10 : 4/5 = 9/10 * 5/4 = 45/40 = 9/8",
+    b"geometry": "Отметьте точки K, L и M на луче FE\nПроведите прямую SR",
 }
 
 Harness = tuple[Bot, "FakeMaxPerUrl", InMemoryStateStore, list[str]]
@@ -69,7 +98,7 @@ def harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Harness:
             tokens_in=1,
             tokens_out=1,
             latency_s=0.0,
-            raw="",
+            raw=TRANSCRIPTS.get(image, ""),
         )
 
     async def fake_solve(_client: Any, task_text: str, **_kw: Any) -> tuple[SolvedTask, None]:
@@ -107,6 +136,17 @@ async def test_album_textbook_plus_notebook_checks_only_notebook_task(harness: H
     assert "№16" not in review
     state = await store.get(7)
     assert [t.number for t in state.textbook_tasks] == [16, 17, 18, 19, 20, 21, 22]
+
+
+async def test_synthetic_numbers_do_not_attach_unrelated_textbook_condition(
+    harness: Harness,
+) -> None:
+    # живые логи 13.09: верное деление дробей получило условие «Отметьте точки K, L и M»
+    # по совпадению придуманных номеров и ушло в солвер → ложная «ошибка»
+    bot, fake_max, _store, solved_texts = harness
+    await bot.handle_update(photo_update("fractions", "geometry"))
+    assert solved_texts == []
+    assert "1 из 1 верно" in fake_max.sent[-1][1]
 
 
 async def test_textbook_only_is_remembered_and_used_for_next_notebook(harness: Harness) -> None:
