@@ -1,5 +1,7 @@
 """Шифр id MAX и ключи при старте бота (спецификация онбординга §10.1, §13)."""
 
+from pathlib import Path
+
 import pytest
 
 from hwcheck.bot.runner import configure_ids
@@ -44,3 +46,49 @@ def test_keys_command_prints_env_lines(capsys: pytest.CaptureFixture[str]) -> No
     assert len(lines["ID_HASH_KEY"]) >= 40
     # пароль идёт в DATABASE_URL — только безопасные для URL символы
     assert all(ch.isalnum() or ch in "-_" for ch in lines["POSTGRES_PASSWORD"])
+
+
+async def test_bad_user_id_key_stops_bot_with_message() -> None:
+    from hwcheck.bot.runner import run_polling
+
+    with pytest.raises(SystemExit, match="USER_ID_KEY"):
+        await run_polling(Settings(_env_file=None, max_token="t", user_id_key="broken"))
+
+
+async def test_pool_is_closed_when_max_client_fails_to_start(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Ревью: сбой старта MAX/GigaChat не должен оставлять открытым пул базы."""
+    from hwcheck.bot import runner
+
+    closed: list[str] = []
+
+    class FakePool:
+        async def close(self) -> None:
+            closed.append("pool")
+
+    async def fake_create_pool(dsn: str) -> FakePool:
+        return FakePool()
+
+    class BrokenMaxClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def __aenter__(self) -> "BrokenMaxClient":
+            raise RuntimeError("MAX недоступен")
+
+        async def __aexit__(self, *exc: object) -> None:
+            pass
+
+    monkeypatch.setattr(runner, "create_pool", fake_create_pool)
+    monkeypatch.setattr(runner, "MaxClient", BrokenMaxClient)
+    monkeypatch.setattr(runner, "_install_stop_handler", lambda stop, loop: None)
+    settings = Settings(
+        _env_file=None,
+        max_token="t",
+        database_url="postgresql://fake",
+        events_path=str(tmp_path / "events.jsonl"),
+    )
+    with pytest.raises(RuntimeError, match="MAX недоступен"):
+        await runner.run_polling(settings)
+    assert closed == ["pool"]

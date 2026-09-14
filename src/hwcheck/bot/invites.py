@@ -1,15 +1,16 @@
 """Приглашения «ребёнок ↔ родитель» (спецификация онбординга §4.4, §7): ссылка и запасной код.
 
 Ссылка `https://max.ru/<бот>?start=p_<токен>` (ребёнок зовёт родителя) или `c_<токен>` (родитель
-зовёт ребёнка); запасной код — 8 знаков без похожих 0/O и 1/I. В базе — только sha256 токена и
-кода: утечка таблицы не даёт погасить чужое приглашение.
+зовёт ребёнка); запасной код — 8 знаков без похожих 0/O и 1/I. В базе — только HMAC токена и кода
+(ключ ID_HASH_KEY): утечка таблицы или бэкапа не даёт подобрать и погасить чужое приглашение.
 """
 
-import hashlib
 import re
 import secrets
 from dataclasses import dataclass
 from typing import Literal
+
+from hwcheck.events import keyed_digest
 
 InviteKind = Literal["student_invites_parent", "parent_invites_student"]
 
@@ -73,4 +74,4 @@ def parse_code(text: str) -> str | None:
 
 
 def digest(secret: str) -> str:
-    return hashlib.sha256(secret.encode()).hexdigest()
+    return keyed_digest(secret)

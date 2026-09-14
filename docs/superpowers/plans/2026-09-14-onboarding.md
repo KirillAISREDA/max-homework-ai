@@ -1205,7 +1205,7 @@ cp .env .env.bak-$(date +%F) && chmod 600 .env.bak-*
 docker build -t max-homework-ai-bot .
 docker run --rm max-homework-ai-bot python -m hwcheck keys >> .env   # секреты сразу в .env, не на экран
 grep -o '^[A-Z_]*=' .env                                               # проверить только имена
-mkdir -p var/backups
+mkdir -p var/backups && chmod 700 var/backups   # дампы с данными детей — только root
 ```
 
 Expected: в списке имён есть `ID_HASH_KEY=`, `USER_ID_KEY=`, `POSTGRES_PASSWORD=` ровно по одному разу.

@@ -128,6 +128,14 @@ def anonymize(user_id: int | None) -> str | None:
     return hmac.new(_id_hash_key, str(user_id).encode(), hashlib.sha256).hexdigest()[:16]
 
 
+def keyed_digest(value: str) -> str:
+    """Полный HMAC-SHA256 секрета с малым перебором (запасной код приглашения: 32⁸ ≈ 2⁴⁰), чтобы
+    хэш из утёкшей базы или бэкапа не подбирался без ключа; без ключа (локально) — sha256."""
+    if _id_hash_key is None:
+        return hashlib.sha256(value.encode()).hexdigest()
+    return hmac.new(_id_hash_key, value.encode(), hashlib.sha256).hexdigest()
+
+
 def legacy_anonymize(user_id: int | None) -> str | None:
     """Хэш до перехода на HMAC — только чтобы узнать тестеров из старого TEST_USERS."""
     if user_id is None:

@@ -66,3 +66,15 @@ def test_hashes_do_not_reveal_secrets() -> None:
     invite = new_invite("parent_invites_student")
     assert invite.token_hash == digest(invite.token) and len(invite.token_hash) == 64
     assert invite.code not in invite.code_hash and invite.token not in invite.token_hash
+
+
+def test_digest_is_keyed_in_prod() -> None:
+    """Ревью: у кода 32⁸ ≈ 2⁴⁰ вариантов — sha256 из утёкшей базы подбирается перебором."""
+    import hashlib
+    import hmac
+
+    from hwcheck.events import set_id_hash_key
+
+    assert digest("4F7K92QD") == hashlib.sha256(b"4F7K92QD").hexdigest()
+    set_id_hash_key("secret-key")
+    assert digest("4F7K92QD") == hmac.new(b"secret-key", b"4F7K92QD", hashlib.sha256).hexdigest()

@@ -93,6 +93,8 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
+        # дампы с данными детей — только владельцу: хост общий с другими проектами (ревью)
+        umask 077
         while true; do
           pg_dump --format=custom --file=/backups/homework-$$(date -u +%F).dump \
             && find /backups -name 'homework-*.dump' -mtime +7 -delete
