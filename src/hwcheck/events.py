@@ -9,6 +9,7 @@ environment=dev исключается из зачёта; в prod события
 
 import hashlib
 import json
+import logging
 import time
 import uuid
 from collections.abc import Iterable, Iterator
@@ -16,6 +17,8 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
 
@@ -60,6 +63,38 @@ class EventLog:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._path.open("a", encoding="utf-8") as out:
             out.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def read_events(path: Path) -> Iterator[dict[str, Any]]:
+    """Записи журнала; нет файла — пусто, битая строка (обрыв записи) пропускается."""
+    if not path.exists():
+        return
+    with path.open(encoding="utf-8") as lines:
+        for number, line in enumerate(lines, start=1):
+            if not line.strip():
+                continue
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError:
+                logger.warning("events: broken line %d skipped", number)
+
+
+def summarize_events(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, dict[str, int]]]:
+    """Вердикты проверок и причины «не уверен» по среде (prod / test / dev).
+
+    События до появления поля reason считаются причиной «unknown».
+    """
+    summary: dict[str, dict[str, dict[str, int]]] = {}
+    for row in rows:
+        if row.get("type") != "task_checked":
+            continue
+        env = summary.setdefault(str(row.get("env")), {"verdicts": {}, "uncertain_reasons": {}})
+        verdict = str(row.get("verdict"))
+        env["verdicts"][verdict] = env["verdicts"].get(verdict, 0) + 1
+        if verdict == "uncertain":
+            reason = str(row.get("reason") or "unknown")
+            env["uncertain_reasons"][reason] = env["uncertain_reasons"].get(reason, 0) + 1
+    return summary
 
 
 def anonymize(user_id: int | None) -> str | None:
