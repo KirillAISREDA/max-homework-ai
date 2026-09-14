@@ -59,3 +59,24 @@
     Кирилл проверяет в первую очередь.
 - `textbook_tasks` — только условия, нужные для заданий тетради этого кейса (номер и текст/выражения).
 - `notes` — всё, что важно для интерпретации (правка учителя красной ручкой, поворот фото, блики).
+
+## Запуск
+
+PERS-тариф: один одновременный запрос, и тот же ключ использует бот в проде. Поэтому:
+
+1. Проверить, что в боте нет активности (события за 10 минут на VPS — `docs/deploy.md`), лучше в школьные часы.
+2. Прогнать конфигурации по очереди (кэш общий: одинаковые вызовы, например распознавание 2-Max в `baseline` и
+   `structure-3lightning`, второй раз не тратят токены):
+
+```bash
+uv run python -m hwcheck bench run --config bench/configs/baseline.json --max-calls 300
+uv run python -m hwcheck bench run --config bench/configs/vision-3ultra.json --max-calls 300
+uv run python -m hwcheck bench report .cache/bench/runs/baseline.jsonl .cache/bench/runs/vision-3ultra.jsonl \
+  --pair baseline vision-3ultra --out bench/reports/2026-09-14-vision.md
+```
+
+- `--max-calls` — лимит свежих вызовов модели на прогон; при исчерпании прогон останавливается, повторный запуск
+  продолжит за счёт кэша.
+- При 429 клиент ждёт 20/40/60 с и повторяет.
+- Модели с изображениями (14.09): GigaChat-2-Max, 2-Pro, 3-Pro, 3-Ultra. **GigaChat-3-Lightning изображения не
+  принимает** (422) — только текстовые шаги (разбор, эталон).
