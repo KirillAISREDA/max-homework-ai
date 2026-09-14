@@ -1,8 +1,17 @@
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 
+import pytest
 from pydantic import BaseModel
 
+from hwcheck.events import set_id_hash_key
 from hwcheck.llm.base import ChatMessage, LLMResult
+
+
+@pytest.fixture(autouse=True)
+def _reset_id_hash_key() -> Iterator[None]:
+    # ключ HMAC — глобальное состояние процесса: тест не должен влиять на соседей
+    yield
+    set_id_hash_key(None)
 
 
 class FakeLLMClient:
