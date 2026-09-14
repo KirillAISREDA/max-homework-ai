@@ -80,32 +80,55 @@ def mark_written_numbers(page: VisionPage, transcript: str) -> VisionPage:
 _COLUMN_GAP = re.compile(r"\s{3,}|\t+")
 
 
+# слово (две и больше кириллических букв): «Дано», «(чел.)» — часть не вычисление
+_WORD = re.compile(r"[А-Яа-яЁё]{2,}")
+# «a = 5», «x = 57»: сама по себе ничего не проверяет
+_BARE_ASSIGNMENT = re.compile(r"\s*(?:[A-Za-z]|х)\s*=\s*-?\d+(?:[.,]\d+)?(?:\s*/\s*\d+)?\s*")
+
+
 def split_columns(steps: list[str]) -> list[str]:
     """Примеры из соседних колонок в одной строке — отдельными строками, колонка за колонкой.
 
     Распознавание пишет колонки через широкий пробел, а разбор их не всегда делит (стенд 14.09:
-    «180 - x = 100      x - 17 = 40» проверялось как одно уравнение → ложная «ошибка»). Делим,
-    только если в каждой части есть «=»; подряд идущие строки с тем же числом колонок читаем
-    сначала левой колонкой, потом правой — иначе цепочки уравнений двух колонок перемешаются.
+    «180 - x = 100      x - 17 = 40» проверялось как одно уравнение → ложная «ошибка»).
+
+    Строка — кандидат, если в каждой части есть «=» и нет слов («Дано: a = 5     b = 3» — не
+    колонки). Участок кандидатов делится, только если он ровный: у всех строк одно число
+    колонок, между ними нет одиночных строк с «=» и есть хоть одно настоящее вычисление, а не
+    одни «a = 5». Ровный участок читается колонка за колонкой; неровный остаётся как написан —
+    восстановить колонки нельзя, а перемешанные строки двух уравнений с «x» дали бы новую
+    ложную ошибку (ревью).
     """
+    rows = [[p.strip() for p in _COLUMN_GAP.split(line.strip())] for line in steps]
+    candidate = [
+        len(parts) >= 2 and all("=" in p and not _WORD.search(p) for p in parts) for parts in rows
+    ]
     result: list[str] = []
-    block: list[list[str]] = []
-
-    def flush() -> None:
-        for column in range(len(block[0]) if block else 0):
-            result.extend(row[column] for row in block)
-        block.clear()
-
-    for line in steps:
-        parts = [p.strip() for p in _COLUMN_GAP.split(line.strip())]
-        if len(parts) >= 2 and all("=" in part for part in parts):
-            if block and len(block[0]) != len(parts):
-                flush()
-            block.append(parts)
+    i = 0
+    while i < len(steps):
+        if not candidate[i]:
+            result.append(steps[i])
+            i += 1
             continue
-        flush()
-        result.append(line)
-    flush()
+        # участок продолжается, пока идут строки с «=»; его конец — последний кандидат
+        last = i
+        j = i
+        while j + 1 < len(steps) and "=" in steps[j + 1]:
+            j += 1
+            if candidate[j]:
+                last = j
+        region = range(i, last + 1)
+        regular = (
+            all(candidate[k] for k in region)
+            and len({len(rows[k]) for k in region}) == 1
+            and any(not _BARE_ASSIGNMENT.fullmatch(p) for k in region for p in rows[k])
+        )
+        if regular:
+            for column in range(len(rows[i])):
+                result.extend(rows[k][column] for k in region)
+        else:
+            result.extend(steps[k] for k in region)
+        i = last + 1
     return result
 
 

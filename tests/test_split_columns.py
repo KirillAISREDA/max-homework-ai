@@ -98,3 +98,57 @@ async def test_recognize_photo_splits_columns(monkeypatch: pytest.MonkeyPatch) -
     recognized = await check.recognize_photo(None, b"img", models)  # type: ignore[arg-type]
     assert recognized.page is not None
     assert recognized.page.tasks[0].student_solution_steps == split_columns(HW2_TASK_20)
+
+
+# --- ревью: колонки разной длины и «Дано» ---
+
+
+def test_irregular_column_region_is_left_as_written() -> None:
+    """Левая колонка на строку длиннее: восстановить колонки нельзя — не делим вовсе
+    (иначе строки двух уравнений с «x» перемешаются и дадут новую ложную ошибку)."""
+    steps = [
+        "180 - x = 100      x - 17 = 40",
+        "x = 180 - 100",
+        "x = 17 + 40",
+        "x = 80              x = 57",
+    ]
+    assert split_columns(steps) == steps
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Дано: a = 5     b = 3",
+        "a = 5     b = 3",
+        "220 + 180 = 400 (чел.)     700 - 400 = 300 (чел.)",
+    ],
+)
+def test_notes_and_bare_assignments_are_not_columns(line: str) -> None:
+    assert split_columns([line]) == [line]
+
+
+def test_textbook_page_role_not_changed_by_given_values() -> None:
+    from hwcheck.bot.pages import page_role
+    from hwcheck.pipeline.schemas import VisionPage, VisionTask
+
+    tasks = [
+        VisionTask(
+            number=1,
+            task_text="Найди периметр",
+            student_solution_steps=["Дано: a = 5     b = 3"],
+            confidence=1,
+        ),
+        VisionTask(number=2, task_text="Реши задачу", confidence=1),
+    ]
+    page = VisionPage(tasks=tasks, page_ok=True)
+    split = page.model_copy(
+        update={
+            "tasks": [
+                t.model_copy(
+                    update={"student_solution_steps": split_columns(t.student_solution_steps)}
+                )
+                for t in tasks
+            ]
+        }
+    )
+    assert page_role(split) == page_role(page) == "textbook"
