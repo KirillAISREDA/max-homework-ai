@@ -155,3 +155,41 @@ async def test_bot_sets_tutor_target_from_error_line() -> None:
     )
     session = await bot._start_tutoring(None, item)
     assert session.expected == "872"
+
+
+# --- стенд 14.09: условие со списком уравнений (hw2 №20) ---
+
+EQUATIONS_20 = "Реши уравнения. 180 − x = 100; x − 17 = 40; x + 24 = 50"
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [EQUATIONS_20, "Реши уравнения:   180 − x = 100      x − 17 = 40"],
+)
+def test_list_of_equations_is_multipart(condition: str) -> None:
+    assert is_multipart(condition, [])
+
+
+@pytest.mark.parametrize(
+    "condition",
+    ["Реши уравнение 180 − x = 100", "Найди значение a + b, если a = 5, b = 3"],
+)
+def test_single_equation_or_assignments_are_not_multipart(condition: str) -> None:
+    assert not is_multipart(condition, [])
+
+
+def test_all_equations_solved_is_correct_despite_lumped_reference() -> None:
+    from hwcheck.bot.pages import split_columns
+
+    steps = split_columns(
+        [
+            "180 - x = 100      x - 17 = 40",
+            "x = 180 - 100       x = 17 + 40",
+            "x = 80              x = 57",
+            "x + 24 = 50",
+            "x = 50 - 24",
+            "x = 26",
+        ]
+    )
+    lumped = RefSolution(steps=["180 - 100 = 80"], answer="80")
+    assert grade(steps, None, lumped, condition=EQUATIONS_20).verdict == "correct"

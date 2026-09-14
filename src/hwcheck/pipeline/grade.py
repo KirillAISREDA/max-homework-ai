@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from hwcheck.pipeline.mathparse import parse_value
+from hwcheck.pipeline.mathparse import parse_equation, parse_value
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.validator import (
     LineCheck,
@@ -120,7 +120,29 @@ def is_multipart(condition: str | None, steps: list[str]) -> bool:
     отдельных примеров в условии: «№52. 651 + 126; 379 − 253; …» (живой альбом 13.09)."""
     labels = {m.group(1).lower() for m in _ITEM.finditer(condition or "")}
     step_labels = {m.group(1).lower() for s in steps if (m := _STEP_ITEM.match(s))}
-    return len(labels) >= 2 or len(step_labels) >= 2 or _listed_expressions(condition) >= 2
+    return (
+        len(labels) >= 2
+        or len(step_labels) >= 2
+        or _listed_expressions(condition) >= 2
+        or _listed_equations(condition) >= 2
+    )
+
+
+# разделители примеров в условии и текст-инструкция перед первым из них
+_CHUNK_BREAK = re.compile(r"[;\n]|\s{3,}")
+_LEADING_WORDS = re.compile(r"^(?:[А-Яа-яЁё]+[\s.,:!?—-]*)+")
+
+
+def _listed_equations(condition: str | None) -> int:
+    """Уравнения списком: «Реши уравнения. 180 − x = 100; x − 17 = 40» (стенд 14.09, hw2 №20).
+
+    Эталон солвера — один ответ на все уравнения; присваивания «a = 5, b = 3» не считаются.
+    """
+    count = 0
+    for chunk in _CHUNK_BREAK.split(condition or ""):
+        equation = parse_equation(_LEADING_WORDS.sub("", chunk.strip()))
+        count += int(equation is not None and equation.kind == "equation")
+    return count
 
 
 def _listed_expressions(condition: str | None) -> int:

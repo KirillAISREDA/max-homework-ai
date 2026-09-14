@@ -76,6 +76,39 @@ def mark_written_numbers(page: VisionPage, transcript: str) -> VisionPage:
     return page.model_copy(update={"tasks": tasks})
 
 
+# граница колонок в строке транскрипции: несколько пробелов или табуляция
+_COLUMN_GAP = re.compile(r"\s{3,}|\t+")
+
+
+def split_columns(steps: list[str]) -> list[str]:
+    """Примеры из соседних колонок в одной строке — отдельными строками, колонка за колонкой.
+
+    Распознавание пишет колонки через широкий пробел, а разбор их не всегда делит (стенд 14.09:
+    «180 - x = 100      x - 17 = 40» проверялось как одно уравнение → ложная «ошибка»). Делим,
+    только если в каждой части есть «=»; подряд идущие строки с тем же числом колонок читаем
+    сначала левой колонкой, потом правой — иначе цепочки уравнений двух колонок перемешаются.
+    """
+    result: list[str] = []
+    block: list[list[str]] = []
+
+    def flush() -> None:
+        for column in range(len(block[0]) if block else 0):
+            result.extend(row[column] for row in block)
+        block.clear()
+
+    for line in steps:
+        parts = [p.strip() for p in _COLUMN_GAP.split(line.strip())]
+        if len(parts) >= 2 and all("=" in part for part in parts):
+            if block and len(block[0]) != len(parts):
+                flush()
+            block.append(parts)
+            continue
+        flush()
+        result.append(line)
+    flush()
+    return result
+
+
 def textbook_is_fresh(saved_at: float | None) -> bool:
     return saved_at is not None and time.time() - saved_at < TEXTBOOK_TTL_S
 
