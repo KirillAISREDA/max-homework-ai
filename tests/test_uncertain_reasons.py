@@ -4,12 +4,13 @@
 какие уточняющие вопросы окупятся (почерк, знак, нет ответа) и что лечится кодом.
 """
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from hwcheck.bot.handlers import _validator_only_grade
-from hwcheck.events import summarize_events
+from hwcheck.events import read_events, summarize_events
 from hwcheck.pipeline.grade import grade
 from hwcheck.pipeline.solver import RefSolution
 
@@ -71,3 +72,17 @@ def test_summary_counts_verdicts_and_reasons_by_environment() -> None:
     assert summary["prod"]["uncertain_reasons"] == {"no_answer": 2, "unreadable": 1}
     assert summary["test"]["verdicts"] == {"wrong": 1}
     assert summary["dev"]["uncertain_reasons"] == {"unknown": 1}
+
+
+def test_read_events_skips_broken_lines_and_missing_file(tmp_path: Path) -> None:
+    """Ревью: повреждённый хвост журнала или отсутствующий файл не должны ронять отчёт."""
+    path = tmp_path / "events.jsonl"
+    assert list(read_events(path)) == []
+    path.write_text(
+        '{"type": "task_checked", "env": "prod", "verdict": "correct"}\n'
+        "\n"
+        '{"type": "task_checked", "env": "pr\n'
+        '{"type": "task_checked", "env": "prod", "verdict": "wrong"}\n',
+        encoding="utf-8",
+    )
+    assert [r["verdict"] for r in read_events(path)] == ["correct", "wrong"]

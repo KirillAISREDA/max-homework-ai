@@ -10,7 +10,7 @@ from pathlib import Path
 from hwcheck.bot.runner import run_polling
 from hwcheck.config import Settings, load_settings
 from hwcheck.eval.offline import run_offline_eval
-from hwcheck.events import summarize_events
+from hwcheck.events import read_events, summarize_events
 from hwcheck.llm import ChatMessage, GigaChatClient
 from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.generator import generate_similar
@@ -71,8 +71,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.command == "report":
         # без кредов GigaChat: только чтение журнала
-        rows = (json.loads(line) for line in args.events.open(encoding="utf-8") if line.strip())
-        print(json.dumps(summarize_events(rows), ensure_ascii=False, indent=2))
+        print(json.dumps(summarize_events(read_events(args.events)), ensure_ascii=False, indent=2))
         return
     asyncio.run(_run(args))
 
