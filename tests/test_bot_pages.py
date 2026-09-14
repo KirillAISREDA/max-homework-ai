@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from hwcheck.bot import handlers
+from hwcheck.bot import check
 from hwcheck.bot.fsm import InMemoryStateStore
 from hwcheck.bot.handlers import Bot
 from hwcheck.bot.models import MaxUpdate
@@ -110,8 +110,8 @@ def harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Harness:
         )
         return solved, None
 
-    monkeypatch.setattr(handlers, "recognize_page_two_stage", fake_recognize)
-    monkeypatch.setattr(handlers, "solve_task", fake_solve)
+    monkeypatch.setattr(check, "recognize_page_two_stage", fake_recognize)
+    monkeypatch.setattr(check, "solve_task", fake_solve)
     fake_max = FakeMaxPerUrl()
     store = InMemoryStateStore()
     bot = Bot(
@@ -263,7 +263,7 @@ async def test_task_checked_when_solver_fails(
     async def failing_solve(*_args: Any, **_kw: Any) -> tuple[SolvedTask, None]:
         raise StructuredOutputError("bad json")
 
-    monkeypatch.setattr(handlers, "solve_task", failing_solve)
+    monkeypatch.setattr(check, "solve_task", failing_solve)
     bot, _max, _store, _solved = harness
     await bot.handle_update(photo_update("textbook", "notebook"))
     assert checked_events(tmp_path)[-1]["ref_status"] == "solver_failed"
@@ -279,7 +279,7 @@ async def test_task_checked_when_reference_not_verified(
         )
         return solved, None
 
-    monkeypatch.setattr(handlers, "solve_task", unverified_solve)
+    monkeypatch.setattr(check, "solve_task", unverified_solve)
     bot, _max, _store, _solved = harness
     await bot.handle_update(photo_update("textbook", "notebook"))
     assert checked_events(tmp_path)[-1]["ref_status"] == "ref_not_verified"
