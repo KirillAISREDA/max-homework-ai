@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Домашка — ИИ-помощник проверки домашки в MAX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;600;700&family=Golos+Text:wght@400;500;600&family=Caveat:wght@500;700&display=block" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1B2A4A;
+    --ink-soft: #4A5A78;
+    --brand: #4FA8E8;
+    --marker: #FFC627;
+    --paper: #FBFCFE;
+    --grid: #DCE9F6;
+    --margin-line: #F0B7B3;
+    --pen: #2A4BB5;
+    --error: #D6453D;
+    --ok: #2E9E5B;
+    --muted: #8A97AD;
+  }
+  @page { size: 1280px 720px; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #E9EEF5; }
+  body {
+    font-family: "Golos Text", "Segoe UI", Arial, sans-serif;
+    color: var(--ink);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Лист тетради в клетку: клетка 24px, поля справа — красная линия, как в школьной тетради */
+  .page {
+    width: 1280px;
+    height: 720px;
+    position: relative;
+    overflow: hidden;
+    page-break-after: always;
+    break-after: page;
+    padding: 56px 168px 48px 72px;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-position: -1px -1px;
+  }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+  .page::after {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0;
+    right: 120px;
+    width: 2px;
+    background: var(--margin-line);
+  }
+  .folio {
+    position: absolute;
+    right: 44px;
+    bottom: 40px;
+    font-family: "Caveat", cursive;
+    font-size: 30px;
+    color: var(--ink-soft);
+  }
+
+  h1, h2 {
+    font-family: "Unbounded", "Golos Text", sans-serif;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  h2 { font-size: 34px; line-height: 1.18; max-width: 980px; }
+  p { margin: 0; }
+  .lead { font-size: 21px; line-height: 1.45; color: var(--ink-soft); }
+  .mark {
+    background: linear-gradient(transparent 66%, var(--marker) 66%, var(--marker) 100%);
+    padding: 0 2px;
+  }
+  .sources {
+    position: absolute;
+    left: 72px;
+    right: 168px;
+    bottom: 22px;
+    font-size: 11.5px;
+    line-height: 1.35;
+    color: var(--muted);
+  }
+
+  /* ---------- 1. Обложка ---------- */
+  .cover { display: grid; grid-template-columns: 1fr 420px; gap: 40px; align-items: center; height: 100%; }
+  .brand { display: flex; align-items: center; gap: 16px; margin-bottom: 44px; }
+  .brand svg { width: 64px; height: 64px; border-radius: 16px; }
+  .brand span { font-family: "Unbounded", sans-serif; font-size: 30px; font-weight: 700; }
+  .cover h1 { font-size: 42px; line-height: 1.14; margin-bottom: 24px; }
+  .cover .lead { max-width: 560px; }
+  .cover-meta { margin-top: 44px; font-size: 16px; line-height: 1.55; color: var(--ink-soft); }
+  .cover-meta b { color: var(--ink); font-weight: 600; }
+
+  .sheet { position: relative; padding: 28px 8px 0 24px; }
+  .hand { font-family: "Caveat", cursive; color: var(--pen); line-height: 1; }
+  .hand.num { font-size: 36px; font-weight: 700; margin-bottom: 14px; }
+  .hand.line { font-size: 58px; font-weight: 500; white-space: nowrap; position: relative; display: inline-block; }
+  .hand .wrong { position: relative; display: inline-block; }
+  .hand .wrong svg { position: absolute; left: -22px; top: -16px; width: 132px; height: 88px; overflow: visible; }
+  .bubble {
+    margin-top: 44px;
+    margin-left: 32px;
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 22px 22px 22px 6px;
+    padding: 18px 22px 18px 20px;
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 14px;
+    box-shadow: 6px 6px 0 var(--brand);
+  }
+  .bubble svg { width: 40px; height: 40px; border-radius: 10px; }
+  .bubble p { font-size: 18px; line-height: 1.4; }
+  .bubble .verdict { font-weight: 600; color: var(--error); display: block; margin-bottom: 4px; }
+
+  /* ---------- 2. Проблема ---------- */
+  .problem { display: grid; grid-template-columns: 400px 1fr; gap: 48px; margin-top: 40px; }
+  .problem .lead { font-size: 22px; color: var(--ink); }
+  .problem .lead + .lead { margin-top: 20px; color: var(--ink-soft); font-size: 19px; }
+  .facts { display: flex; flex-direction: column; gap: 30px; }
+  .fact { display: grid; grid-template-columns: 250px 1fr; gap: 20px; align-items: start; }
+  .fact .value { font-family: "Unbounded", sans-serif; font-size: 32px; line-height: 1.1; font-weight: 600; white-space: nowrap; }
+  .fact p { font-size: 18px; line-height: 1.42; }
+  .fact small { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); }
+
+  /* ---------- 3. Как работает ---------- */
+  .how { display: grid; grid-template-columns: 1fr 330px; gap: 48px; margin-top: 34px; }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 26px 36px; counter-reset: step; }
+  .steps li { counter-increment: step; position: relative; padding-left: 56px; }
+  .steps li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: -4px;
+    width: 40px; height: 40px;
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-family: "Unbounded", sans-serif; font-weight: 600; font-size: 18px;
+    background: var(--paper);
+  }
+  .steps h3 { font-family: "Unbounded", sans-serif; font-size: 19px; font-weight: 600; margin: 0 0 8px; }
+  .steps p { font-size: 16.5px; line-height: 1.45; color: var(--ink-soft); }
+  .phone {
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 26px;
+    padding: 20px 18px;
+    align-self: start;
+  }
+  .phone .who { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .msg { background: #EEF5FC; border-radius: 16px 16px 16px 4px; padding: 14px 16px; font-size: 16px; line-height: 1.5; }
+  .msg b { font-weight: 600; }
+  .row-mark { display: flex; align-items: center; gap: 8px; }
+  .row-mark svg { width: 16px; height: 16px; flex: none; }
+  .btn { margin-top: 10px; border: 2px solid var(--brand); border-radius: 12px; padding: 9px 12px; text-align: center; font-weight: 600; font-size: 15px; color: var(--ink); }
+  .msg.parent { margin-top: 14px; background: #FFF6DA; border-radius: 16px 16px 4px 16px; }
+  .trust { margin-top: 26px; font-size: 16px; line-height: 1.5; color: var(--ink-soft); max-width: 700px; }
+
+  /* ---------- 4. Отличия ---------- */
+  table.compare { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13.5px; }
+  .compare th, .compare td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1.5px solid #C9D6E6; }
+  .compare thead th { font-family: "Unbounded", sans-serif; font-size: 12.5px; font-weight: 600; line-height: 1.3; border-bottom: 2px solid var(--ink); background: var(--paper); }
+  .compare tbody th { font-weight: 500; width: 230px; background: var(--paper); line-height: 1.35; }
+  .compare td { line-height: 1.3; background: var(--paper); }
+  .compare .us { background: #FFF1C2; }
+  .compare thead .us { background: var(--marker); }
+  .cell { display: flex; gap: 7px; align-items: flex-start; }
+  .cell svg { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+  .cell span { color: var(--ink-soft); }
+  .nodata { color: var(--muted); font-style: italic; }
+  .proof { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; margin-top: 16px; font-size: 14.5px; line-height: 1.42; }
+  .proof b { font-family: "Unbounded", sans-serif; font-weight: 600; font-size: 17px; }
+
+  /* ---------- 5. Статус и план ---------- */
+  .status { display: grid; grid-template-columns: 1fr 1.05fr 1fr; gap: 40px; margin-top: 34px; }
+  .status h3 { font-family: "Unbounded", sans-serif; font-size: 18px; font-weight: 600; margin: 0 0 14px; }
+  .status ul { margin: 0; padding-left: 20px; }
+  .status li { font-size: 15.5px; line-height: 1.45; margin-bottom: 9px; }
+  .status li::marker { color: var(--brand); }
+  .timeline { display: grid; grid-template-columns: 84px 1fr; row-gap: 12px; column-gap: 14px; font-size: 15.5px; line-height: 1.42; }
+  .timeline dt { font-family: "Caveat", cursive; font-size: 25px; line-height: 1; color: var(--pen); font-weight: 700; }
+  .timeline dd { margin: 0; }
+  .aside p { font-size: 15.5px; line-height: 1.45; margin-bottom: 14px; }
+  .team { margin-top: 26px; padding-top: 18px; border-top: 2px solid var(--ink); display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; font-size: 16px; line-height: 1.45; }
+  .team a { color: var(--ink); font-weight: 600; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<!-- Логотип «робот» (assets/branding/logo.svg) — в symbol, чтобы вставлять в нескольких местах -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="logo" viewBox="0 0 500 500">
+    <rect width="500" height="500" fill="#4FA8E8"/>
+    <line x1="250" y1="150" x2="250" y2="112" stroke="#1B2A4A" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="250" cy="92" r="20" fill="#FFC627" stroke="#1B2A4A" stroke-width="8"/>
+    <rect x="72" y="238" width="34" height="66" rx="12" fill="#1B2A4A"/>
+    <rect x="394" y="238" width="34" height="66" rx="12" fill="#1B2A4A"/>
+    <rect x="105" y="150" width="290" height="236" rx="58" fill="#FFFFFF"/>
+    <circle cx="192" cy="252" r="25" fill="#1B2A4A"/>
+    <circle cx="308" cy="252" r="25" fill="#1B2A4A"/>
+    <circle cx="201" cy="243" r="8" fill="#FFFFFF"/>
+    <circle cx="317" cy="243" r="8" fill="#FFFFFF"/>
+    <circle cx="148" cy="304" r="14" fill="#FFB8C2"/>
+    <circle cx="352" cy="304" r="14" fill="#FFB8C2"/>
+    <path d="M 200 312 L 238 348 L 300 292" fill="none" stroke="#1B2A4A" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="yes" viewBox="0 0 20 20"><path d="M3 10.5 L8 15 L17 4.5" fill="none" stroke="#2E9E5B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="no" viewBox="0 0 20 20"><path d="M4.5 4.5 L15.5 15.5 M15.5 4.5 L4.5 15.5" fill="none" stroke="#D6453D" stroke-width="3" stroke-linecap="round"/></symbol>
+  <symbol id="part" viewBox="0 0 20 20"><path d="M4 10 H16" fill="none" stroke="#8A97AD" stroke-width="3" stroke-linecap="round"/></symbol>
+</svg>
+
+<!-- 1 -->
+<section class="page">
+  <div class="cover">
+    <div>
+      <div class="brand"><svg><use href="#logo"/></svg><span>Домашка</span></div>
+      <h1>Проверяет домашку по фото тетради и учит находить ошибки самому</h1>
+      <p class="lead">ИИ-помощник в мессенджере MAX для учеников 1–9 классов и их родителей. Не выдаёт готовые ответы — ведёт к ним подсказками.</p>
+      <p class="cover-meta"><b>Работает в MAX с 4 сентября 2026</b><br>Участник Sber500 x Disrupt, этап 1</p>
+    </div>
+    <div class="sheet" aria-label="Пример проверки">
+      <div class="hand num">№ 17</div>
+      <div class="hand line">803 + 169 = <span class="wrong">753<svg viewBox="0 0 132 88"><path d="M14 44 C 10 14, 62 4, 104 14 C 136 22, 128 68, 84 78 C 44 86, 8 74, 12 42 C 14 30, 30 20, 46 17" fill="none" stroke="#D6453D" stroke-width="3.5" stroke-linecap="round"/></svg></span></div>
+      <div class="bubble">
+        <svg><use href="#logo"/></svg>
+        <p><span class="verdict">№17 — ошибка в строке 1</span>Давай разберёмся. Сложи сначала единицы: 3 + 9. Сколько получилось?</p>
+      </div>
+    </div>
+  </div>
+  <div class="folio">1</div>
+</section>
+
+<!-- 2 -->
+<section class="page">
+  <h2>Домашку вечером проверяют уставшие родители, или её списывают у нейросети</h2>
+  <div class="problem">
+    <div>
+      <p class="lead">Массовые сервисы либо сразу дают готовый ответ (ГДЗ, ИИ-чаты), либо проверяют только свои онлайн-задания (Учи.ру, ЯКласс, Skysmart).</p>
+      <p class="lead">Решение, которое ребёнок написал в тетради сам, по-прежнему проверяет взрослый. А ребёнок, получивший готовый ответ, сдаёт верную тетрадь и не понимает тему.</p>
+    </div>
+    <div class="facts">
+      <div class="fact">
+        <div class="value"><span class="mark">62%</span></div>
+        <p>школьников 8–15 лет пользуются нейросетями, большинство из них — для учёбы<small>Анкетолог, опрос 1886 школьников, сентябрь 2025</small></p>
+      </div>
+      <div class="fact">
+        <div class="value"><span class="mark">5–6 тыс. ₽</span></div>
+        <p>в неделю тратят семьи на репетиторов; час занятий по математике — от 500 до 2500 ₽<small>SuperJob для «Коммерсанта», апрель 2026</small></p>
+      </div>
+      <div class="fact">
+        <div class="value"><span class="mark">18 млн</span></div>
+        <p>школьников в России. Домашние задания не отменят, а списывать их с нейросетью — «неправильно», говорит министр просвещения<small>Доклад Правительства РФ, 2024/25; Правмир, май 2026</small></p>
+      </div>
+    </div>
+  </div>
+  <p class="sources">Источники: iom.anketolog.ru/2025/08/28/shkolniki-ispolzuyut-nejroseti; kommersant.ru/doc/8607904; static.government.ru (доклад об образовании 2024/25); pravmir.ru (08.05.2026).</p>
+  <div class="folio">2</div>
+</section>
+
+<!-- 3 -->
+<section class="page">
+  <h2>Ребёнок присылает фото тетради, через минуту видит ошибки и разбирает их сам</h2>
+  <div class="how">
+    <div>
+      <ol class="steps">
+        <li><h3>Фото в MAX</h3><p>Страница тетради, можно вместе со страницей учебника — до четырёх фото в одном сообщении.</p></li>
+        <li><h3>Распознавание</h3><p>GigaChat переписывает страницу текстом и раскладывает её на задания. Условие берём из печатного учебника.</p></li>
+        <li><h3>Проверка</h3><p>GigaChat решает задание, а SymPy пересчитывает каждую строку ученика и сам эталон. Ошибка доказана пересчётом. Не уверены — так и пишем.</p></li>
+        <li><h3>Разбор</h3><p>Подсказки трёх уровней: где ошибка, какой приём, полный разбор. Разбор засчитан, когда ребёнок сам напишет верное число.</p></li>
+      </ol>
+      <p class="trust">Проверка открывается после согласия родителя на обработку данных. Имена детей не собираем, идентификаторы шифруем, фото удаляем через 30 дней, данные храним в России.</p>
+    </div>
+    <div class="phone">
+      <div class="who">Домашка ИИ</div>
+      <div class="msg">
+        <b>Проверил! 1 из 2 верно.</b>
+        <div class="row-mark"><svg><use href="#no"/></svg>№17 — есть ошибка (строка 1)</div>
+        <div class="row-mark"><svg><use href="#yes"/></svg>№19 — верно</div>
+        <div class="btn">Разобрать №17</div>
+      </div>
+      <div class="msg parent">Родителю: «Ребёнок (4 класс) проверил домашку: 2 задания, 1 ошибку разбирает с подсказками». Сразу или сводкой вечером.</div>
+    </div>
+  </div>
+  <div class="folio">3</div>
+</section>
+
+<!-- 4 -->
+<section class="page">
+  <h2>Чем мы отличаемся</h2>
+  <table class="compare">
+    <thead>
+      <tr>
+        <th></th>
+        <th class="us">Домашка</th>
+        <th>СберКот в СберKids</th>
+        <th>ИИ-чаты, Алиса</th>
+        <th>ГДЗ</th>
+        <th>Учи.ру, ЯКласс, Skysmart</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th>Проверяет решение ребёнка из тетради</th>
+        <td class="us"><div class="cell"><svg><use href="#yes"/></svg>все задания страницы</div></td>
+        <td><div class="cell"><svg><use href="#part"/></svg><span>подсказки на «правильно ли решил?»</span></div></td>
+        <td><div class="cell"><svg><use href="#no"/></svg><span>решают сами</span></div></td>
+        <td><div class="cell"><svg><use href="#no"/></svg><span>ответы по номеру</span></div></td>
+        <td><div class="cell"><svg><use href="#no"/></svg><span>свои онлайн-задания</span></div></td>
+      </tr>
+      <tr>
+        <th>Не выдаёт готовый ответ</th>
+        <td class="us"><div class="cell"><svg><use href="#yes"/></svg>ответ только на 3-м уровне</div></td>
+        <td><div class="cell"><svg><use href="#yes"/></svg></div></td>
+        <td><div class="cell"><svg><use href="#no"/></svg></div></td>
+        <td><div class="cell"><svg><use href="#no"/></svg></div></td>
+        <td><div class="cell"><svg><use href="#part"/></svg><span>не применимо</span></div></td>
+      </tr>
+      <tr>
+        <th>Ошибка доказана пересчётом, а не нейросетью</th>
+        <td class="us"><div class="cell"><svg><use href="#yes"/></svg>SymPy</div></td>
+        <td><span class="nodata">нет данных</span></td>
+        <td><div class="cell"><svg><use href="#no"/></svg></div></td>
+        <td><div class="cell"><svg><use href="#part"/></svg><span>не применимо</span></div></td>
+        <td><div class="cell"><svg><use href="#part"/></svg><span>не применимо</span></div></td>
+      </tr>
+      <tr>
+        <th>Классы и предметы</th>
+        <td class="us">1–9; математика, затем русский</td>
+        <td><span>1–6, математика</span></td>
+        <td><span>любые</span></td>
+        <td><span>1–11, по учебникам</span></td>
+        <td><span>1–11</span></td>
+      </tr>
+      <tr>
+        <th>Где работает</th>
+        <td class="us">MAX без установки, рядом «Сферум»</td>
+        <td><span>отдельное приложение</span></td>
+        <td><span>приложения; ChatGPT в РФ без VPN недоступен</span></td>
+        <td><span>сайты</span></td>
+        <td><span>платформы и приложения</span></td>
+      </tr>
+      <tr>
+        <th>Родитель в контуре</th>
+        <td class="us"><div class="cell"><svg><use href="#yes"/></svg>согласие и итоги</div></td>
+        <td><span class="nodata">нет данных</span></td>
+        <td><div class="cell"><svg><use href="#no"/></svg></div></td>
+        <td><div class="cell"><svg><use href="#no"/></svg></div></td>
+        <td><span class="nodata">нет данных</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="proof">
+    <p><b>78–80%</b> орфографических ошибок ребёнка прячет распознавание рукописи языковой моделью — проверили на 161 ошибке из датасета школьных тетрадей. Для русского берём посимвольный OCR без автоисправления.</p>
+    <p><b>28 из 31</b> фото реальных тетрадей распознаются после перехода на двухэтапную схему (было 8). Спорные проверки разбираем по сохранённым фото.</p>
+  </div>
+  <p class="sources">Открытые источники на 14.09.2026: 1rnd.ru (СберКот, 01.09.2026), alice.yandex.ru, yaklass.ru, externat.foxford.ru, rustore.ru, dtf.ru. 78–80% и 28/31 — наши замеры, методика в репозитории.</p>
+  <div class="folio">4</div>
+</section>
+
+<!-- 5 -->
+<section class="page">
+  <h2>Где мы сейчас и что дальше</h2>
+  <div class="status">
+    <div>
+      <h3>Уже работает</h3>
+      <ul>
+        <li>Бот в MAX с 4 сентября, сервер в России</li>
+        <li>Математика: арифметика, дроби, уравнения, вычисления столбиком, текстовые задачи</li>
+        <li>303 автотеста и открытый репозиторий</li>
+        <li>Журнал каждого вызова компонента, тестовый трафик отделён</li>
+        <li>Спроектированы онбординг и согласие родителя</li>
+      </ul>
+    </div>
+    <div>
+      <h3>План</h3>
+      <dl class="timeline">
+        <dt>20 сент.</dt><dd>Онбординг: класс, предмет, согласие родителя, итоги родителю</dd>
+        <dt>15 окт.</dt><dd>70+ реальных пользователей и 30+ интервью — этап 1</dd>
+        <dt>ноябрь</dt><dd>Русский язык, переезд в Cloud.ru, 1000+ пользователей в день</dd>
+        <dt>2027</dt><dd>Остальные предметы 1–9 классов по учебному плану, отчёты родителю</dd>
+      </dl>
+    </div>
+    <div class="aside">
+      <h3>Почему MAX</h3>
+      <p><b>107 млн</b> регистраций и больше 85 млн человек в день. В MAX уже работает «Сферум»: электронный журнал и домашние задания.</p>
+      <p>По рекомендациям Минпросвещения (сентябрь 2026) ученикам 1–4 классов не стоит пользоваться ИИ самостоятельно — поэтому родитель участвует с первого шага, а бот не выдаёт ответ.</p>
+    </div>
+  </div>
+  <div class="team">
+    <p><b>Команда.</b> Кирилл — основатель: продукт, разработка, запуск. Код пишем вместе с ИИ-агентами: тесты до кода и код-ревью каждого изменения.</p>
+    <p>Бот в MAX: «Домашка ИИ»<br><a href="https://github.com/KirillAISREDA/max-homework-ai">github.com/KirillAISREDA/max-homework-ai</a></p>
+  </div>
+  <p class="sources">Источники: vedomosti.ru (26.03.2026, 06.05.2026); vk.company/ru/press/releases/12069 («Сферум» в MAX); pravmir.ru (13.09.2026, рекомендации Минпросвещения).</p>
+  <div class="folio">5</div>
+</section>
+
+</body>
+</html>
