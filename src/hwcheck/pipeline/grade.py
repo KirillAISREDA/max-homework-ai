@@ -184,11 +184,18 @@ def is_long_division(steps: list[str], condition: str | None) -> bool:
     """
     fragments = sum(1 for step in steps if _FRAGMENT.match(step))
     division = any(_DIVISION.search(step) for step in steps) or any(
-        # «в 10:45», «10 : 45» — время, не деление (ревью)
-        ":" in example and not _CLOCK.match(re.sub(r"\s+", "", example))
-        for example in condition_examples(condition)
+        _is_division_example(example) for example in condition_examples(condition)
     )
     return division and fragments >= LONG_DIVISION_FRAGMENTS
+
+
+def _is_division_example(example: str) -> bool:
+    """«в 10:45» и «10 : 45» (OCR ставит пробелы) — время, не деление (ревью); пример с
+    пробелами и целым результатом («20 : 10») — деление. Нецелое «18 : 24» уголком не
+    подтвердить результатом, поэтому потерять его как признак деления не страшно."""
+    if ":" not in example or _CLOCK.match(example):
+        return False
+    return not _CLOCK.match(re.sub(r"\s+", "", example)) or _integer_result(example) is not None
 
 
 def _grade_long_division(

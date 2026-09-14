@@ -148,3 +148,10 @@ def test_rewritten_example_must_keep_the_operation() -> None:
 
 def test_clock_time_with_spaces_is_not_division() -> None:
     assert not is_long_division(["20 + 15 = 35", "12", "8", "5"], "Автобус ушёл в 10 : 45.")
+
+
+def test_spaced_example_with_integer_result_stays_division() -> None:
+    """Финальная проверка ревью: «20 : 10» с пробелами — пример, а не время «20:10»."""
+    fragments = ["- 20", "0", "2"]
+    assert is_long_division(fragments, "Выполни деление: 20 : 10")
+    assert not is_long_division(fragments, "Поезд ушёл в 20:10.")
