@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -72,6 +73,10 @@ def main(argv: list[str] | None = None) -> None:
     add_bench_parser(sub)
 
     args = parser.parse_args(argv)
+    # консоль Windows в cp1251: «→», «·» в отчётах роняли печать — не валим команду из-за вывода
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(errors="replace")
     if args.command == "report":
         # без кредов GigaChat: только чтение журнала
         print(json.dumps(summarize_events(read_events(args.events)), ensure_ascii=False, indent=2))

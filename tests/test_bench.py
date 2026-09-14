@@ -388,3 +388,24 @@ def test_split_pages_collects_textbook_and_notebook() -> None:
     album = split_pages([photo("textbook", condition), photo("notebook", solution)], [])
     assert [t.number for t in album.textbook] == [19]
     assert album.notebook == [solution]
+
+
+def test_bench_report_prints_on_legacy_windows_console(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Прогон 14.09: печать отчёта со «→» падала в консоли cp1251 (JSONL при этом писался)."""
+    import sys
+
+    from hwcheck.cli import main
+
+    run = tmp_path / "run.jsonl"
+    run.write_text(
+        '{"type": "config", "name": "c", "vision_model": "a", '
+        '"structure_model": "b", "solver_model": "c"}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "golden").mkdir()
+    console = io.TextIOWrapper(io.BytesIO(), encoding="cp1251")
+    monkeypatch.setattr(sys, "stdout", console)
+    main(["bench", "report", str(run), "--golden", str(tmp_path / "golden")])
+    console.flush()
