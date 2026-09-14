@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import secrets
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 from hwcheck.bench.cli import add_bench_parser, report_command, run_command
 from hwcheck.bot.runner import run_polling
 from hwcheck.config import Settings, load_settings
+from hwcheck.crypto import new_user_id_key
 from hwcheck.eval.offline import run_offline_eval
 from hwcheck.events import read_events, summarize_events
 from hwcheck.llm import ChatMessage, GigaChatClient
@@ -67,6 +69,10 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("bot", help="Запустить бота MAX (long polling, для разработки)")
 
+    sub.add_parser(
+        "keys", help="Новые секреты для .env: ID_HASH_KEY, USER_ID_KEY, POSTGRES_PASSWORD"
+    )
+
     rep = sub.add_parser("report", help="Сводка вердиктов и причин «не уверен» по журналу событий")
     rep.add_argument("events", type=Path, nargs="?", default=Path("var/events.jsonl"))
 
@@ -77,6 +83,12 @@ def main(argv: list[str] | None = None) -> None:
     reconfigure = getattr(sys.stdout, "reconfigure", None)
     if reconfigure is not None:
         reconfigure(errors="replace")
+    if args.command == "keys":
+        # без кредов GigaChat; вывод дописывают прямо в .env на сервере — не в чат и не в лог
+        print(f"ID_HASH_KEY={secrets.token_urlsafe(32)}")
+        print(f"USER_ID_KEY={new_user_id_key()}")
+        print(f"POSTGRES_PASSWORD={secrets.token_urlsafe(24)}")
+        return
     if args.command == "report":
         # без кредов GigaChat: только чтение журнала
         print(json.dumps(summarize_events(read_events(args.events)), ensure_ascii=False, indent=2))

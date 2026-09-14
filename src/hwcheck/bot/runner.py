@@ -22,7 +22,8 @@ from hwcheck.bot.fsm import InMemoryStateStore, RedisStateStore, StateStore
 from hwcheck.bot.handlers import Bot
 from hwcheck.bot.max_api import MaxClient
 from hwcheck.config import Settings
-from hwcheck.events import EventLog
+from hwcheck.crypto import UserIdCipher
+from hwcheck.events import EventLog, set_id_hash_key
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
 
@@ -104,9 +105,20 @@ async def _poll_loop(
             await stop_wait
 
 
+def configure_ids(settings: Settings) -> None:
+    """Ключи id при старте: HMAC для обезличенных id; ключ шифра проверяется сразу, а не на
+    первом пользователе (спецификация онбординга §10.1)."""
+    set_id_hash_key(settings.id_hash_key or None)
+    if settings.user_id_key:
+        UserIdCipher(settings.user_id_key)
+    if settings.environment == "prod" and not settings.id_hash_key:
+        logger.warning("ID_HASH_KEY не задан: id обезличены legacy-хэшем, обратимым перебором")
+
+
 async def run_polling(settings: Settings) -> None:
     if not settings.max_token:
         raise SystemExit("Не задан MAX_TOKEN (токен бота MAX, см. .env.example)")
+    configure_ids(settings)
     events = EventLog(
         Path(settings.events_path), settings.environment, test_users=settings.test_user_hashes
     )
