@@ -143,13 +143,16 @@ async def run_bench(
 def load_run(path: Path) -> tuple[BenchConfig, list[CaseRun]]:
     config: BenchConfig | None = None
     runs = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        row = json.loads(line)
-        kind = row.pop("type")
-        if kind == "config":
-            config = BenchConfig.model_validate(row)
-        elif kind == "case":
-            runs.append(CaseRun(**row))
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        try:
+            row = json.loads(line)
+            kind = row.pop("type")
+            if kind == "config":
+                config = BenchConfig.model_validate(row)
+            elif kind == "case":
+                runs.append(CaseRun(**row))
+        except (json.JSONDecodeError, TypeError, KeyError, ValueError) as exc:
+            raise ValueError(f"{path.name}:{number}: {type(exc).__name__}: {exc}") from exc
     if config is None:
         raise ValueError(f"{path}: нет строки config")
     return config, runs
@@ -192,6 +195,15 @@ def summarize(cases: list[GoldenCase], runs: list[CaseRun]) -> BenchSummary:
         case = by_id.get(run.case_id)
         if case is None:
             continue
+        summary.seconds += run.seconds
+        summary.fresh_calls += run.fresh_calls
+        summary.cached_calls += run.cached_calls
+        summary.tokens += run.tokens
+        summary.rate_limited += run.rate_limited
+        if run.error is not None:
+            # недосчитанный кейс (лимит вызовов) — не «задание не найдено»: исключаем из качества
+            summary.unfinished += 1
+            continue
         summary.cases += 1
         truth_lines = [line for task in case.notebook_tasks for line in task.lines]
         predicted_lines = [line for task in run.tasks for line in task["lines"]]
@@ -206,12 +218,6 @@ def summarize(cases: list[GoldenCase], runs: list[CaseRun]) -> BenchSummary:
             if task["verdict"] == "uncertain":
                 summary.uncertain_reasons[task["reason"] or "unknown"] += 1
         summary.page_errors += len(run.page_errors)
-        summary.unfinished += int(run.error is not None)
-        summary.seconds += run.seconds
-        summary.fresh_calls += run.fresh_calls
-        summary.cached_calls += run.cached_calls
-        summary.tokens += run.tokens
-        summary.rate_limited += run.rate_limited
     return summary
 
 
@@ -247,7 +253,10 @@ def render_report(
             "Модели (распознавание / разбор / эталон)",
             [f"{c.vision_model} / {c.structure_model} / {c.solver_model}" for c, _ in results],
         ),
-        ("Кейсов", [str(s.cases) for _, s in results]),
+        (
+            "Кейсов в метриках (+ не досчитано, исключены)",
+            [f"{s.cases}" + (f" (+{s.unfinished})" if s.unfinished else "") for _, s in results],
+        ),
         (
             "Ложные «ошибки» (верное → ошибка)",
             [_pct(s.verdicts.false_error, s.verdicts.truth_correct) for _, s in results],
@@ -282,15 +291,16 @@ def render_report(
             [_pct(s.lines.exact, s.lines.truth_lines) for _, s in results],
         ),
         ("Символьные ошибки строк (CER)", [f"{100 * s.lines.cer:.1f}%" for _, s in results]),
+        ("Лишние строки (нет в тетради)", [str(s.lines.extra_lines) for _, s in results]),
         ("Роль страницы верна", [_pct(s.roles_correct, s.roles_total) for _, s in results]),
         (
             "Токены всего / на кейс",
-            [f"{s.tokens} / {s.tokens // s.cases if s.cases else 0}" for _, s in results],
+            [f"{s.tokens} / {s.tokens // max(1, s.cases + s.unfinished)}" for _, s in results],
         ),
         ("Вызовы свежие / из кэша", [f"{s.fresh_calls} / {s.cached_calls}" for _, s in results]),
         (
-            "429 / сбои страниц / не дошли до конца",
-            [f"{s.rate_limited} / {s.page_errors} / {s.unfinished}" for _, s in results],
+            "429 / сбои страниц",
+            [f"{s.rate_limited} / {s.page_errors}" for _, s in results],
         ),
         ("Время, с", [f"{s.seconds:.0f}" for _, s in results]),
         (

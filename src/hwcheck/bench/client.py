@@ -8,6 +8,8 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
+import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -74,6 +76,7 @@ class BenchClient:
                 "model": model,
                 "prompt": prompt,
                 "image": hashlib.sha256(image).hexdigest(),
+                "filename": filename,  # от расширения зависит MIME-тип запроса
             }
         )
         return await self._cached(
@@ -94,7 +97,7 @@ class BenchClient:
         self.stats.fresh_calls += 1
         self.stats.tokens += result.tokens_in + result.tokens_out
         self._cache_dir.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
         tmp.write_text(result.model_dump_json(), encoding="utf-8")
         tmp.replace(path)
         return result
@@ -113,7 +116,8 @@ class BenchClient:
 
 
 def _rate_limited(exc: Exception) -> bool:
-    return getattr(exc, "status_code", None) == 429 or "429" in str(exc)
+    # только код ответа: «429» в тексте ошибки бывает в id запроса и URL (ревью)
+    return getattr(exc, "status_code", None) == 429
 
 
 def _key(payload: dict[str, object]) -> str:

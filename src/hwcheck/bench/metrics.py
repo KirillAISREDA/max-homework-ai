@@ -37,6 +37,7 @@ class LineScore:
     exact: int = 0
     char_errors: int = 0
     truth_chars: int = 0
+    extra_lines: int = 0  # строки модели без пары в эталоне (выдуманные или раздвоенные)
 
     @property
     def exact_rate(self) -> float:
@@ -51,33 +52,98 @@ class LineScore:
         self.exact += other.exact
         self.char_errors += other.char_errors
         self.truth_chars += other.truth_chars
+        self.extra_lines += other.extra_lines
 
 
-def _best_match(target: str, candidates: list[str], used: set[int]) -> tuple[int | None, int]:
-    best, best_distance = None, len(target)
-    for i, candidate in enumerate(candidates):
-        if i in used:
-            continue
-        distance = levenshtein(target, candidate)
-        if best is None or distance < best_distance:
-            best, best_distance = i, distance
-    return best, best_distance
+def _hungarian(cost: list[list[int]]) -> list[int]:
+    """Оптимальное назначение для квадратной матрицы: row → col с минимальной суммой.
+
+    Жадное сопоставление на однотипных примерах («NNN + NNN = NNN») занимает строку, нужную
+    другой строке эталона, и завышает ошибки (ревью). Потенциалы, O(n³), n — строк на кейс.
+    """
+    n = len(cost)
+    inf = float("inf")
+    u = [0.0] * (n + 1)
+    v = [0.0] * (n + 1)
+    owner = [0] * (n + 1)  # owner[col] = row (1-based)
+    way = [0] * (n + 1)
+    for row in range(1, n + 1):
+        owner[0] = row
+        col0 = 0
+        minv = [inf] * (n + 1)
+        used = [False] * (n + 1)
+        while True:
+            used[col0] = True
+            row0 = owner[col0]
+            delta = inf
+            col1 = 0
+            for col in range(1, n + 1):
+                if used[col]:
+                    continue
+                current = cost[row0 - 1][col - 1] - u[row0] - v[col]
+                if current < minv[col]:
+                    minv[col] = current
+                    way[col] = col0
+                if minv[col] < delta:
+                    delta = minv[col]
+                    col1 = col
+            for col in range(n + 1):
+                if used[col]:
+                    u[owner[col]] += delta
+                    v[col] -= delta
+                else:
+                    minv[col] -= delta
+            col0 = col1
+            if owner[col0] == 0:
+                break
+        while col0:
+            col1 = way[col0]
+            owner[col0] = owner[col1]
+            col0 = col1
+    assignment = [0] * n
+    for col in range(1, n + 1):
+        assignment[owner[col] - 1] = col - 1
+    return assignment
+
+
+def _assign_lines(targets: list[str], candidates: list[str]) -> list[tuple[int | None, int]]:
+    """Для каждой строки эталона — (индекс строки модели или None, расстояние не больше длины)."""
+    size = max(len(targets), len(candidates))
+    if size == 0:
+        return []
+    cost = [
+        [
+            (
+                min(levenshtein(targets[i], candidates[j]), len(targets[i]))
+                if j < len(candidates)
+                else len(targets[i])
+            )
+            if i < len(targets)
+            else 0
+            for j in range(size)
+        ]
+        for i in range(size)
+    ]
+    assignment = _hungarian(cost)
+    return [
+        (assignment[i] if assignment[i] < len(candidates) else None, cost[i][assignment[i]])
+        for i in range(len(targets))
+    ]
 
 
 def score_lines(truth: list[str], predicted: list[str]) -> LineScore:
     """Порядок строк не важен: у разных моделей колонки примеров идут в разном порядке."""
+    targets = [normalize_line(line) for line in truth]
     candidates = [normalize_line(p) for p in predicted]
-    used: set[int] = set()
     score = LineScore()
-    for line in truth:
-        target = normalize_line(line)
-        index, distance = _best_match(target, candidates, used)
-        if index is not None:
-            used.add(index)
+    matched = 0
+    for target, (index, distance) in zip(targets, _assign_lines(targets, candidates), strict=True):
         score.truth_lines += 1
         score.truth_chars += len(target)
-        score.char_errors += min(distance, len(target))
+        score.char_errors += distance
         score.exact += int(index is not None and distance == 0)
+        matched += int(index is not None)
+    score.extra_lines = len(candidates) - matched
     return score
 
 
@@ -96,17 +162,18 @@ def match_tasks(
     free = list(range(len(predicted)))
     pairs: list[tuple[GoldenTask, PredictedTask | None]] = []
     for task in truth:
-        chosen = next(
-            (
-                i
-                for i in free
-                if task.number_on_page
-                and predicted[i].number_on_page
-                and predicted[i].number == task.number
-            ),
-            None,
-        )
-        if chosen is None:
+        same_number = [
+            i
+            for i in free
+            if task.number_on_page
+            and predicted[i].number_on_page
+            and predicted[i].number == task.number
+        ]
+        chosen: int | None
+        if same_number:
+            # номер может повториться (задвоение при распознавании) — среди них по содержимому
+            chosen = min(same_number, key=lambda i: score_lines(task.lines, predicted[i].lines).cer)
+        else:
             scored = [(score_lines(task.lines, predicted[i].lines).cer, i) for i in free]
             scored = [(cer, i) for cer, i in scored if cer <= MATCH_MAX_CER]
             chosen = min(scored)[1] if scored else None
@@ -191,21 +258,16 @@ class DisagreementScore:
 
 
 def disagreement(truth: list[str], run_a: list[str], run_b: list[str]) -> DisagreementScore:
+    targets = [normalize_line(line) for line in truth]
     a_lines = [normalize_line(x) for x in run_a]
     b_lines = [normalize_line(x) for x in run_b]
-    used_a: set[int] = set()
-    used_b: set[int] = set()
     score = DisagreementScore()
-    for line in truth:
-        target = normalize_line(line)
-        ia, _ = _best_match(target, a_lines, used_a)
-        ib, _ = _best_match(target, b_lines, used_b)
+    pairs = zip(
+        targets, _assign_lines(targets, a_lines), _assign_lines(targets, b_lines), strict=True
+    )
+    for target, (ia, _), (ib, _) in pairs:
         a = a_lines[ia] if ia is not None else ""
         b = b_lines[ib] if ib is not None else ""
-        if ia is not None:
-            used_a.add(ia)
-        if ib is not None:
-            used_b.add(ib)
         error = a != target
         flagged = a != b
         score.lines += 1

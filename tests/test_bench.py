@@ -141,6 +141,10 @@ def test_disagreement_between_two_transcriptions() -> None:
 # --- клиент стенда ---
 
 
+class RateLimited(RuntimeError):
+    status_code = 429
+
+
 class CountingClient:
     def __init__(self, fail_first: int = 0) -> None:
         self.calls = 0
@@ -151,7 +155,7 @@ class CountingClient:
     ) -> LLMResult:
         self.calls += 1
         if self.calls <= self._fail_first:
-            raise RuntimeError("HTTP 429 Too Many Requests")
+            raise RateLimited("Too Many Requests")
         return LLMResult(content=f"ответ {model}", model=model, tokens_in=7, tokens_out=3)
 
     async def analyze_image(
@@ -256,3 +260,131 @@ async def test_run_bench_end_to_end(tmp_path: Path) -> None:
     report = render_report([(config, summary)])
     assert "baseline" in report and "Ложные «ошибки»" in report
     assert out.read_text(encoding="utf-8").count("\n") >= 1
+
+
+# --- ревью: корректность метрик ---
+
+
+def test_same_number_tasks_are_matched_by_content() -> None:
+    base = GoldenCase.model_validate(case_json("0" * 64)).notebook_tasks[0]
+    truth_ok = base.model_copy(update={"number": 5, "lines": ["1 + 1 = 2"]})
+    truth_bad = base.model_copy(
+        update={"number": 5, "lines": ["2 + 2 = 5"], "verdict": "wrong", "error_lines": [1]}
+    )
+    predicted = [
+        PredictedTask(number=5, number_on_page=True, lines=["2 + 2 = 5"], verdict="wrong"),
+        PredictedTask(number=5, number_on_page=True, lines=["1 + 1 = 2"], verdict="correct"),
+    ]
+    tally = tally_verdicts(match_tasks([truth_ok, truth_bad], predicted))
+    assert (tally.correct_ok, tally.caught, tally.false_error, tally.missed_error) == (1, 1, 0, 0)
+
+
+def test_line_matching_is_optimal_not_greedy() -> None:
+    score = score_lines(["abbaa", "aaaaa"], ["aaaaa", "bbbbb"])
+    assert (score.exact, score.char_errors) == (1, 3)
+
+
+def test_extra_predicted_lines_are_counted() -> None:
+    score = score_lines(["7 + 3 = 10"], ["7 + 3 = 10", "лишняя", "ещё лишняя"])
+    assert (score.exact, score.extra_lines) == (1, 2)
+
+
+def test_unfinished_case_is_excluded_from_quality_metrics() -> None:
+    from hwcheck.bench.runner import CaseRun
+
+    case = GoldenCase.model_validate(case_json("0" * 64))
+    two_tasks = case.model_copy(
+        update={
+            "notebook_tasks": [
+                *case.notebook_tasks,
+                case.notebook_tasks[0].model_copy(update={"number": 20}),
+            ]
+        }
+    )
+    run = CaseRun(
+        case_id=case.id,
+        config="c",
+        roles=["notebook"],
+        page_errors=[],
+        transcripts=[""],
+        tasks=[
+            {
+                "number": 19,
+                "number_on_page": True,
+                "lines": case.notebook_tasks[0].lines,
+                "answer": "300",
+                "verdict": "correct",
+                "reason": None,
+                "ref_status": "no_condition",
+            }
+        ],
+        seconds=1.0,
+        fresh_calls=1,
+        cached_calls=0,
+        tokens=10,
+        rate_limited=0,
+        error="BudgetExceeded: лимит",
+    )
+    summary = summarize([two_tasks], [run])
+    assert summary.unfinished == 1
+    assert (summary.verdicts.found, summary.verdicts.not_found, summary.lines.truth_lines) == (
+        0,
+        0,
+        0,
+    )
+
+
+async def test_rate_limit_detected_by_status_code_only(tmp_path: Path) -> None:
+    class NotRateLimited(RuntimeError):
+        status_code = 500
+
+    class Failing(CountingClient):
+        async def chat(
+            self, messages: Sequence[ChatMessage], *, model: str, temperature: float = 0.1
+        ) -> LLMResult:
+            raise NotRateLimited("upstream error, request id 42917")
+
+    client = BenchClient(Failing(), tmp_path, sleep=no_sleep)
+    with pytest.raises(NotRateLimited):
+        await client.chat([ChatMessage(role="user", content="x")], model="m")
+    assert client.stats.rate_limited == 0
+
+
+async def test_image_cache_key_includes_filename(tmp_path: Path) -> None:
+    inner = CountingClient()
+    client = BenchClient(inner, tmp_path, sleep=no_sleep)
+    await client.analyze_image(b"img", prompt="p", model="m", filename="page.jpg")
+    await client.analyze_image(b"img", prompt="p", model="m", filename="page.png")
+    assert inner.calls == 2
+
+
+def test_load_run_names_the_broken_file(tmp_path: Path) -> None:
+    from hwcheck.bench.runner import load_run
+
+    path = tmp_path / "run.jsonl"
+    path.write_text(
+        '{"type": "config", "name": "c", "vision_model": "a", '
+        '"structure_model": "b", "solver_model": "c"}\n{"type": "ca',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="run.jsonl:2"):
+        load_run(path)
+
+
+def test_split_pages_collects_textbook_and_notebook() -> None:
+    from hwcheck.bot.check import RecognizedPhoto, split_pages
+    from hwcheck.pipeline.schemas import VisionPage, VisionTask
+    from hwcheck.pipeline.vision import RecognizedPage
+
+    def photo(role: str, task: VisionTask) -> RecognizedPhoto:
+        page = VisionPage(tasks=[task], page_ok=True)
+        rec = RecognizedPage(page, 0, 1, 0, 0, 0.0, "")
+        return RecognizedPhoto(page=page, role=role, rec=rec)  # type: ignore[arg-type]
+
+    condition = VisionTask(number=19, task_text="Всего 700 ребят", confidence=1)
+    solution = VisionTask(
+        number=19, task_text="", student_solution_steps=["700 - 400 = 300"], confidence=1
+    )
+    album = split_pages([photo("textbook", condition), photo("notebook", solution)], [])
+    assert [t.number for t in album.textbook] == [19]
+    assert album.notebook == [solution]
