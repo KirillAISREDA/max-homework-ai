@@ -1,7 +1,8 @@
 """Состояние диалога (арх. §3.2): детерминированный FSM, LLM его не контролирует.
 
-idle → checking (фото в обработке) → review (результаты + кнопки «Разобрать»)
-→ tutoring (диалог по одному заданию) → review → … Хранилище за протоколом:
+idle → checking (фото в обработке) → [clarifying (уточняющие вопросы ученику)] → review
+(результаты + кнопки «Разобрать») → tutoring (диалог по одному заданию) → review → …
+Хранилище за протоколом:
 Redis (арх. §6.2, TTL 24 ч) на сервере, in-memory — локально и в тестах.
 """
 
@@ -21,13 +22,22 @@ logger = logging.getLogger(__name__)
 
 STATE_TTL_S = 24 * 3600
 
-DialogPhase = Literal["idle", "checking", "review", "tutoring"]
+DialogPhase = Literal["idle", "checking", "clarifying", "review", "tutoring"]
 
 
 class CheckedTask(BaseModel):
     task: VisionTask
     ref: RefSolution | None  # None — условия нет, проверка только пересчётом
     grade: GradeResult
+
+
+class Clarification(BaseModel):
+    """Вопрос ученику по спорному заданию (bot/clarify.py)."""
+
+    task_index: int
+    kind: Literal["answer", "sign", "line"]
+    line_index: int | None = None  # строка решения для sign/line
+    attempts: int = 0  # неразобранных ответов
 
 
 class ChatState(BaseModel):
@@ -40,6 +50,7 @@ class ChatState(BaseModel):
     # следующим сообщением (сценарий «учебник + тетрадь», сессия 9)
     textbook_tasks: list[VisionTask] = Field(default_factory=list)
     textbook_saved_at: float | None = None  # время сохранения условий (TTL в pages.py)
+    clarifications: list[Clarification] = Field(default_factory=list)  # очередь вопросов
 
 
 class StateStore(Protocol):

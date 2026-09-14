@@ -48,8 +48,31 @@ PAGES: dict[bytes, VisionPage] = {
         ],
         page_ok=True,
     ),
+    # уточняющие вопросы: ответа нет (эталон из учебника есть) и неразборчивый знак
+    b"noanswer": VisionPage(
+        tasks=[
+            VisionTask(
+                number=19, task_text="", student_solution_steps=["220 + 180 = 400"], confidence=0.9
+            )
+        ],
+        page_ok=True,
+    ),
+    b"blurred": VisionPage(
+        tasks=[
+            VisionTask(
+                number=n,
+                task_text="",
+                student_solution_steps=["15 * 10 + (30 - 20) <неразборчиво> 5 = 200"],
+                confidence=0.9,
+            )
+            for n in (5, 6, 7)
+        ],
+        page_ok=True,
+    ),
 }
 TRANSCRIPTS: dict[bytes, str] = {
+    b"noanswer": "№ 19\n220 + 180 = 400",
+    b"blurred": "№ 5\n№ 6\n№ 7\n15 * 10 + (30 - 20) <неразборчиво> 5 = 200",
     b"textbook": "\n".join(f"{n}. условие" for n in range(16, 23)),
     b"notebook": "№ 19\n700 - (220 + 180) = 300",
     b"bare": "№ 19\n700 - (220 + 180) = 300",
@@ -283,3 +306,106 @@ async def test_task_checked_when_reference_not_verified(
     bot, _max, _store, _solved = harness
     await bot.handle_update(photo_update("textbook", "notebook"))
     assert checked_events(tmp_path)[-1]["ref_status"] == "ref_not_verified"
+
+
+# --- уточняющие вопросы (шаг 1) ---
+
+
+def text_update(text: str, chat_id: int = 7) -> MaxUpdate:
+    return MaxUpdate.model_validate(
+        {
+            "update_type": "message_created",
+            "message": {
+                "sender": {"user_id": 42},
+                "recipient": {"chat_id": chat_id},
+                "body": {"mid": "t", "text": text, "attachments": []},
+            },
+        }
+    )
+
+
+def callback_update(payload: str, chat_id: int = 7) -> MaxUpdate:
+    return MaxUpdate.model_validate(
+        {
+            "update_type": "message_callback",
+            "chat_id": chat_id,
+            "callback": {"callback_id": "cb", "payload": payload, "user": {"user_id": 42}},
+        }
+    )
+
+
+def events_of(tmp_path: Path, kind: str) -> list[dict[str, Any]]:
+    lines = (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    return [e for e in map(json.loads, lines) if e["type"] == kind]
+
+
+async def test_missing_answer_is_asked_and_regraded(harness: Harness, tmp_path: Path) -> None:
+    bot, fake_max, store, _solved = harness
+    await bot.handle_update(photo_update("textbook", "noanswer"))
+    review, ask = fake_max.sent[-2][1], fake_max.sent[-1][1]
+    assert "№19 — уточню у тебя одну деталь" in review
+    assert "не нашёл итоговый ответ" in ask
+    assert "300" not in ask  # эталон не раскрываем
+    assert (await store.get(7)).phase == "clarifying"
+
+    await bot.handle_update(text_update("300"))
+    assert "№19 — верно ✅" in fake_max.sent[-1][1]
+    state = await store.get(7)
+    assert (state.phase, state.clarifications) == ("review", [])
+    answered = events_of(tmp_path, "clarification_answered")[-1]
+    assert (answered["verdict_before"], answered["verdict_after"]) == ("uncertain", "correct")
+    assert events_of(tmp_path, "task_checked")[-1]["clarified"] is True
+
+
+async def test_unreadable_sign_is_chosen_with_buttons(harness: Harness) -> None:
+    bot, fake_max, store, _solved = harness
+    await bot.handle_update(photo_update("blurred"))
+    _chat, ask, buttons = fake_max.sent[-1]
+    assert "(30 - 20) ? 5" in ask
+    assert buttons is not None and buttons[0][2]["payload"] == "clarify:mul"
+
+    await bot.handle_update(callback_update("clarify:mul"))
+    assert "№5 — верно ✅" in fake_max.sent[-2][1]
+    assert "(30 - 20) ? 5" in fake_max.sent[-1][1]  # второй вопрос — про №6
+    await bot.handle_update(callback_update("clarify:plus"))
+    result_text, result_buttons = fake_max.sent[-1][1], fake_max.sent[-1][2]
+    assert "№6 — есть ошибка" in result_text
+    assert result_buttons is not None and result_buttons[0][0]["payload"] == "tutor:1"
+    state = await store.get(7)
+    assert (state.phase, state.clarifications) == ("review", [])
+
+
+async def test_questions_are_limited_and_others_get_reason(harness: Harness) -> None:
+    bot, fake_max, store, _solved = harness
+    await bot.handle_update(photo_update("blurred"))
+    review = fake_max.sent[-2][1]
+    assert review.count("уточню у тебя одну деталь") == 2
+    assert "№7 — часть записи неразборчива" in review
+    assert "показать взрослому" not in review
+    assert len((await store.get(7)).clarifications) == 2
+
+
+async def test_unclear_reply_twice_leaves_task_as_is(harness: Harness, tmp_path: Path) -> None:
+    bot, fake_max, store, _solved = harness
+    await bot.handle_update(photo_update("textbook", "noanswer"))
+    await bot.handle_update(text_update("не знаю"))
+    assert "Напиши только число" in fake_max.sent[-1][1]
+    await bot.handle_update(text_update("а что писать"))
+    assert "оставлю №19 как есть" in fake_max.sent[-1][1]
+    assert (await store.get(7)).phase == "review"
+    assert events_of(tmp_path, "clarification_answered")[-1]["understood"] is False
+
+
+async def test_new_photo_drops_pending_questions(harness: Harness) -> None:
+    bot, _fake_max, store, _solved = harness
+    await bot.handle_update(photo_update("blurred"))
+    await bot.handle_update(photo_update("textbook", "notebook"))
+    state = await store.get(7)
+    assert (state.phase, state.clarifications) == ("review", [])
+
+
+async def test_stray_clarify_button_is_harmless(harness: Harness) -> None:
+    bot, fake_max, _store, _solved = harness
+    await bot.handle_update(callback_update("clarify:mul"))
+    assert fake_max.callbacks == ["cb"]
+    assert fake_max.sent == []
