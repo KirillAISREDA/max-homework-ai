@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from hwcheck.pipeline.mathparse import parse_value
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.validator import (
     LineCheck,
@@ -19,6 +20,15 @@ from hwcheck.pipeline.validator import (
 )
 
 Verdict = Literal["correct", "wrong", "uncertain"]
+# почему «не уверен» — по ним решаем, какие уточняющие вопросы ученику окупятся
+UncertainReason = Literal[
+    "unreadable",  # на странице <неразборчиво>: вопрос «какой знак/цифра»
+    "ambiguous_equation",  # корень сменился — новое уравнение или ошибка шага
+    "answer_unparseable",  # ответ записан, но не разобран: «какой ответ получился?»
+    "no_answer",  # ответа нет, последняя строка не совпала с эталоном
+    "steps_unparseable",  # ни одна строка решения не разобрана
+]
+_UNREADABLE = "неразборчив"
 
 # пункт задания: «а)», «б)» в условии или в начале строки решения
 _ITEM = re.compile(r"(?:^|[\s;:,.])([а-еa-e])\)", re.IGNORECASE)
@@ -36,6 +46,7 @@ class GradeResult(BaseModel):
     first_error_line: int | None  # 1-based, первый шаг с арифметическим расхождением
     slip_lines: list[int]  # шаги с расхождением при верном итоговом ответе
     line_checks: list[LineCheck]
+    uncertain_reason: UncertainReason | None = None  # только для verdict=uncertain
 
 
 def grade(
@@ -46,6 +57,7 @@ def grade(
     condition: str | None = None,
 ) -> GradeResult:
     """`condition` — печатное условие задания: помогает перечитать знаки, спутанные OCR."""
+    reason: UncertainReason | None = None
     checks = check_steps(student_steps, condition=condition)
     if is_multipart(condition, student_steps):
         # эталон солвера — один ответ на несколько пунктов (живые логи 06.09: «80» на
@@ -69,6 +81,7 @@ def grade(
         verdict = "uncertain"
         first_error = None
         slips = []
+        reason = _uncertain_reason(checks, student_answer)
     elif answers_match:
         verdict = "correct"
         first_error = None
@@ -84,7 +97,22 @@ def grade(
         first_error_line=first_error,
         slip_lines=slips,
         line_checks=checks,
+        uncertain_reason=reason if verdict == "uncertain" else None,
     )
+
+
+def _uncertain_reason(checks: list[LineCheck], student_answer: str | None) -> UncertainReason:
+    """Одна главная причина: сначала то, что лечится вопросом ученику, потом пробелы разбора."""
+    answer = (student_answer or "").strip()
+    if _UNREADABLE in answer.lower() or any(_UNREADABLE in c.line.lower() for c in checks):
+        return "unreadable"
+    if any(c.doubtful for c in checks):
+        return "ambiguous_equation"
+    if answer and parse_value(answer) is None:
+        return "answer_unparseable"
+    if not any(c.status in ("ok", "mismatch") for c in checks):
+        return "steps_unparseable"
+    return "no_answer"
 
 
 def is_multipart(condition: str | None, steps: list[str]) -> bool:
@@ -126,4 +154,5 @@ def grade_by_lines(checks: list[LineCheck]) -> GradeResult:
         first_error_line=mismatches[0] if mismatches else None,
         slip_lines=[],
         line_checks=checks,
+        uncertain_reason=_uncertain_reason(checks, None) if verdict == "uncertain" else None,
     )

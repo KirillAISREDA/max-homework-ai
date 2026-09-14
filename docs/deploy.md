@@ -58,6 +58,17 @@ du -sh var/photos                               # объём сохранённ�
 docker compose restart
 ```
 
+Сводка вердиктов и причин «не уверен» (prod / test отдельно; причины пишутся с 14.09):
+
+```bash
+docker exec homework-bot python -m hwcheck report var/events.jsonl
+```
+
+Причины: `unreadable` — на странице «неразборчиво»; `ambiguous_equation` — корень сменился без явной связи;
+`answer_unparseable` — ответ записан, но не разобран; `no_answer` — ответа нет и последняя строка не эталон;
+`steps_unparseable` — не разобрана ни одна строка. Рядом `ref_status`: `no_condition`, `solver_failed`,
+`ref_not_verified`, `ok`.
+
 Разобрать спорную проверку: найти в `var/events.jsonl` событие `task_checked` с нужным вердиктом,
 по его `trace_id` — `vision_recognized` с полем `photo`, открыть `var/photos/<photo>`.
 

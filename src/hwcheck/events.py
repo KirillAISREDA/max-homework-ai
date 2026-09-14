@@ -62,6 +62,24 @@ class EventLog:
             out.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def summarize_events(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, dict[str, int]]]:
+    """Вердикты проверок и причины «не уверен» по среде (prod / test / dev).
+
+    События до появления поля reason считаются причиной «unknown».
+    """
+    summary: dict[str, dict[str, dict[str, int]]] = {}
+    for row in rows:
+        if row.get("type") != "task_checked":
+            continue
+        env = summary.setdefault(str(row.get("env")), {"verdicts": {}, "uncertain_reasons": {}})
+        verdict = str(row.get("verdict"))
+        env["verdicts"][verdict] = env["verdicts"].get(verdict, 0) + 1
+        if verdict == "uncertain":
+            reason = str(row.get("reason") or "unknown")
+            env["uncertain_reasons"][reason] = env["uncertain_reasons"].get(reason, 0) + 1
+    return summary
+
+
 def anonymize(user_id: int | None) -> str | None:
     """152-ФЗ и антифрод: наружу — только необратимый хэш идентификатора."""
     if user_id is None:

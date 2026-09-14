@@ -254,6 +254,8 @@ class Bot:
 
     async def _check_task(self, user_id: int | None, task: VisionTask) -> CheckedTask:
         ref: RefSolution | None = None
+        # что стало с эталоном — вторая половина ответа на вопрос «почему не уверен»
+        ref_status = "no_condition"
         if task.task_text.strip():
             try:
                 solved, llm_result = await solve_task(
@@ -271,8 +273,10 @@ class Bot:
                 )
                 if solved.ref_ok:
                     ref = solved.solution
+                ref_status = "ok" if solved.ref_ok else "ref_not_verified"
             except StructuredOutputError:
                 logger.warning("solver failed for task %s", task.number)
+                ref_status = "solver_failed"
         if ref is not None:
             result = grade(
                 task.student_solution_steps, task.student_answer, ref, condition=task.task_text
@@ -284,6 +288,11 @@ class Bot:
             user_id=user_id,
             component="validator",
             verdict=result.verdict,
+            reason=result.uncertain_reason,
+            ref_status=ref_status,
+            n_steps=len(task.student_solution_steps),
+            n_parsed=sum(1 for c in result.line_checks if c.status in ("ok", "mismatch")),
+            has_answer=bool((task.student_answer or "").strip()),
         )
         return CheckedTask(task=task, ref=ref, grade=result)
 

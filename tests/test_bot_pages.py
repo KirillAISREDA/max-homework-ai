@@ -1,6 +1,7 @@
 """Сценарий бота «учебник + тетрадь»: альбом из двух фото, учебник отдельным
 сообщением, порядок фото, лимит фото. Vision и Solver подменены."""
 
+import json
 import logging
 import time
 from pathlib import Path
@@ -229,3 +230,56 @@ async def test_recognized_page_structure_is_logged(
     logged = " ".join(r.getMessage() for r in caplog.records)
     assert "role=notebook" in logged
     assert "(19," in logged  # номер задания и флаги: условие/строки/ответ
+
+
+# --- шаг 0: причина «не уверен» и статус эталона в событии task_checked ---
+
+
+def checked_events(tmp_path: Path) -> list[dict[str, Any]]:
+    lines = (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    return [e for e in map(json.loads, lines) if e["type"] == "task_checked"]
+
+
+async def test_task_checked_logs_reference_status_ok(harness: Harness, tmp_path: Path) -> None:
+    bot, _max, _store, _solved = harness
+    await bot.handle_update(photo_update("textbook", "notebook"))
+    event = checked_events(tmp_path)[-1]
+    assert event["ref_status"] == "ok"
+    assert event["reason"] is None
+    assert (event["n_steps"], event["n_parsed"], event["has_answer"]) == (1, 1, True)
+
+
+async def test_task_checked_without_condition(harness: Harness, tmp_path: Path) -> None:
+    bot, _max, _store, _solved = harness
+    await bot.handle_update(photo_update("bare"))
+    assert checked_events(tmp_path)[-1]["ref_status"] == "no_condition"
+
+
+async def test_task_checked_when_solver_fails(
+    harness: Harness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hwcheck.llm.base import StructuredOutputError
+
+    async def failing_solve(*_args: Any, **_kw: Any) -> tuple[SolvedTask, None]:
+        raise StructuredOutputError("bad json")
+
+    monkeypatch.setattr(handlers, "solve_task", failing_solve)
+    bot, _max, _store, _solved = harness
+    await bot.handle_update(photo_update("textbook", "notebook"))
+    assert checked_events(tmp_path)[-1]["ref_status"] == "solver_failed"
+
+
+async def test_task_checked_when_reference_not_verified(
+    harness: Harness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def unverified_solve(*_args: Any, **_kw: Any) -> tuple[SolvedTask, None]:
+        solution = RefSolution(steps=["220 + 180 = 500"], answer="200")
+        solved = SolvedTask(
+            solution=solution, ref_ok=False, from_cache=False, model="m", prompt_version="v1"
+        )
+        return solved, None
+
+    monkeypatch.setattr(handlers, "solve_task", unverified_solve)
+    bot, _max, _store, _solved = harness
+    await bot.handle_update(photo_update("textbook", "notebook"))
+    assert checked_events(tmp_path)[-1]["ref_status"] == "ref_not_verified"
