@@ -44,6 +44,7 @@ _LETTER = re.compile(r"[A-Za-zА-Яа-яЁё]")
 _FRAGMENT = re.compile(r"^\s*[+\-−×*·]?\s*\d+(?:[.,]\d+)?\s*$")
 _DIVISION = re.compile(r"\d\s*[:|÷]\s*\d")
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+_CLOCK = re.compile(r"^(?:[01]?\d|2[0-3]):[0-5]\d$")
 LONG_DIVISION_FRAGMENTS = 3
 
 
@@ -180,7 +181,8 @@ def is_long_division(steps: list[str], condition: str | None) -> bool:
     """
     fragments = sum(1 for step in steps if _FRAGMENT.match(step))
     division = any(_DIVISION.search(step) for step in steps) or any(
-        ":" in example for example in condition_examples(condition)
+        ":" in example and not _CLOCK.match(example)  # «в 10:45» — время, не деление (ревью)
+        for example in condition_examples(condition)
     )
     return division and fragments >= LONG_DIVISION_FRAGMENTS
 
@@ -193,15 +195,15 @@ def _grade_long_division(
 ) -> GradeResult:
     """Уголок распознавание не читает, поэтому расхождения обрывков — не ошибки ребёнка.
 
-    Ошибка — строка, переписавшая пример из условия с неверным результатом, или неверный
-    итоговый ответ; «верно» — верный ответ или результаты всех примеров условия нашлись в
-    работе; иначе «не уверен».
+    Ошибка — строка примера из условия или его проверки («374 · 2» для «748 : 2») с неверным
+    результатом, или неверный итоговый ответ; «верно» — верный ответ или результаты всех
+    примеров условия нашлись в работе; иначе «не уверен».
     """
     examples = condition_examples(condition)
     errors = [
         i
         for i, check in enumerate(checks, start=1)
-        if check.status == "mismatch" and _rewrites_example(check.line, examples)
+        if check.status == "mismatch" and _is_example_line(check.line, examples)
     ]
     answers_match = compare_answers(student_answer, ref_answer) if ref_answer else None
     results_found = bool(examples) and all(_result_found(e, examples, checks) for e in examples)
@@ -221,18 +223,35 @@ def _grade_long_division(
     )
 
 
-def _rewrites_example(line: str, examples: list[str]) -> bool:
+def _is_example_line(line: str, examples: list[str]) -> bool:
+    """Строка с числами примера («748 : 2 = 375») или проверки результата («374 * 2 = 700»).
+
+    Мусорное «748 * 374 = 279352» из уголка — ни то ни другое: делимое с частным не проверка.
+    """
     if "=" not in line:
         return False
     numbers = sorted(_NUMBER.findall(line.split("=", 1)[0]))
-    return any(numbers == sorted(_NUMBER.findall(example)) for example in examples)
+    for example in examples:
+        operands = _NUMBER.findall(example)
+        result = _integer_result(example)
+        forms = [sorted(operands)]
+        if result is not None and len(operands) == 2:
+            forms.append(sorted([result, operands[1]]))  # частное · делитель
+        if numbers in forms:
+            return True
+    return False
+
+
+def _integer_result(example: str) -> str | None:
+    """Целый результат примера; дробный в уголке не ищем — только «не уверен»."""
+    value = parse_value(example)
+    return str(value) if value is not None and getattr(value, "is_integer", False) else None
 
 
 def _result_found(example: str, examples: list[str], checks: list[LineCheck]) -> bool:
-    value = parse_value(example)
-    if value is None or not getattr(value, "is_integer", False):
+    result = _integer_result(example)
+    if result is None:
         return False
-    result = str(value)
     if any(result in _NUMBER.findall(other) for other in examples):
         return False  # число есть в условии — не отличить результат ребёнка от условия
     return any(result in _NUMBER.findall(check.line) for check in checks)

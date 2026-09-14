@@ -80,3 +80,11 @@ def test_not_a_continuation() -> None:
     for photos in cases:
         expected = sum(len(p.page.tasks) for p in photos if p.page is not None)
         assert len(split_pages(photos, []).notebook) == expected
+
+
+def test_ambiguous_continuation_is_not_attached() -> None:
+    """Ревью: №55 и №57 без ответа, каждое последнее на своей странице — чьё продолжение, не понять.
+
+    Отдельное «№1» безопаснее, чем чужой ответ в задании."""
+    photos = [photo("notebook", N55), photo("notebook", N57), photo("notebook", ANSWER_PAGE)]
+    assert [t.number for t in split_pages(photos, []).notebook] == [55, 57, 1]

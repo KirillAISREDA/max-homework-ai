@@ -110,3 +110,22 @@ def test_single_example_with_reference_uses_answer() -> None:
 
 def test_simple_column_error_is_still_wrong() -> None:
     assert validator_only_grade(["803", "+ 169", "-----", "753"]).verdict == "wrong"
+
+
+# --- ревью ---
+
+
+def test_wrong_multiplication_check_is_an_error() -> None:
+    """Ревью: «проверку» ребёнка (частное · делитель) нельзя пропускать как обрывок."""
+    condition = "Выполни деление и проверку: 748 : 2"
+    steps = ["748 : 2 = 374", "- 6", "14", "- 14", "8", "- 8", "0", "374 * 2 = 700"]
+    result = validator_only_grade(steps, condition=condition)
+    assert result.verdict == "wrong"
+    assert result.first_error_line == 8
+
+
+def test_clock_time_in_condition_is_not_division() -> None:
+    """Ревью: «в 10:45» в тексте задачи — не пример на деление."""
+    steps = ["20 + 15 = 35", "12", "8", "5"]
+    assert not is_long_division(steps, "Автобус ушёл в 10:45.")
+    assert is_long_division(["756 | 6", "- 6", "15", "- 12"], None)
