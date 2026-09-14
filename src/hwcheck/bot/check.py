@@ -9,7 +9,13 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
-from hwcheck.bot.pages import PageRole, mark_written_numbers, merge_textbook, page_role
+from hwcheck.bot.pages import (
+    PageRole,
+    mark_written_numbers,
+    merge_textbook,
+    page_role,
+    split_columns,
+)
 from hwcheck.llm.base import LLMResult
 from hwcheck.pipeline.grade import GradeResult, grade, grade_by_lines
 from hwcheck.pipeline.schemas import VisionPage, VisionTask
@@ -66,8 +72,16 @@ async def recognize_photo(
     rec = await recognize_page_two_stage(
         llm, image, vision_model=models.vision, structure_model=models.structure
     )
-    page = mark_written_numbers(rec.page, rec.raw) if rec.page else None
+    page = mark_written_numbers(_split_task_columns(rec.page), rec.raw) if rec.page else None
     return RecognizedPhoto(page=page, role=page_role(page), rec=rec)
+
+
+def _split_task_columns(page: VisionPage) -> VisionPage:
+    tasks = [
+        t.model_copy(update={"student_solution_steps": split_columns(t.student_solution_steps)})
+        for t in page.tasks
+    ]
+    return page.model_copy(update={"tasks": tasks})
 
 
 def split_pages(photos: list[RecognizedPhoto], textbook: list[VisionTask]) -> AlbumPages:
