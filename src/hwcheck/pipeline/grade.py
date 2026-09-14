@@ -27,6 +27,7 @@ UncertainReason = Literal[
     "answer_unparseable",  # ответ записан, но не разобран: «какой ответ получился?»
     "no_answer",  # ответа нет, последняя строка не совпала с эталоном
     "steps_unparseable",  # ни одна строка решения не разобрана
+    "column_unreadable",  # деление уголком не прочитано: обрывки вместо записи
 ]
 _UNREADABLE = "неразборчив"
 
@@ -38,6 +39,12 @@ _STEP_ITEM = re.compile(r"^\s*([а-еa-e])\)", re.IGNORECASE)
 _NUM = r"\(*\s*\d+(?:[.,]\d+)?(?:\s+\d+\s*/\s*\d+)?\s*\)*"
 _EXPRESSION = re.compile(rf"{_NUM}(?:\s*[+\-−·×*:/]\s*{_NUM})+")
 _LETTER = re.compile(r"[A-Za-zА-Яа-яЁё]")
+# деление уголком (живой альбом 14.09, №55): распознавание рвёт запись на обрывки («− 6», «14»)
+# и склеивает мусорные равенства («748 * 374 = 279352»)
+_FRAGMENT = re.compile(r"^\s*[+\-−×*·]?\s*\d+(?:[.,]\d+)?\s*$")
+_DIVISION = re.compile(r"\d\s*[:|÷]\s*\d")
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+LONG_DIVISION_FRAGMENTS = 3
 
 
 class GradeResult(BaseModel):
@@ -62,7 +69,9 @@ def grade(
     if is_multipart(condition, student_steps):
         # эталон солвера — один ответ на несколько пунктов (живые логи 06.09: «80» на
         # четыре выражения); сверять с ним нечего, судим по арифметике каждой строки
-        return grade_by_lines(checks)
+        return grade_by_lines(checks, condition=condition)
+    if is_long_division(student_steps, condition):
+        return _grade_long_division(checks, condition, ref.answer, student_answer)
     mismatch_lines = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
     answers_match = compare_answers(student_answer, ref.answer)
     if answers_match is None and not mismatch_lines and last_value_matches(checks, ref.answer):
@@ -146,21 +155,93 @@ def _listed_equations(condition: str | None) -> int:
 
 
 def _listed_expressions(condition: str | None) -> int:
+    return len(condition_examples(condition))
+
+
+def condition_examples(condition: str | None) -> list[str]:
     """Примеры списком после текста: «Вычисли. 3 · 196   2 · 438», «651 + 126; 379 − 253».
 
     Числа внутри текстовой задачи — «в 8:15, а прибывает в 10:45», «15-20 рублей» —
     не в счёт (ревью): иначе задача уходила бы в проверку по строкам без сверки с
     эталоном, и неверный ход решения с верной арифметикой получал «верно».
     """
-    count = 0
+    examples: list[str] = []
     for chunk in re.split(r"[;\n]", condition or ""):
         after_text = max((m.end() for m in _LETTER.finditer(chunk)), default=0)
-        count += len(_EXPRESSION.findall(chunk[after_text:]))
-    return count
+        examples.extend(example.strip() for example in _EXPRESSION.findall(chunk[after_text:]))
+    return examples
 
 
-def grade_by_lines(checks: list[LineCheck]) -> GradeResult:
+def is_long_division(steps: list[str], condition: str | None) -> bool:
+    """Деление уголком: деление в работе или в примерах условия и обрывки записи столбиком.
+
+    Простой столбик сложения («803 / +169 / 753») сюда не попадает — его ошибки валидатор
+    по-прежнему ловит.
+    """
+    fragments = sum(1 for step in steps if _FRAGMENT.match(step))
+    division = any(_DIVISION.search(step) for step in steps) or any(
+        ":" in example for example in condition_examples(condition)
+    )
+    return division and fragments >= LONG_DIVISION_FRAGMENTS
+
+
+def _grade_long_division(
+    checks: list[LineCheck],
+    condition: str | None,
+    ref_answer: str | None,
+    student_answer: str | None,
+) -> GradeResult:
+    """Уголок распознавание не читает, поэтому расхождения обрывков — не ошибки ребёнка.
+
+    Ошибка — строка, переписавшая пример из условия с неверным результатом, или неверный
+    итоговый ответ; «верно» — верный ответ или результаты всех примеров условия нашлись в
+    работе; иначе «не уверен».
+    """
+    examples = condition_examples(condition)
+    errors = [
+        i
+        for i, check in enumerate(checks, start=1)
+        if check.status == "mismatch" and _rewrites_example(check.line, examples)
+    ]
+    answers_match = compare_answers(student_answer, ref_answer) if ref_answer else None
+    results_found = bool(examples) and all(_result_found(e, examples, checks) for e in examples)
+    if errors or answers_match is False:
+        verdict: Verdict = "wrong"
+    elif answers_match or results_found:
+        verdict = "correct"
+    else:
+        verdict = "uncertain"
+    return GradeResult(
+        verdict=verdict,
+        answers_match=answers_match,
+        first_error_line=errors[0] if errors else None,
+        slip_lines=[],
+        line_checks=checks,
+        uncertain_reason="column_unreadable" if verdict == "uncertain" else None,
+    )
+
+
+def _rewrites_example(line: str, examples: list[str]) -> bool:
+    if "=" not in line:
+        return False
+    numbers = sorted(_NUMBER.findall(line.split("=", 1)[0]))
+    return any(numbers == sorted(_NUMBER.findall(example)) for example in examples)
+
+
+def _result_found(example: str, examples: list[str], checks: list[LineCheck]) -> bool:
+    value = parse_value(example)
+    if value is None or not getattr(value, "is_integer", False):
+        return False
+    result = str(value)
+    if any(result in _NUMBER.findall(other) for other in examples):
+        return False  # число есть в условии — не отличить результат ребёнка от условия
+    return any(result in _NUMBER.findall(check.line) for check in checks)
+
+
+def grade_by_lines(checks: list[LineCheck], *, condition: str | None = None) -> GradeResult:
     """Без эталонного ответа: только детерминированный пересчёт строк."""
+    if is_long_division([check.line for check in checks], condition):
+        return _grade_long_division(checks, condition, None, None)
     mismatches = [i for i, c in enumerate(checks, start=1) if c.status == "mismatch"]
     if mismatches:
         verdict: Verdict = "wrong"

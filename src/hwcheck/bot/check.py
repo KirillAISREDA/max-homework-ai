@@ -87,7 +87,7 @@ def _split_task_columns(page: VisionPage) -> VisionPage:
 def split_pages(photos: list[RecognizedPhoto], textbook: list[VisionTask]) -> AlbumPages:
     """Учебник даёт условия, тетрадь — решения; условия копятся к уже известным."""
     known = list(textbook)
-    notebook: list[VisionTask] = []
+    notebook_pages: list[list[VisionTask]] = []
     new_textbook: list[VisionTask] = []
     comment: str | None = None
     for photo in photos:
@@ -98,10 +98,65 @@ def split_pages(photos: list[RecognizedPhoto], textbook: list[VisionTask]) -> Al
             new_textbook.extend(merge_textbook([], page.tasks))
             known = merge_textbook(known, page.tasks)
         elif photo.role == "notebook":
-            notebook.extend(page.tasks)
+            notebook_pages.append(page.tasks)
         elif page.page_comment:
             comment = page.page_comment
-    return AlbumPages(notebook=notebook, textbook=known, new_textbook=new_textbook, comment=comment)
+    return AlbumPages(
+        notebook=_attach_continuations(notebook_pages),
+        textbook=known,
+        new_textbook=new_textbook,
+        comment=comment,
+    )
+
+
+def _attach_continuations(pages: list[list[VisionTask]]) -> list[VisionTask]:
+    """Задания тетради по порядку фото; страница-продолжение приклеена к своему заданию.
+
+    Живой альбом 14.09: «Ответ: было — 35 луковиц» к №57 — на отдельной странице, и это фото
+    пришло раньше страницы с №57, а структуризатор назвал его «№1». Страница из одного задания
+    без номера, но с ответом — продолжение последнего в альбоме задания с номером и без ответа;
+    такого нет — самостоятельное задание. Без ответа не приклеиваем: повторный прогон того же
+    фото дал вместо ответа выдуманные дроби, и они сломали бы сверку последней строки №57.
+    """
+    entries = [
+        (task, len(page) == 1 and not task.number_on_page and _has_answer(task))
+        for page in pages
+        for task in page
+    ]
+    tasks = [task for task, _ in entries]
+    attached: set[int] = set()
+    for index, (task, is_continuation) in enumerate(entries):
+        if not is_continuation:
+            continue
+        target = next(
+            (
+                i
+                for i in reversed(range(len(tasks)))
+                if tasks[i].number_on_page and not _has_answer(tasks[i])
+            ),
+            None,
+        )
+        if target is not None:
+            tasks[target] = _merge_continuation(tasks[target], task)
+            attached.add(index)
+    return [task for index, task in enumerate(tasks) if index not in attached]
+
+
+def _has_answer(task: VisionTask) -> bool:
+    return bool((task.student_answer or "").strip())
+
+
+def _merge_continuation(previous: VisionTask, continuation: VisionTask) -> VisionTask:
+    return previous.model_copy(
+        update={
+            "student_solution_steps": [
+                *previous.student_solution_steps,
+                *continuation.student_solution_steps,
+            ],
+            "student_answer": continuation.student_answer,
+            "confidence": min(previous.confidence, continuation.confidence),
+        }
+    )
 
 
 async def check_task(
@@ -143,4 +198,4 @@ async def check_task(
 
 def validator_only_grade(steps: list[str], *, condition: str | None = None) -> GradeResult:
     """Столбик примеров без условия: проверка — только детерминированный пересчёт."""
-    return grade_by_lines(check_steps(steps, condition=condition or None))
+    return grade_by_lines(check_steps(steps, condition=condition or None), condition=condition)

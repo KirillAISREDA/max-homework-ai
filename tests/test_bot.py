@@ -341,3 +341,26 @@ async def test_stop_handler_wakes_loop_and_sets_event() -> None:
         await asyncio.wait_for(stop.wait(), timeout=1)
     finally:
         signal.signal(signal.SIGTERM, previous)
+
+
+async def test_text_after_review_points_to_buttons_not_welcome(tmp_path: Path) -> None:
+    """Живой альбом 14.09: текст после сводки получал приветствие — будто бот всё забыл."""
+    from hwcheck.bot.fsm import ChatState, CheckedTask
+    from hwcheck.bot.handlers import REVIEW_DONE, REVIEW_HINT, WELCOME
+    from hwcheck.pipeline.schemas import VisionTask
+
+    bot, fake_max, _ = make_bot(tmp_path)
+    steps = ["2 + 2 = 5"]
+    task = VisionTask(number=55, task_text="", student_solution_steps=steps, confidence=1)
+    wrong = CheckedTask(task=task, ref=None, grade=_validator_only_grade(steps))
+    store = bot._store
+    await store.set(7, ChatState(phase="review", tasks=[wrong]))
+
+    await bot.handle_update(MaxUpdate.model_validate(TEXT_UPDATE))
+    _chat, text, buttons = fake_max.sent[-1]
+    assert text == REVIEW_HINT != WELCOME
+    assert buttons is not None and buttons[0][0]["payload"] == "tutor:0"
+
+    await store.set(7, ChatState(phase="review", tasks=[wrong], resolved_indices=[0]))
+    await bot.handle_update(MaxUpdate.model_validate(TEXT_UPDATE))
+    assert fake_max.sent[-1][1:] == (REVIEW_DONE, None)

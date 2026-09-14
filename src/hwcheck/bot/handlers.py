@@ -62,6 +62,8 @@ TEXTBOOK_ONLY = (
     "Вижу страницу учебника ({numbers}) 📖 Пришли фото тетради с решением — "
     "проверю по этим условиям."
 )
+REVIEW_HINT = "Выбери задание для разбора 👇 Или пришли фото новой домашки 📸"
+REVIEW_DONE = "Эту домашку я уже проверил 👍 Пришли фото следующей — проверю 📸"
 
 
 class Bot:
@@ -457,6 +459,12 @@ class Bot:
             updated = apply_text(state.tasks[current.task_index], current, text)
             await self._answer_clarification(chat_id, user_id, state, updated)
             return
+        if state.phase == "review" and state.tasks:
+            # после сводки приветствие выглядит так, будто бот всё забыл (живой альбом 14.09)
+            remaining = _remaining_buttons(state)
+            text = REVIEW_HINT if remaining else REVIEW_DONE
+            await self._max.send_message(chat_id, text, buttons=remaining or None)
+            return
         if state.phase != "tutoring" or state.tutor is None:
             await self._max.send_message(chat_id, WELCOME)
             return
@@ -510,6 +518,7 @@ UNCERTAIN_TEXT = {
     "answer_unparseable": "не разобрал ответ",
     "no_answer": "не нашёл итоговый ответ",
     "steps_unparseable": "не смог разобрать решение",
+    "column_unreadable": "не смог прочитать деление уголком",
 }
 
 
