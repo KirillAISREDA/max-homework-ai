@@ -46,6 +46,33 @@ docker compose up -d --build     # пересборка ~1 мин, зависи�
 docker compose logs --tail 50
 ```
 
+## PostgreSQL и ключи id (онбординг, этап 1)
+
+С этапа 1 онбординга compose требует `POSTGRES_PASSWORD` в `.env`, а бот хэширует id через `ID_HASH_KEY`
+(HMAC) и проверяет `USER_ID_KEY` при старте. Первая выкатка — один раз:
+
+```bash
+# на VPS, в /opt/max-homework-ai; перед этим — нет событий за 10 минут
+git pull
+cp .env .env.bak-$(date +%F) && chmod 600 .env.bak-*
+docker build -t max-homework-ai-bot .
+docker run --rm max-homework-ai-bot python -m hwcheck keys >> .env   # секреты сразу в .env, не на экран
+grep -o '^[A-Z_]*=' .env                                               # проверить только имена
+mkdir -p var/backups
+docker compose up -d postgres pgbackup bot                             # Redis не трогаем
+docker compose logs --tail 20 bot                                      # «migrations applied: 001_onboarding.sql»
+```
+
+Копию `ID_HASH_KEY`, `USER_ID_KEY`, `POSTGRES_PASSWORD` Кирилл хранит вне VPS: без `USER_ID_KEY` бот не
+сможет писать пользователям, без `ID_HASH_KEY` — найти их. Переход на HMAC один раз сбрасывает открытые
+разборы (ключи Redis `fsm:<хэш>` меняются); тестеры из старого `TEST_USERS` узнаются и по прежнему хэшу.
+
+```bash
+docker exec homework-postgres psql -U homework -c '\dt'                   # таблицы онбординга
+docker exec homework-postgres psql -U homework -c 'SELECT * FROM schema_migrations'
+ls -la var/backups                                                       # ежедневные дампы, хранение 7 дней
+```
+
 ## Диагностика
 
 ```bash

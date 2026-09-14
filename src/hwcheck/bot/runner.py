@@ -23,6 +23,7 @@ from hwcheck.bot.handlers import Bot
 from hwcheck.bot.max_api import MaxClient
 from hwcheck.config import Settings
 from hwcheck.crypto import UserIdCipher
+from hwcheck.db.pool import create_pool
 from hwcheck.events import EventLog, set_id_hash_key
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
@@ -131,6 +132,8 @@ async def run_polling(settings: Settings) -> None:
     if redis_client is not None:
         # Redis недоступен — лучше не стартовать (health покажет), чем терять диалоги молча
         await redis_client.ping()
+    # PostgreSQL недоступен или миграция упала — не стартуем: health покажет, профили не потеряются
+    pool = await create_pool(settings.database_url) if settings.database_url else None
     async with (
         MaxClient(
             settings.max_token, settings.max_base_url, ca_bundle=settings.max_ca_bundle
@@ -146,4 +149,6 @@ async def run_polling(settings: Settings) -> None:
         finally:
             if redis_client is not None:
                 await redis_client.aclose()
+            if pool is not None:
+                await pool.close()
         logger.info("bot stopped")

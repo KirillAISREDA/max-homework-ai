@@ -10,7 +10,9 @@
 
 | Компонент | Версия | Лицензия | Назначение |
 |---|---|---|---|
+| asyncpg | 0.31.0 | Apache-2.0 | Асинхронный драйвер PostgreSQL: пул и миграции при старте бота (`db/pool.py`, `db/migrate.py`) — профили, согласия, приглашения онбординга |
 | certifi | 2026.7.22 | MPL-2.0 | Корневые сертификаты для TLS; база, к которой `bot/max_api.py` добавляет корень НУЦ Минцифры при обращении к MAX API |
+| cryptography | 50.0.1 | Apache-2.0 OR BSD-3-Clause | Fernet: id MAX в базе хранится только шифротекстом (`crypto.py`, спецификация онбординга §10.1) |
 | gigachat | 0.2.3 | MIT | Официальный SDK GigaChat API — единственный клиент LLM/vision (`llm/gigachat_client.py`), OAuth и его обновление берёт на себя |
 | httpx | 0.28.1 | BSD-3-Clause | Асинхронный HTTP-клиент MAX Bot API (`bot/max_api.py`): long polling `/updates`, отправка сообщений |
 | pillow | 12.3.0 | MIT-CMU | Обработка фотографий тетради перед vision-запросом (`pipeline/normalize.py`: `Image`, `ImageOps`) |
@@ -33,6 +35,7 @@
 | pytest-asyncio | 1.4.0 | Apache-2.0 | Поддержка `async def` тестов (`asyncio_mode = "auto"`) |
 | ruff | 0.16.5 | MIT | Линтер и форматтер (CI: `ruff check`, `ruff format --check`) |
 | mypy | 2.3.1 | MIT | Статическая типизация, `strict = true` (CI: `mypy`) |
+| asyncpg-stubs | 0.31.3 | BSD-3-Clause | Типы asyncpg для mypy strict |
 | fakeredis | 2.38.0 | BSD-3-Clause | In-memory замена Redis в тестах `RedisStateStore` без поднятия сервера |
 
 ## 3. Модели (LLM/vision)
