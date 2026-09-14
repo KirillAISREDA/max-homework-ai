@@ -9,17 +9,21 @@ import logging
 import time
 from pathlib import Path
 
+from hwcheck.bot.check import (
+    CheckModels,
+    RecognizedPhoto,
+    check_task,
+    recognize_photo,
+    split_pages,
+    validator_only_grade,
+)
 from hwcheck.bot.fsm import ChatState, CheckedTask, StateStore
 from hwcheck.bot.max_api import MaxClient, callback_button
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.pages import (
     MAX_PHOTOS,
-    PageRole,
     attach_conditions,
     describe_tasks,
-    mark_written_numbers,
-    merge_textbook,
-    page_role,
     task_label,
     textbook_is_fresh,
 )
@@ -28,12 +32,10 @@ from hwcheck.events import EventLog, anonymize, trace
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.classifier import classify_error
-from hwcheck.pipeline.grade import GradeResult, grade, grade_by_lines
-from hwcheck.pipeline.schemas import VisionPage, VisionTask
-from hwcheck.pipeline.solver import FileCache, RefSolution, StructuredOutputError, solve_task
+from hwcheck.pipeline.grade import GradeResult
+from hwcheck.pipeline.schemas import VisionTask
+from hwcheck.pipeline.solver import FileCache, RefSolution, StructuredOutputError
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
-from hwcheck.pipeline.validator import check_steps
-from hwcheck.pipeline.vision import recognize_page_two_stage
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,14 @@ class Bot:
         self._settings = settings
         self._photos = photos
         self._cache = FileCache(Path(".cache/solver"))
+
+    @property
+    def _models(self) -> CheckModels:
+        return CheckModels(
+            vision=self._settings.vision_model,
+            structure=self._settings.tutor_model,
+            solver=self._settings.solver_model,
+        )
 
     async def handle_update(self, update: MaxUpdate) -> None:
         # один trace_id на все вызовы компонентов по апдейту (антифрод, Прил. 2 п. 5)
@@ -145,15 +155,9 @@ class Bot:
 
     async def _recognize(
         self, user_id: int | None, image: bytes, photo: str | None
-    ) -> tuple[VisionPage | None, PageRole]:
-        rec = await recognize_page_two_stage(
-            self._llm,
-            image,
-            vision_model=self._settings.vision_model,
-            structure_model=self._settings.tutor_model,
-        )
-        page = mark_written_numbers(rec.page, rec.raw) if rec.page else None
-        role = page_role(page)
+    ) -> RecognizedPhoto:
+        recognized = await recognize_photo(self._llm, image, self._models)
+        page, role, rec = recognized.page, recognized.role, recognized.rec
         # структура страницы без содержимого — чтобы разбирать спорные роли по логу;
         # сама транскрипция (текст ребёнка) — только в dev
         summary = [
@@ -181,13 +185,11 @@ class Bot:
             role=role,
             photo=photo,
         )
-        return page, role
+        return recognized
 
-    async def _recognize_all(
-        self, user_id: int | None, urls: list[str]
-    ) -> list[tuple[VisionPage | None, PageRole]]:
+    async def _recognize_all(self, user_id: int | None, urls: list[str]) -> list[RecognizedPhoto]:
         """Сбой одного фото (сеть, vision) не теряет остальные; упали все — наверх."""
-        results: list[tuple[VisionPage | None, PageRole]] = []
+        results: list[RecognizedPhoto] = []
         failed = 0
         for url in urls:
             photo: str | None = None
@@ -213,20 +215,10 @@ class Bot:
         состоянии чата (TTL), так что тетрадь может прийти и следующим сообщением.
         """
         state = await self._store.get(chat_id)
-        textbook = list(state.textbook_tasks) if textbook_is_fresh(state.textbook_saved_at) else []
-        notebook: list[VisionTask] = []
-        new_textbook: list[VisionTask] = []
-        comment: str | None = None
-        for page, role in await self._recognize_all(user_id, urls):
-            if page is None:
-                continue
-            if role == "textbook":
-                new_textbook.extend(merge_textbook([], page.tasks))
-                textbook = merge_textbook(textbook, page.tasks)
-            elif role == "notebook":
-                notebook.extend(page.tasks)
-            elif page.page_comment:
-                comment = page.page_comment
+        known = list(state.textbook_tasks) if textbook_is_fresh(state.textbook_saved_at) else []
+        album = split_pages(await self._recognize_all(user_id, urls), known)
+        notebook, textbook = album.notebook, album.textbook
+        new_textbook, comment = album.new_textbook, album.comment
         if not notebook:
             if new_textbook:
                 remembered = state.model_copy(
@@ -253,36 +245,19 @@ class Bot:
         await self._send_review(chat_id, new_state)
 
     async def _check_task(self, user_id: int | None, task: VisionTask) -> CheckedTask:
-        ref: RefSolution | None = None
-        # что стало с эталоном — вторая половина ответа на вопрос «почему не уверен»
-        ref_status = "no_condition"
-        if task.task_text.strip():
-            try:
-                solved, llm_result = await solve_task(
-                    self._llm,
-                    task.task_text,
-                    model=self._settings.solver_model,
-                    cache=self._cache,
-                )
-                self._events.log(
-                    "solver_call",
-                    user_id=user_id,
-                    component="solver",
-                    from_cache=solved.from_cache,
-                    tokens=(llm_result.tokens_in + llm_result.tokens_out) if llm_result else 0,
-                )
-                if solved.ref_ok:
-                    ref = solved.solution
-                ref_status = "ok" if solved.ref_ok else "ref_not_verified"
-            except StructuredOutputError:
-                logger.warning("solver failed for task %s", task.number)
-                ref_status = "solver_failed"
-        if ref is not None:
-            result = grade(
-                task.student_solution_steps, task.student_answer, ref, condition=task.task_text
+        checked = await check_task(self._llm, task, self._models, self._cache)
+        if checked.solved is not None:
+            result_tokens = checked.solver_result
+            self._events.log(
+                "solver_call",
+                user_id=user_id,
+                component="solver",
+                from_cache=checked.solved.from_cache,
+                tokens=(result_tokens.tokens_in + result_tokens.tokens_out) if result_tokens else 0,
             )
-        else:
-            result = _validator_only_grade(task.student_solution_steps, condition=task.task_text)
+        result = checked.grade
+        # что стало с эталоном — вторая половина ответа на вопрос «почему не уверен»
+        ref_status = checked.ref_status
         self._events.log(
             "task_checked",
             user_id=user_id,
@@ -294,7 +269,7 @@ class Bot:
             n_parsed=sum(1 for c in result.line_checks if c.status in ("ok", "mismatch")),
             has_answer=bool((task.student_answer or "").strip()),
         )
-        return CheckedTask(task=task, ref=ref, grade=result)
+        return CheckedTask(task=task, ref=checked.ref, grade=result)
 
     async def _send_review(self, chat_id: int, state: ChatState) -> None:
         lines = []
@@ -451,7 +426,7 @@ def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:
 
 def _validator_only_grade(steps: list[str], *, condition: str | None = None) -> GradeResult:
     """Столбик примеров без условия: проверка — только детерминированный пересчёт."""
-    return grade_by_lines(check_steps(steps, condition=condition or None))
+    return validator_only_grade(steps, condition=condition)
 
 
 def _error_line_value(result: GradeResult) -> str | None:

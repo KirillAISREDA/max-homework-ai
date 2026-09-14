@@ -4,9 +4,11 @@ import argparse
 import asyncio
 import json
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from hwcheck.bench.cli import add_bench_parser, report_command, run_command
 from hwcheck.bot.runner import run_polling
 from hwcheck.config import Settings, load_settings
 from hwcheck.eval.offline import run_offline_eval
@@ -68,10 +70,19 @@ def main(argv: list[str] | None = None) -> None:
     rep = sub.add_parser("report", help="Сводка вердиктов и причин «не уверен» по журналу событий")
     rep.add_argument("events", type=Path, nargs="?", default=Path("var/events.jsonl"))
 
+    add_bench_parser(sub)
+
     args = parser.parse_args(argv)
+    # консоль Windows в cp1251: «→», «·» в отчётах роняли печать — не валим команду из-за вывода
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(errors="replace")
     if args.command == "report":
         # без кредов GigaChat: только чтение журнала
         print(json.dumps(summarize_events(read_events(args.events)), ensure_ascii=False, indent=2))
+        return
+    if args.command == "bench" and args.bench_command == "report":
+        report_command(args)  # только чтение прогонов и разметки
         return
     asyncio.run(_run(args))
 
@@ -114,6 +125,10 @@ async def _run(args: argparse.Namespace) -> None:
     settings = load_settings()
     if not settings.gigachat_credentials:
         raise SystemExit("Не задан GIGACHAT_CREDENTIALS (см. .env.example)")
+
+    if args.command == "bench":
+        await run_command(args, settings)
+        return
 
     if args.command == "bot":
         configure_bot_logging(settings)
