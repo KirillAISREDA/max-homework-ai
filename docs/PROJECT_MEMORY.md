@@ -86,7 +86,7 @@
 версионированы; данные детей минимизированы (152-ФЗ): без ФИО и школы, id MAX не хранится в открытом виде.
 
 Код (`src/hwcheck/`): `llm/` (клиент GigaChat, structured output) · `pipeline/` (normalize, vision, solver,
-mathparse, validator, grade, classifier, tutor, generator) · `bot/` (max_api, models, handlers, pages, fsm,
+mathparse, validator, grade, classifier, tutor, generator) · `bot/` (max_api, models, handlers, check, pages, clarify, fsm,
 runner) · `events.py` · `photos.py` · `config.py` · `cli.py` (`hwcheck ping | vision | eval | solve | grade |
 tutor | generate | bot`).
 
@@ -104,6 +104,9 @@ tutor | generate | bot`).
   распознавание рукописи (2-Max: 37 из 51 строки-вычисления с расхождением, CER 20 % на надёжных кейсах);
   3-Ultra/3-Pro не лучше; 3-Lightning не принимает фото и плохо размечает страницы; расхождение двух
   расшифровок — точный (89 %), но неполный (46 %) сигнал для уточняющих вопросов.
+- **Уточняющие вопросы (14.09, шаг 1):** «не уверен» по неразборчивому знаку/строке или без итогового ответа →
+  до 2 вопросов ученику (`bot/clarify.py`, фаза `clarifying`), ответ пересчитывает валидатор; ответ спрашиваем
+  только при сошедшейся строке решения; результат — событие `task_clarified`. Шаг 2 (ошибки OCR) — по данным.
 - **Живые логи:** до исправлений 06–13.09 — 15 проверок, 0 «верно» (ложные ошибки парсера, склейка с чужим
   условием, падения). После PR #12–#15 проверено на альбоме с намеренными ошибками — вердикты верные; **на
   верной работе после выката ещё не проверено**.

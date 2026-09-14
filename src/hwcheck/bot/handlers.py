@@ -17,6 +17,15 @@ from hwcheck.bot.check import (
     split_pages,
     validator_only_grade,
 )
+from hwcheck.bot.clarify import (
+    MAX_ATTEMPTS,
+    apply_sign,
+    apply_text,
+    parse_sign_payload,
+    plan_clarifications,
+    question,
+    retry_prompt,
+)
 from hwcheck.bot.fsm import ChatState, CheckedTask, StateStore
 from hwcheck.bot.max_api import MaxClient, callback_button
 from hwcheck.bot.models import MaxUpdate
@@ -235,14 +244,18 @@ class Bot:
         checked = [
             await self._check_task(user_id, task) for task in attach_conditions(notebook, textbook)
         ]
+        plan = plan_clarifications(checked)
         new_state = ChatState(
-            phase="review",
+            phase="clarifying" if plan else "review",
             tasks=checked,
             textbook_tasks=textbook,
             textbook_saved_at=time.time() if textbook else None,
+            clarifications=plan,
         )
         await self._store.set(chat_id, new_state)
         await self._send_review(chat_id, new_state)
+        if plan:
+            await self._ask_clarification(chat_id, user_id, new_state)
 
     async def _check_task(self, user_id: int | None, task: VisionTask) -> CheckedTask:
         checked = await check_task(self._llm, task, self._models, self._cache)
@@ -272,31 +285,104 @@ class Bot:
         return CheckedTask(task=task, ref=checked.ref, grade=result)
 
     async def _send_review(self, chat_id: int, state: ChatState) -> None:
+        asked = {c.task_index for c in state.clarifications}
         lines = []
         buttons = []
         for i, item in enumerate(state.tasks):
-            label = task_label(item.task)
-            if item.grade.verdict == "correct":
-                lines.append(f"{label} — верно ✅")
-            elif item.grade.verdict == "wrong":
-                where = (
-                    f" (строка {item.grade.first_error_line})"
-                    if item.grade.first_error_line
-                    else ""
-                )
-                lines.append(f"{label} — есть ошибка{where} ❌")
-                buttons.append([callback_button(f"Разобрать {_lower(label)}", f"tutor:{i}")])
-            else:
-                lines.append(f"{label} — не уверен, лучше показать взрослому 🤔")
+            if i in asked:
+                lines.append(f"{task_label(item.task)} — уточню у тебя одну деталь ✍️")
+                continue
+            line, button = _task_line(i, item)
+            lines.append(line)
+            if button:
+                buttons.append(button)
         correct = sum(1 for t in state.tasks if t.grade.verdict == "correct")
         header = f"Проверил! {correct} из {len(state.tasks)} верно.\n"
         await self._max.send_message(chat_id, header + "\n".join(lines), buttons=buttons or None)
+
+    # --- уточняющие вопросы (bot/clarify.py): код ведёт очередь, ответ пересчитывается ---
+
+    async def _ask_clarification(self, chat_id: int, user_id: int | None, state: ChatState) -> None:
+        clarification = state.clarifications[0]
+        item = state.tasks[clarification.task_index]
+        text, buttons = question(item, clarification)
+        self._events.log(
+            "clarification_asked",
+            user_id=user_id,
+            kind=clarification.kind,
+            reason=item.grade.uncertain_reason,
+        )
+        await self._max.send_message(chat_id, text, buttons=buttons)
+
+    async def _answer_clarification(
+        self, chat_id: int, user_id: int | None, state: ChatState, updated: CheckedTask | None
+    ) -> None:
+        clarification = state.clarifications[0]
+        before = state.tasks[clarification.task_index]
+        rest = state.clarifications[1:]
+        tasks = list(state.tasks)
+        if updated is None and clarification.attempts + 1 < MAX_ATTEMPTS:
+            retried = clarification.model_copy(update={"attempts": clarification.attempts + 1})
+            await self._store.set(
+                chat_id, state.model_copy(update={"clarifications": [retried, *rest]})
+            )
+            text, buttons = retry_prompt(clarification)
+            await self._max.send_message(chat_id, text, buttons=buttons)
+            return
+        self._events.log(
+            "clarification_answered",
+            user_id=user_id,
+            user_initiated=True,
+            kind=clarification.kind,
+            understood=updated is not None,
+            verdict_before=before.grade.verdict,
+            verdict_after=(updated or before).grade.verdict,
+        )
+        if updated is None:
+            message = f"Хорошо, оставлю {_lower(task_label(before.task))} как есть 🤔"
+            buttons = None
+        else:
+            tasks[clarification.task_index] = updated
+            # отдельное событие: задание уже учтено в task_checked, в отчёте не дублируем
+            self._events.log(
+                "task_clarified",
+                user_id=user_id,
+                component="validator",
+                kind=clarification.kind,
+                verdict=updated.grade.verdict,
+                reason=updated.grade.uncertain_reason,
+            )
+            message, button = _clarified_line(clarification.task_index, updated)
+            buttons = [button] if button else None
+        state = state.model_copy(
+            update={
+                "tasks": tasks,
+                "clarifications": rest,
+                "phase": "clarifying" if rest else "review",
+            }
+        )
+        await self._store.set(chat_id, state)
+        await self._max.send_message(chat_id, message, buttons=buttons)
+        if rest:
+            await self._ask_clarification(chat_id, user_id, state)
 
     async def _on_callback(
         self, chat_id: int, user_id: int | None, payload: str, callback_id: str
     ) -> None:
         self._events.log("button_pressed", user_id=user_id, user_initiated=True, payload=payload)
         state = await self._store.get(chat_id)
+        if payload.startswith("clarify:"):
+            await self._max.answer_callback(callback_id)
+            parsed = parse_sign_payload(payload)
+            if parsed is None or state.phase != "clarifying" or not state.clarifications:
+                return
+            token, key = parsed
+            current = state.clarifications[0]
+            if token != current.token:
+                return  # кнопка прошлого вопроса: следующий вопрос она не отвечает
+            updated = apply_sign(state.tasks[current.task_index], current, key)
+            await self._answer_clarification(chat_id, user_id, state, updated)
+            return
         index = (
             _parse_tutor_index(payload, len(state.tasks)) if payload.startswith("tutor:") else None
         )
@@ -319,8 +405,14 @@ class Bot:
         self._events.log(
             "tutor_reply", user_id=user_id, component="tutor", hint_level=session.hint_level
         )
+        # разбор другого задания снимает оставшиеся вопросы (задания остаются «не уверен»)
         state = state.model_copy(
-            update={"phase": "tutoring", "tutor": session, "tutoring_index": index}
+            update={
+                "phase": "tutoring",
+                "tutor": session,
+                "tutoring_index": index,
+                "clarifications": [],
+            }
         )
         await self._store.set(chat_id, state)
         await self._max.send_message(chat_id, reply)
@@ -360,6 +452,11 @@ class Bot:
     async def _on_text(self, chat_id: int, user_id: int | None, text: str) -> None:
         self._events.log("message_received", user_id=user_id, user_initiated=True)
         state = await self._store.get(chat_id)
+        if state.phase == "clarifying" and state.clarifications:
+            current = state.clarifications[0]
+            updated = apply_text(state.tasks[current.task_index], current, text)
+            await self._answer_clarification(chat_id, user_id, state, updated)
+            return
         if state.phase != "tutoring" or state.tutor is None:
             await self._max.send_message(chat_id, WELCOME)
             return
@@ -404,6 +501,36 @@ class Bot:
             state = state.model_copy(update={"tutor": session})
             await self._store.set(chat_id, state)
             await self._max.send_message(chat_id, reply)
+
+
+# «не уверен» без вопроса — с причиной, а не безличное «покажи взрослому»
+UNCERTAIN_TEXT = {
+    "unreadable": "часть записи неразборчива",
+    "ambiguous_equation": "не уверен в ходе решения уравнений",
+    "answer_unparseable": "не разобрал ответ",
+    "no_answer": "не нашёл итоговый ответ",
+    "steps_unparseable": "не смог разобрать решение",
+}
+
+
+def _task_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str]] | None]:
+    """Строка вердикта по заданию и кнопка «Разобрать» для ошибки."""
+    label = task_label(item.task)
+    if item.grade.verdict == "correct":
+        return f"{label} — верно ✅", None
+    if item.grade.verdict == "wrong":
+        where = f" (строка {item.grade.first_error_line})" if item.grade.first_error_line else ""
+        button = [callback_button(f"Разобрать {_lower(label)}", f"tutor:{index}")]
+        return f"{label} — есть ошибка{where} ❌", button
+    reason = UNCERTAIN_TEXT.get(item.grade.uncertain_reason or "", "не уверен в проверке")
+    return f"{label} — {reason} 🤔", None
+
+
+def _clarified_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str]] | None]:
+    """Итог после ответа ученика: «не уверен» здесь — ответ понят, но проверка не сошлась."""
+    if item.grade.verdict == "uncertain":
+        return f"{task_label(item.task)} — спасибо, но и так не получилось проверить 🤔", None
+    return _task_line(index, item)
 
 
 def _remaining_buttons(state: ChatState) -> list[list[dict[str, str]]]:

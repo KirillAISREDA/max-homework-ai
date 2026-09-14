@@ -82,14 +82,20 @@ def read_events(path: Path) -> Iterator[dict[str, Any]]:
 def summarize_events(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, dict[str, int]]]:
     """Вердикты проверок и причины «не уверен» по среде (prod / test / dev).
 
-    События до появления поля reason считаются причиной «unknown».
+    События до появления поля reason считаются причиной «unknown». Пересчёт после ответа
+    ученика (task_clarified) — отдельно в `clarified`: задание уже учтено в `verdicts`.
     """
     summary: dict[str, dict[str, dict[str, int]]] = {}
     for row in rows:
-        if row.get("type") != "task_checked":
+        if row.get("type") not in ("task_checked", "task_clarified"):
             continue
-        env = summary.setdefault(str(row.get("env")), {"verdicts": {}, "uncertain_reasons": {}})
+        env = summary.setdefault(
+            str(row.get("env")), {"verdicts": {}, "uncertain_reasons": {}, "clarified": {}}
+        )
         verdict = str(row.get("verdict"))
+        if row.get("type") == "task_clarified":
+            env["clarified"][verdict] = env["clarified"].get(verdict, 0) + 1
+            continue
         env["verdicts"][verdict] = env["verdicts"].get(verdict, 0) + 1
         if verdict == "uncertain":
             reason = str(row.get("reason") or "unknown")

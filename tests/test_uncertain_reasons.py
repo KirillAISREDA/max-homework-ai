@@ -66,12 +66,14 @@ def test_summary_counts_verdicts_and_reasons_by_environment() -> None:
         {"type": "task_checked", "env": "test", "verdict": "wrong"},
         {"type": "task_checked", "env": "dev", "verdict": "uncertain"},  # до шага 0 — без причины
         {"type": "vision_recognized", "env": "prod"},
+        {"type": "task_clarified", "env": "prod", "verdict": "correct", "kind": "answer"},
     ]
     summary = summarize_events(rows)
     assert summary["prod"]["verdicts"] == {"correct": 1, "uncertain": 3}
     assert summary["prod"]["uncertain_reasons"] == {"no_answer": 2, "unreadable": 1}
     assert summary["test"]["verdicts"] == {"wrong": 1}
     assert summary["dev"]["uncertain_reasons"] == {"unknown": 1}
+    assert summary["prod"]["clarified"] == {"correct": 1}
 
 
 def test_read_events_skips_broken_lines_and_missing_file(tmp_path: Path) -> None:
