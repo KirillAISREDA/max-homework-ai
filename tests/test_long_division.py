@@ -129,3 +129,22 @@ def test_clock_time_in_condition_is_not_division() -> None:
     steps = ["20 + 15 = 35", "12", "8", "5"]
     assert not is_long_division(steps, "Автобус ушёл в 10:45.")
     assert is_long_division(["756 | 6", "- 6", "15", "- 12"], None)
+
+
+def test_check_line_must_be_multiplication() -> None:
+    """Повторное ревью: при частном, равном делителю (81 : 9 = 9), мусорное «9 + 9 = 100»
+    совпадало с проверкой по числам и давало ложную «ошибку»."""
+    condition = "Выполни деление и проверку: 81 : 9"
+    noise = ["81 : 9 = 9", "- 81", "0", "9", "9 + 9 = 100"]
+    assert validator_only_grade(noise, condition=condition).verdict != "wrong"
+    wrong_check = ["81 : 9 = 9", "- 81", "0", "9", "9 * 9 = 80"]
+    assert validator_only_grade(wrong_check, condition=condition).verdict == "wrong"
+
+
+def test_rewritten_example_must_keep_the_operation() -> None:
+    steps = ["748 + 2 = 751", "- 6", "14", "- 14", "8", "- 8", "0"]
+    assert validator_only_grade(steps, condition="Вычисли: 748 : 2").verdict != "wrong"
+
+
+def test_clock_time_with_spaces_is_not_division() -> None:
+    assert not is_long_division(["20 + 15 = 35", "12", "8", "5"], "Автобус ушёл в 10 : 45.")

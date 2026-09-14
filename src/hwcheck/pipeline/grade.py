@@ -45,6 +45,9 @@ _FRAGMENT = re.compile(r"^\s*[+\-−×*·]?\s*\d+(?:[.,]\d+)?\s*$")
 _DIVISION = re.compile(r"\d\s*[:|÷]\s*\d")
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 _CLOCK = re.compile(r"^(?:[01]?\d|2[0-3]):[0-5]\d$")
+# знак действия между числами → семейство: OCR пишет деление и «:», и «/», умножение — «*», «·»
+_OPERATION = re.compile(r"(?<=\d)\s*([+\-−*·×:/÷])\s*(?=\d)")
+_FAMILY = {"+": "+", "-": "-", "−": "-", "*": "*", "·": "*", "×": "*", ":": ":", "/": ":", "÷": ":"}
 LONG_DIVISION_FRAGMENTS = 3
 
 
@@ -181,7 +184,8 @@ def is_long_division(steps: list[str], condition: str | None) -> bool:
     """
     fragments = sum(1 for step in steps if _FRAGMENT.match(step))
     division = any(_DIVISION.search(step) for step in steps) or any(
-        ":" in example and not _CLOCK.match(example)  # «в 10:45» — время, не деление (ревью)
+        # «в 10:45», «10 : 45» — время, не деление (ревью)
+        ":" in example and not _CLOCK.match(re.sub(r"\s+", "", example))
         for example in condition_examples(condition)
     )
     return division and fragments >= LONG_DIVISION_FRAGMENTS
@@ -224,22 +228,30 @@ def _grade_long_division(
 
 
 def _is_example_line(line: str, examples: list[str]) -> bool:
-    """Строка с числами примера («748 : 2 = 375») или проверки результата («374 * 2 = 700»).
+    """Пример условия теми же числами и действиями («748 : 2 = 375») или проверка деления
+    умножением частного на делитель («374 * 2 = 700»).
 
-    Мусорное «748 * 374 = 279352» из уголка — ни то ни другое: делимое с частным не проверка.
+    Мусорное «748 * 374 = 279352» из уголка — ни то ни другое; «9 + 9 = 100» при «81 : 9» —
+    тоже (повторное ревью: частное равно делителю, но проверка — только умножение).
     """
     if "=" not in line:
         return False
-    numbers = sorted(_NUMBER.findall(line.split("=", 1)[0]))
+    left = line.split("=", 1)[0]
+    numbers = sorted(_NUMBER.findall(left))
+    operations = _operations(left)
     for example in examples:
         operands = _NUMBER.findall(example)
+        if numbers == sorted(operands) and operations == _operations(example):
+            return True
         result = _integer_result(example)
-        forms = [sorted(operands)]
-        if result is not None and len(operands) == 2:
-            forms.append(sorted([result, operands[1]]))  # частное · делитель
-        if numbers in forms:
+        is_check = operations == ["*"] and _operations(example) == [":"] and result is not None
+        if is_check and numbers == sorted([result, operands[1]]):
             return True
     return False
+
+
+def _operations(expression: str) -> list[str]:
+    return [_FAMILY[sign] for sign in _OPERATION.findall(expression)]
 
 
 def _integer_result(example: str) -> str | None:
