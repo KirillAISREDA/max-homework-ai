@@ -21,6 +21,7 @@ from hwcheck.bot.clarify import (
     MAX_ATTEMPTS,
     apply_sign,
     apply_text,
+    parse_sign_payload,
     plan_clarifications,
     question,
     retry_prompt,
@@ -342,15 +343,16 @@ class Bot:
             buttons = None
         else:
             tasks[clarification.task_index] = updated
+            # отдельное событие: задание уже учтено в task_checked, в отчёте не дублируем
             self._events.log(
-                "task_checked",
+                "task_clarified",
                 user_id=user_id,
                 component="validator",
+                kind=clarification.kind,
                 verdict=updated.grade.verdict,
                 reason=updated.grade.uncertain_reason,
-                clarified=True,
             )
-            message, button = _task_line(clarification.task_index, updated)
+            message, button = _clarified_line(clarification.task_index, updated)
             buttons = [button] if button else None
         state = state.model_copy(
             update={
@@ -371,11 +373,15 @@ class Bot:
         state = await self._store.get(chat_id)
         if payload.startswith("clarify:"):
             await self._max.answer_callback(callback_id)
-            if state.phase == "clarifying" and state.clarifications:
-                current = state.clarifications[0]
-                item = state.tasks[current.task_index]
-                updated = apply_sign(item, current, payload.split(":", 1)[1])
-                await self._answer_clarification(chat_id, user_id, state, updated)
+            parsed = parse_sign_payload(payload)
+            if parsed is None or state.phase != "clarifying" or not state.clarifications:
+                return
+            token, key = parsed
+            current = state.clarifications[0]
+            if token != current.token:
+                return  # кнопка прошлого вопроса: следующий вопрос она не отвечает
+            updated = apply_sign(state.tasks[current.task_index], current, key)
+            await self._answer_clarification(chat_id, user_id, state, updated)
             return
         index = (
             _parse_tutor_index(payload, len(state.tasks)) if payload.startswith("tutor:") else None
@@ -399,7 +405,7 @@ class Bot:
         self._events.log(
             "tutor_reply", user_id=user_id, component="tutor", hint_level=session.hint_level
         )
-        # разбор другого задания откладывает уточняющие вопросы
+        # разбор другого задания снимает оставшиеся вопросы (задания остаются «не уверен»)
         state = state.model_copy(
             update={
                 "phase": "tutoring",
@@ -518,6 +524,13 @@ def _task_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str]]
         return f"{label} — есть ошибка{where} ❌", button
     reason = UNCERTAIN_TEXT.get(item.grade.uncertain_reason or "", "не уверен в проверке")
     return f"{label} — {reason} 🤔", None
+
+
+def _clarified_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str]] | None]:
+    """Итог после ответа ученика: «не уверен» здесь — ответ понят, но проверка не сошлась."""
+    if item.grade.verdict == "uncertain":
+        return f"{task_label(item.task)} — спасибо, но и так не получилось проверить 🤔", None
+    return _task_line(index, item)
 
 
 def _remaining_buttons(state: ChatState) -> list[list[dict[str, str]]]:

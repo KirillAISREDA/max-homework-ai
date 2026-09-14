@@ -47,16 +47,19 @@ BLURRED_SIGN = "15 * 10 + (30 - 20) <неразборчиво> 5 = 200"
 def test_plan_asks_answer_when_answer_missing_and_reference_known() -> None:
     item = with_ref(["220 + 180 = 400"])
     assert item.grade.uncertain_reason == "no_answer"
-    assert plan_clarifications([item]) == [Clarification(task_index=0, kind="answer")]
+    [planned] = plan_clarifications([item])
+    assert (planned.task_index, planned.kind) == (0, "answer")
 
 
 def test_plan_asks_sign_or_line_for_unreadable_marks() -> None:
     sign = without_ref([BLURRED_SIGN])
     line = without_ref(["15 * 1<неразборчиво> = 150"], number=6)
-    assert plan_clarifications([sign, line]) == [
-        Clarification(task_index=0, kind="sign", line_index=0),
-        Clarification(task_index=1, kind="line", line_index=0),
+    planned = plan_clarifications([sign, line])
+    assert [(c.task_index, c.kind, c.line_index) for c in planned] == [
+        (0, "sign", 0),
+        (1, "line", 0),
     ]
+    assert planned[0].token != planned[1].token  # у каждого вопроса своя кнопка
 
 
 def test_plan_skips_what_a_question_cannot_fix() -> None:
@@ -86,11 +89,16 @@ def test_sign_question_shows_childs_line_and_sign_buttons() -> None:
     text, buttons = question(item, Clarification(task_index=0, kind="sign", line_index=0))
     assert "15 * 10 + (30 - 20) ? 5 = 200" in text
     assert buttons is not None
+    token = "abc123"
+    text, buttons = question(
+        item, Clarification(task_index=0, kind="sign", line_index=0, token=token)
+    )
+    assert buttons is not None
     assert [b["payload"] for row in buttons for b in row] == [
-        "clarify:plus",
-        "clarify:minus",
-        "clarify:mul",
-        "clarify:div",
+        f"clarify:{token}:plus",
+        f"clarify:{token}:minus",
+        f"clarify:{token}:mul",
+        f"clarify:{token}:div",
     ]
 
 
@@ -131,3 +139,29 @@ def test_retyped_line_replaces_unreadable_one() -> None:
     assert result is not None and result.grade.verdict == "correct"
     assert result.task.student_solution_steps == ["15 * 10 = 150"]
     assert apply_text(item, clarification, "там было десять") is None
+
+
+# --- ревью ---
+
+
+def test_answer_is_not_asked_without_any_checked_work() -> None:
+    """Иначе «какой ответ получился?» — удобный способ угадать эталон без решения (ревью)."""
+    unreadable_answer = with_ref(["Решение: смотри рисунок"], answer="<неразборчиво>")
+    wordy_answer = with_ref(["Решение: смотри рисунок"], answer="примерно много")
+    assert unreadable_answer.grade.uncertain_reason == "unreadable"
+    assert wordy_answer.grade.uncertain_reason == "answer_unparseable"
+    assert plan_clarifications([unreadable_answer, wordy_answer]) == []
+
+
+def test_line_clarification_requires_line_index() -> None:
+    item = without_ref(["15 * 1<неразборчиво> = 150"])
+    with pytest.raises(ValueError):
+        apply_text(item, Clarification(task_index=0, kind="line"), "15 * 10 = 150")
+
+
+def test_still_uncertain_after_clarification_reads_differently() -> None:
+    from hwcheck.bot.handlers import _clarified_line
+
+    item = without_ref(["15 * 1<неразборчиво> = 150"])
+    line, button = _clarified_line(0, item)
+    assert "и так не получилось проверить" in line and button is None

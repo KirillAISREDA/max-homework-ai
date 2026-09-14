@@ -7,6 +7,7 @@ Redis (арх. §6.2, TTL 24 ч) на сервере, in-memory — локаль
 """
 
 import logging
+from secrets import token_hex
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field, ValidationError
@@ -38,6 +39,8 @@ class Clarification(BaseModel):
     kind: Literal["answer", "sign", "line"]
     line_index: int | None = None  # строка решения для sign/line
     attempts: int = 0  # неразобранных ответов
+    # метка вопроса в payload кнопок: старая кнопка не должна ответить на следующий вопрос
+    token: str = Field(default_factory=lambda: token_hex(4))
 
 
 class ChatState(BaseModel):

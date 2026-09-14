@@ -354,7 +354,8 @@ async def test_missing_answer_is_asked_and_regraded(harness: Harness, tmp_path: 
     assert (state.phase, state.clarifications) == ("review", [])
     answered = events_of(tmp_path, "clarification_answered")[-1]
     assert (answered["verdict_before"], answered["verdict_after"]) == ("uncertain", "correct")
-    assert events_of(tmp_path, "task_checked")[-1]["clarified"] is True
+    assert events_of(tmp_path, "task_clarified")[-1]["verdict"] == "correct"
+    assert "clarified" not in events_of(tmp_path, "task_checked")[-1]  # не считаем задание дважды
 
 
 async def test_unreadable_sign_is_chosen_with_buttons(harness: Harness) -> None:
@@ -362,12 +363,16 @@ async def test_unreadable_sign_is_chosen_with_buttons(harness: Harness) -> None:
     await bot.handle_update(photo_update("blurred"))
     _chat, ask, buttons = fake_max.sent[-1]
     assert "(30 - 20) ? 5" in ask
-    assert buttons is not None and buttons[0][2]["payload"] == "clarify:mul"
+    assert buttons is not None
+    mul = buttons[0][2]["payload"]
+    assert mul.startswith("clarify:") and mul.endswith(":mul")
 
-    await bot.handle_update(callback_update("clarify:mul"))
+    await bot.handle_update(callback_update(mul))
     assert "№5 — верно ✅" in fake_max.sent[-2][1]
+    second_buttons = fake_max.sent[-1][2]
     assert "(30 - 20) ? 5" in fake_max.sent[-1][1]  # второй вопрос — про №6
-    await bot.handle_update(callback_update("clarify:plus"))
+    assert second_buttons is not None
+    await bot.handle_update(callback_update(second_buttons[0][0]["payload"]))  # «+»
     result_text, result_buttons = fake_max.sent[-1][1], fake_max.sent[-1][2]
     assert "№6 — есть ошибка" in result_text
     assert result_buttons is not None and result_buttons[0][0]["payload"] == "tutor:1"
@@ -409,3 +414,21 @@ async def test_stray_clarify_button_is_harmless(harness: Harness) -> None:
     await bot.handle_update(callback_update("clarify:mul"))
     assert fake_max.callbacks == ["cb"]
     assert fake_max.sent == []
+
+
+async def test_stale_sign_button_does_not_answer_next_question(harness: Harness) -> None:
+    """Ревью (CRITICAL): повторное нажатие кнопки №5 молча засчитывало №6."""
+    bot, fake_max, store, _solved = harness
+    await bot.handle_update(photo_update("blurred"))
+    first_buttons = fake_max.sent[-1][2]
+    assert first_buttons is not None
+    mul_for_5 = first_buttons[0][2]["payload"]
+    await bot.handle_update(callback_update(mul_for_5))
+    sent_before = len(fake_max.sent)
+
+    await bot.handle_update(callback_update(mul_for_5))  # старая кнопка ещё раз
+    state = await store.get(7)
+    assert state.phase == "clarifying"
+    assert [c.task_index for c in state.clarifications] == [1]
+    assert state.tasks[1].grade.verdict == "uncertain"
+    assert len(fake_max.sent) == sent_before

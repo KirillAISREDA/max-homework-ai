@@ -48,6 +48,10 @@ def _clarification_for(index: int, item: CheckedTask) -> Clarification | None:
     if item.grade.verdict != "uncertain":
         return None
     reason = item.grade.uncertain_reason
+    # итоговый ответ спрашиваем только при хоть одной сошедшейся строке решения:
+    # иначе вопрос — способ подобрать ответ без решения
+    worked = any(check.status == "ok" for check in item.grade.line_checks)
+    can_ask_answer = item.ref is not None and worked
     if reason == "unreadable":
         for line_index, line in enumerate(item.task.student_solution_steps):
             if _UNREADABLE_SIGN.search(line):
@@ -55,8 +59,8 @@ def _clarification_for(index: int, item: CheckedTask) -> Clarification | None:
             if _UNREADABLE.search(line):
                 return Clarification(task_index=index, kind="line", line_index=line_index)
         # неразборчив сам ответ — спрашиваем ответ, если есть с чем сверить
-        return Clarification(task_index=index, kind="answer") if item.ref is not None else None
-    if reason in ("no_answer", "answer_unparseable") and item.ref is not None:
+        return Clarification(task_index=index, kind="answer") if can_ask_answer else None
+    if reason in ("no_answer", "answer_unparseable") and can_ask_answer:
         return Clarification(task_index=index, kind="answer")
     return None
 
@@ -71,13 +75,7 @@ def question(item: CheckedTask, clarification: Clarification) -> tuple[str, Butt
     if clarification.kind == "sign":
         shown = _UNREADABLE.sub("?", line, count=1)
         text = f"{label}, строка {_line_number(clarification)}: {shown}\nКакой знак вместо «?»?"
-        buttons = [
-            [
-                callback_button(shown_sign, f"clarify:{key}")
-                for key, (shown_sign, _) in SIGNS.items()
-            ]
-        ]
-        return text, buttons
+        return text, sign_buttons(clarification)
     return (
         f"{label}: не разобрал строку {_line_number(clarification)}. "
         "Перепиши её, как в тетради, со знаком «=».",
@@ -90,8 +88,20 @@ def retry_prompt(clarification: Clarification) -> tuple[str, Buttons | None]:
         return "Не понял 🙂 Напиши только число, без слов.", None
     if clarification.kind == "line":
         return "Не понял 🙂 Перепиши строку целиком, со знаком «=».", None
-    buttons = [[callback_button(shown, f"clarify:{key}") for key, (shown, _) in SIGNS.items()]]
-    return "Нажми кнопку со знаком 👇", buttons
+    return "Нажми кнопку со знаком 👇", sign_buttons(clarification)
+
+
+def sign_buttons(clarification: Clarification) -> Buttons:
+    token = clarification.token
+    return [[callback_button(shown, f"clarify:{token}:{key}") for key, (shown, _) in SIGNS.items()]]
+
+
+def parse_sign_payload(payload: str) -> tuple[str, str] | None:
+    """`clarify:<token>:<знак>` → (token, знак); payload недоверенный."""
+    parts = payload.split(":")
+    if len(parts) != 3 or parts[0] != "clarify":
+        return None
+    return parts[1], parts[2]
 
 
 def apply_text(item: CheckedTask, clarification: Clarification, text: str) -> CheckedTask | None:
@@ -128,13 +138,19 @@ def regrade(item: CheckedTask, task: VisionTask) -> CheckedTask:
 
 def _replace_line(item: CheckedTask, clarification: Clarification, line: str) -> CheckedTask:
     steps = list(item.task.student_solution_steps)
-    steps[clarification.line_index or 0] = line
+    steps[_line_index(clarification)] = line
     return regrade(item, item.task.model_copy(update={"student_solution_steps": steps}))
 
 
 def _line(item: CheckedTask, clarification: Clarification) -> str:
-    return item.task.student_solution_steps[clarification.line_index or 0]
+    return item.task.student_solution_steps[_line_index(clarification)]
 
 
 def _line_number(clarification: Clarification) -> int:
-    return (clarification.line_index or 0) + 1
+    return _line_index(clarification) + 1
+
+
+def _line_index(clarification: Clarification) -> int:
+    if clarification.line_index is None:
+        raise ValueError(f"clarification {clarification.kind!r} without line_index")
+    return clarification.line_index
