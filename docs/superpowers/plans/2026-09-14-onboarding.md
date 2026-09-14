@@ -568,7 +568,9 @@ def test_start_payload_roundtrip() -> None:
         assert parse_start_payload(start_payload(invite.kind, invite.token)) == (kind, invite.token)
 
 
-@pytest.mark.parametrize("payload", [None, "", "p_", "x_abcdefghijklmnopqrstu", "p_short", "p_bad token!"])
+@pytest.mark.parametrize(
+    "payload", [None, "", "p_", "x_abcdefghijklmnopqrstu", "p_short", "p_bad token!"]
+)
 def test_broken_start_payload_is_ignored(payload: str | None) -> None:
     assert parse_start_payload(payload) is None
 
@@ -796,7 +798,9 @@ async def test_constraints_protect_consent_and_cascade_profiles(schema: str) -> 
             "VALUES ('s1', 'x', 'student') RETURNING id"
         )
         with pytest.raises(asyncpg.CheckViolationError):
-            await conn.execute("INSERT INTO student_profiles (user_id, grade) VALUES ($1, 10)", student)
+            await conn.execute(
+                "INSERT INTO student_profiles (user_id, grade) VALUES ($1, 10)", student
+            )
         await conn.execute(consent, "p1")
         with pytest.raises(asyncpg.UniqueViolationError):  # у ребёнка один подтвердивший родитель
             await conn.execute(consent, "p2")
@@ -956,9 +960,7 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 _LOCK_KEY = 0x686F6D65  # «home»
 
 
-async def apply_migrations(
-    conn: asyncpg.Connection, directory: Path = MIGRATIONS_DIR
-) -> list[str]:
+async def apply_migrations(conn: asyncpg.Connection, directory: Path = MIGRATIONS_DIR) -> list[str]:
     """Применяет новые миграции и возвращает их имена; упавшая откатывается целиком."""
     await conn.execute("SELECT pg_advisory_lock($1)", _LOCK_KEY)
     try:
