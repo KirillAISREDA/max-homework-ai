@@ -14,8 +14,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       # лог бота на томе var/ (ротация 5 МБ × 3): docker logs пропадают при пересборке
       LOG_PATH: var/bot.log
+      # профили, согласия, приглашения; пароль — из .env (python -m hwcheck keys)
+      DATABASE_URL: postgresql://homework:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан в .env}@postgres:5432/homework
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     # Контейнер работает от uid 1000: перед первым запуском на хосте
     #   mkdir -p var .cache && chown -R 1000:1000 var .cache
@@ -55,5 +59,57 @@ services:
       timeout: 3s
       retries: 5
 
+  postgres:
+    image: postgres:17-alpine
+    container_name: homework-postgres
+    restart: unless-stopped
+    # портов наружу нет: база доступна только боту в сети compose
+    environment:
+      POSTGRES_USER: homework
+      POSTGRES_DB: homework
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан в .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homework -d homework"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ежедневный pg_dump в var/backups, хранение 7 дней (спецификация онбординга §7)
+  pgbackup:
+    image: postgres:17-alpine
+    container_name: homework-pgbackup
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: homework
+      PGDATABASE: homework
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан в .env}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # дампы с данными детей — только владельцу: хост общий с другими проектами (ревью)
+        umask 077
+        while true; do
+          pg_dump --format=custom --file=/backups/homework-$$(date -u +%F).dump \
+            && find /backups -name 'homework-*.dump' -mtime +7 -delete
+          sleep 86400
+        done
+    volumes:
+      - ./var/backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
 volumes:
   redis-data:
+  postgres-data:

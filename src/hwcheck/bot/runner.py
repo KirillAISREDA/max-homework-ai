@@ -22,7 +22,9 @@ from hwcheck.bot.fsm import InMemoryStateStore, RedisStateStore, StateStore
 from hwcheck.bot.handlers import Bot
 from hwcheck.bot.max_api import MaxClient
 from hwcheck.config import Settings
-from hwcheck.events import EventLog
+from hwcheck.crypto import UserIdCipher, UserIdCipherError
+from hwcheck.db.pool import create_pool
+from hwcheck.events import EventLog, set_id_hash_key
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
 
@@ -104,9 +106,23 @@ async def _poll_loop(
             await stop_wait
 
 
+def configure_ids(settings: Settings) -> None:
+    """Ключи id при старте: HMAC для обезличенных id; ключ шифра проверяется сразу, а не на
+    первом пользователе (спецификация онбординга §10.1)."""
+    set_id_hash_key(settings.id_hash_key or None)
+    if settings.user_id_key:
+        UserIdCipher(settings.user_id_key)
+    if settings.environment == "prod" and not settings.id_hash_key:
+        logger.warning("ID_HASH_KEY не задан: id обезличены legacy-хэшем, обратимым перебором")
+
+
 async def run_polling(settings: Settings) -> None:
     if not settings.max_token:
         raise SystemExit("Не задан MAX_TOKEN (токен бота MAX, см. .env.example)")
+    try:
+        configure_ids(settings)
+    except UserIdCipherError as exc:
+        raise SystemExit(str(exc)) from exc
     events = EventLog(
         Path(settings.events_path), settings.environment, test_users=settings.test_user_hashes
     )
@@ -116,22 +132,23 @@ async def run_polling(settings: Settings) -> None:
     marker_path = Path(settings.events_path).parent / "max_marker.txt"
     stop = asyncio.Event()
     _install_stop_handler(stop, asyncio.get_running_loop())
-    if redis_client is not None:
-        # Redis недоступен — лучше не стартовать (health покажет), чем терять диалоги молча
-        await redis_client.ping()
-    async with (
-        MaxClient(
-            settings.max_token, settings.max_base_url, ca_bundle=settings.max_ca_bundle
-        ) as max_client,
-        GigaChatClient(settings) as llm,
-    ):
+    # всё открытое закрывается в обратном порядке, даже если старт MAX/GigaChat упал (ревью)
+    async with contextlib.AsyncExitStack() as resources:
+        if redis_client is not None:
+            resources.push_async_callback(redis_client.aclose)
+            # Redis недоступен — лучше не стартовать (health покажет), чем терять диалоги молча
+            await redis_client.ping()
+        if settings.database_url:
+            # PostgreSQL недоступен или миграция упала — не стартуем, профили не потеряются
+            pool = await create_pool(settings.database_url)
+            resources.push_async_callback(pool.close)
+        max_client = await resources.enter_async_context(
+            MaxClient(settings.max_token, settings.max_base_url, ca_bundle=settings.max_ca_bundle)
+        )
+        llm = await resources.enter_async_context(GigaChatClient(settings))
         me = await max_client.me()
         logger.info("bot started: %s", me.get("name") or me)
         print(f"Бот запущен: {me.get('name', me)}. Ctrl+C — остановка.")
         bot = Bot(max_client, llm, store, events, settings, photos=_make_photo_store(settings))
-        try:
-            await _poll_loop(max_client, bot, marker_path, stop)
-        finally:
-            if redis_client is not None:
-                await redis_client.aclose()
-        logger.info("bot stopped")
+        await _poll_loop(max_client, bot, marker_path, stop)
+    logger.info("bot stopped")

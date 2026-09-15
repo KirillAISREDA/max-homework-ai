@@ -8,6 +8,7 @@ environment=dev исключается из зачёта; в prod события
 """
 
 import hashlib
+import hmac
 import json
 import logging
 import time
@@ -50,9 +51,11 @@ class EventLog:
         **fields: Any,
     ) -> None:
         user = anonymize(user_id)
+        # TEST_USERS мог быть собран до перехода на HMAC — узнаём тестера и по старому хэшу
+        is_tester = user in self._test_users or legacy_anonymize(user_id) in self._test_users
         record = {
             "ts": time.time(),
-            "env": "test" if user in self._test_users else self._environment,
+            "env": "test" if is_tester else self._environment,
             "trace_id": _trace_id.get(),
             "type": event_type,
             "user": user,
@@ -103,8 +106,38 @@ def summarize_events(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, dict
     return summary
 
 
+_id_hash_key: bytes | None = None
+
+
+def set_id_hash_key(key: str | None) -> None:
+    """Секрет HMAC для обезличивания id (`ID_HASH_KEY`); None — legacy-хэш (локально, тесты)."""
+    global _id_hash_key
+    _id_hash_key = key.encode() if key else None
+
+
 def anonymize(user_id: int | None) -> str | None:
-    """152-ФЗ и антифрод: наружу — только необратимый хэш идентификатора."""
+    """152-ФЗ и антифрод: наружу — только необратимый хэш идентификатора.
+
+    С ключом — HMAC (спецификация онбординга §8): простой sha256 от id обратим перебором
+    диапазона id MAX. Тот же хэш — поле user в events.jsonl, ключи Redis и имена фото.
+    """
+    if user_id is None:
+        return None
+    if _id_hash_key is None:
+        return legacy_anonymize(user_id)
+    return hmac.new(_id_hash_key, str(user_id).encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def keyed_digest(value: str) -> str:
+    """Полный HMAC-SHA256 секрета с малым перебором (запасной код приглашения: 32⁸ ≈ 2⁴⁰), чтобы
+    хэш из утёкшей базы или бэкапа не подбирался без ключа; без ключа (локально) — sha256."""
+    if _id_hash_key is None:
+        return hashlib.sha256(value.encode()).hexdigest()
+    return hmac.new(_id_hash_key, value.encode(), hashlib.sha256).hexdigest()
+
+
+def legacy_anonymize(user_id: int | None) -> str | None:
+    """Хэш до перехода на HMAC — только чтобы узнать тестеров из старого TEST_USERS."""
     if user_id is None:
         return None
     return hashlib.sha256(f"hwcheck:{user_id}".encode()).hexdigest()[:16]

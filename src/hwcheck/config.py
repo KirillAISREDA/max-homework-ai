@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     # обезличенные id тестеров (поле "user" в events.jsonl) через запятую: в prod их
     # события пишутся с env=test и не попадают в зачёт
     test_users: str = ""
+    # секрет HMAC для обезличенных id (события, ключи Redis, имена фото); пусто — legacy-хэш
+    id_hash_key: str = ""
+    # ключ Fernet: id MAX в базе хранится только шифротекстом (python -m hwcheck keys)
+    user_id_key: str = ""
+    # PostgreSQL: профили, согласия, приглашения; пусто — бот без базы (как до онбординга)
+    database_url: str | None = None
 
     # состояние диалога: пусто — в памяти процесса (локально), иначе Redis (сервер)
     redis_url: str | None = None
