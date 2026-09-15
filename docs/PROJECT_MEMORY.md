@@ -24,18 +24,18 @@
 - Бот: «Домашка ИИ» в MAX. Команда: Кирилл (основатель — продукт, разработка, запуск) + ИИ-агенты
   (Claude Code): разработка по TDD, ревью агентами, PR на каждое изменение.
 
-## 2. Текущее состояние (14.09.2026)
+## 2. Текущее состояние (15.09.2026)
 
 | Что | Состояние |
 |---|---|
-| Бот в MAX | работает в prod на VPS, long polling; `main` = `67a3848` |
+| Бот в MAX | работает в prod на VPS, long polling; `main` = `1e687ff` (15.09) |
 | Пайплайн математики | фото → двухэтапный vision (транскрипция → структура) → Solver (GigaChat) → Validator (SymPy) → вердикт → разбор с тьютором |
 | Качество vision | 28/31 фото датасета распознаны (было 8/31 до двухэтапной схемы) |
-| Validator | арифметика, дроби, смешанные числа, уравнения с одной переменной, столбики (+ − × на однозначное), ответы фразой, многопунктовые задания |
-| Тесты | 303, CI зелёный (ruff, mypy strict, pytest) |
+| Validator | арифметика, дроби, смешанные числа, уравнения с одной переменной, столбики (+ − × на однозначное), ответы фразой, многопунктовые задания; деление уголком — «верно» по результатам примеров условия, иначе «не уверен» |
+| Тесты | 441 (из них 4 — PostgreSQL), CI зелёный (ruff, mypy strict, pytest, PostgreSQL 17 в CI) |
 | Прод-данные 04–13.09 | 4 пользователя (3 тестера + 1 реальный), 29 загрузок домашки, 44 проверенных задания, ~189 тыс. токенов |
 | Отслеживание | `var/events.jsonl` (trace_id, обезличенный user, env prod/test), фото 30 дней, `var/bot.log` |
-| Онбординг и согласие родителя | **спроектирован** (`docs/superpowers/specs/2026-09-14-onboarding-design.md`), не реализован — **блокирует привлечение пользователей** |
+| Онбординг и согласие родителя | спецификация + план из 5 этапов (`docs/superpowers/plans/2026-09-14-onboarding.md`); **этап 1 «Фундамент» в prod 15.09** (PostgreSQL, HMAC-хэши id, шифр id, каталог предметов, приглашения); вход ученика и согласие — этап 2, **до него пользователей не привлекаем** |
 | Русский язык | исследование закончено, прототип не начат |
 | Конкурс Sber500xDisrupt | допущены к этапу 1 (13.09); форма онбординга конкурса — ответы в `docs/contest/sber500-onboarding-answers.md` |
 
@@ -138,10 +138,10 @@ tutor | generate | bot`).
 |---|---|
 | Репозиторий | https://github.com/KirillAISREDA/max-homework-ai (публичный; «открытый контур» конкурса) |
 | VPS | `193.247.73.243` (HOSTKEY, Москва по геолокации IP), Ubuntu 22.04, 4 vCPU / 7.7 ГБ; общий с чужими проектами — чужое не трогать |
-| Каталог на VPS | `/opt/max-homework-ai` — git-клон `main` + `.env` (бэкап `.env.bak-20260913`) |
-| Контейнеры | `homework-bot` (лимит 1 ГБ), `homework-redis` (`redis:8-alpine`, AOF, том `max-homework-ai_redis-data`) |
-| Данные на VPS | `var/events.jsonl`, `var/max_marker.txt`, `var/photos/` (TTL 30 дней), `var/bot.log`, `.cache/solver/` |
-| Секреты (`.env`, не в git) | `GIGACHAT_CREDENTIALS`, `GIGACHAT_SCOPE` (PERS), `MAX_TOKEN`, `TEST_USERS`, `ENVIRONMENT=prod` |
+| Каталог на VPS | `/opt/max-homework-ai` — git-клон `main` + `.env` (бэкапы `.env.bak-20260913`, `.env.bak-2026-09-15`) |
+| Контейнеры | `homework-bot` (лимит 1 ГБ), `homework-redis` (`redis:8-alpine`, AOF, том `max-homework-ai_redis-data`), `homework-postgres` (`postgres:17-alpine`, 256 МБ, без портов, том `postgres-data`, миграции при старте бота), `homework-pgbackup` (ежедневный `pg_dump`) |
+| Данные на VPS | `var/events.jsonl`, `var/max_marker.txt`, `var/photos/` (TTL 30 дней), `var/bot.log`, `.cache/solver/`, `var/backups/` (дампы PostgreSQL, 7 дней, только root) |
+| Секреты (`.env`, не в git) | `GIGACHAT_CREDENTIALS`, `GIGACHAT_SCOPE` (PERS), `MAX_TOKEN`, `TEST_USERS`, `ENVIRONMENT=prod`; с 15.09 — `ID_HASH_KEY` (HMAC id), `USER_ID_KEY` (Fernet id MAX), `POSTGRES_PASSWORD`: **копия у Кирилла вне VPS** — без них бот не найдёт и не напишет пользователям |
 | TLS | корень НУЦ Минцифры `certs/russian_trusted_root_ca.cer` — для GigaChat (заменяет хранилище) и MAX (добавляется к certifi) |
 | GigaChat | PERS-фримиум до 30.08.2027: Ultra ~50M, Max ~24,4M, Pro 40M, Lite 250M токенов; **1 одновременный запрос** |
 | MAX Bot API | `platform-api2.max.ru`; deep link `max.ru/<бот>?start=<payload ≤ 128>` → `bot_started.payload` |
@@ -196,6 +196,13 @@ validator · #6 положение конкурса · #7 классификат
 - **Прод с пользователями:** перед рестартом — события за 10 минут; код выкатывать `docker compose up -d
   --build bot`, Redis не трогать (13.09 рестарт Redis для проверки уронил загрузку тестера).
 - **Логи контейнера пропадают при пересборке** — поэтому `var/bot.log`.
+- **Распознавание нестабильно:** одно фото — разные расшифровки от прогона к прогону (живой альбом 14.09: мусорные
+  равенства из уголка, выдуманные задачи и дроби). Правила проверки должны переживать мусор, а не только «чистую» запись.
+- **`ruff format --check .` проверяет и код в markdown** — планы и документы с блоками python тоже форматировать.
+- **`gh pr merge` может падать с GraphQL-ошибкой GitHub** — сливать через REST:
+  `gh api -X PUT repos/KirillAISREDA/max-homework-ai/pulls/<N>/merge -f merge_method=merge`.
+- **Локальный Docker не тянет образы** (прокси 127.0.0.1:10801) — тесты базы на кэшированном `postgres:16-alpine`
+  (`hwcheck-test-pg`, порт 55432).
 - **Один поллер на токен:** не запускать `hwcheck bot` локально, пока жив контейнер.
 - **Windows-окружение:** `TaskStop` фонового `uv run` не убивает дочерний python; heredoc с кавычками в bash
   ломается — правки через скрипты в scratchpad; Clash Verge (TUN, fake-ip) блокирует фреймы claude.ai в Chromium.
