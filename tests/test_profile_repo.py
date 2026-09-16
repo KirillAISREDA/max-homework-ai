@@ -6,22 +6,44 @@
 
 from __future__ import annotations
 
+import os
+import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
+import asyncpg
 import pytest
 
 from hwcheck.bot.invites import new_invite
 from hwcheck.db.memory import InMemoryProfileRepository
-from hwcheck.db.repo import ProfileRepository, StudentProfile
+from hwcheck.db.pool import create_pool
+from hwcheck.db.repo import PgProfileRepository, ProfileRepository, StudentProfile
 
 NOW = datetime(2026, 9, 16, 12, 0, tzinfo=UTC)
 WEEK = timedelta(days=7)
 
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
-@pytest.fixture(params=["memory"])
+
+@pytest.fixture(params=["memory", "postgres"])
 async def repo(request: pytest.FixtureRequest) -> AsyncIterator[ProfileRepository]:
-    yield InMemoryProfileRepository()
+    if request.param == "memory":
+        yield InMemoryProfileRepository()
+        return
+    if TEST_DATABASE_URL is None:
+        if "CI" in os.environ:
+            pytest.fail("в CI нужен TEST_DATABASE_URL")
+        pytest.skip("нужен TEST_DATABASE_URL (PostgreSQL)")
+    schema = f"test_{uuid.uuid4().hex[:12]}"
+    admin = await asyncpg.connect(TEST_DATABASE_URL)
+    await admin.execute(f'CREATE SCHEMA "{schema}"')
+    pool = await create_pool(TEST_DATABASE_URL, server_settings={"search_path": schema})
+    try:
+        yield PgProfileRepository(pool)
+    finally:
+        await pool.close()
+        await admin.execute(f'DROP SCHEMA "{schema}" CASCADE')
+        await admin.close()
 
 
 async def student(repo: ProfileRepository, name: str = "s1", grade: int = 7) -> StudentProfile:
