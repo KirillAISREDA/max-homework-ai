@@ -26,6 +26,7 @@ from hwcheck.bot.fsm import InMemoryStateStore, RedisStateStore, StateStore
 from hwcheck.bot.handlers import Bot
 from hwcheck.bot.max_api import MaxClient
 from hwcheck.bot.onboarding.context import OnboardingContext
+from hwcheck.bot.onboarding.policy import POLICY_VERSION, policy_messages
 from hwcheck.bot.onboarding.router import Onboarding
 from hwcheck.bot.onboarding.state import (
     InMemoryOnboardingStateStore,
@@ -162,6 +163,13 @@ def make_onboarding(
         )
     if pool is None:
         raise SystemExit("ONBOARDING_REQUIRED=true: нет подключения к PostgreSQL")
+    try:
+        policy_messages()  # «Полный текст» на экране согласия: без файла политики не стартуем
+    except FileNotFoundError as exc:
+        raise SystemExit(
+            "ONBOARDING_REQUIRED=true: нет текста политики "
+            f"docs/legal/privacy-policy-{POLICY_VERSION}.md"
+        ) from exc
     states: OnboardingStateStore = (
         RedisOnboardingStateStore(redis_client)
         if redis_client is not None

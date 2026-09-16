@@ -53,3 +53,16 @@ def test_make_onboarding(tmp_path: Path) -> None:
     assert isinstance(onboarding, Onboarding)
     assert onboarding._ctx.bot_username == "domashka_bot"
     assert isinstance(onboarding._ctx.states, RedisOnboardingStateStore)
+
+
+def test_onboarding_needs_policy_text(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Без файла политики «Полный текст» упал бы у родителя — бот не стартует (ревью ветки)."""
+    monkeypatch.setattr("hwcheck.bot.onboarding.policy.LEGAL_DIR", tmp_path)
+    common: dict[str, Any] = {
+        "redis_client": None,
+        "dialogs": InMemoryStateStore(),
+        "max_client": object(),
+        "events": EventLog(tmp_path / "events.jsonl", "dev"),
+    }
+    with pytest.raises(SystemExit, match="политики"):
+        make_onboarding(settings(), pool=object(), me={"username": "domashka_bot"}, **common)
