@@ -27,7 +27,7 @@ from hwcheck.bot.clarify import (
     retry_prompt,
 )
 from hwcheck.bot.fsm import ChatState, CheckedTask, StateStore
-from hwcheck.bot.max_api import MaxClient, callback_button
+from hwcheck.bot.max_api import MaxClient
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
 from hwcheck.bot.pages import (
@@ -37,6 +37,9 @@ from hwcheck.bot.pages import (
     task_label,
     textbook_is_fresh,
 )
+from hwcheck.bot.summary import clarified_line, review_header, task_line
+from hwcheck.bot.summary import lower as _lower
+from hwcheck.bot.summary import remaining_buttons as _remaining_buttons
 from hwcheck.config import Settings
 from hwcheck.events import EventLog, anonymize, trace
 from hwcheck.llm.gigachat_client import GigaChatClient
@@ -44,8 +47,9 @@ from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.schemas import VisionTask
-from hwcheck.pipeline.solver import FileCache, RefSolution, StructuredOutputError
+from hwcheck.pipeline.solver import FileCache, StructuredOutputError
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
+from hwcheck.subjects.math.module import _error_line_value, _pseudo_ref
 
 logger = logging.getLogger(__name__)
 
@@ -306,12 +310,11 @@ class Bot:
             if i in asked:
                 lines.append(f"{task_label(item.task)} — уточню у тебя одну деталь ✍️")
                 continue
-            line, button = _task_line(i, item)
+            line, button = task_line(i, item)
             lines.append(line)
             if button:
                 buttons.append(button)
-        correct = sum(1 for t in state.tasks if t.grade.verdict == "correct")
-        header = f"Проверил! {correct} из {len(state.tasks)} верно.\n"
+        header = review_header(state)
         await self._max.send_message(chat_id, header + "\n".join(lines), buttons=buttons or None)
 
     # --- уточняющие вопросы (bot/clarify.py): код ведёт очередь, ответ пересчитывается ---
@@ -366,7 +369,7 @@ class Bot:
                 verdict=updated.grade.verdict,
                 reason=updated.grade.uncertain_reason,
             )
-            message, button = _clarified_line(clarification.task_index, updated)
+            message, button = clarified_line(clarification.task_index, updated)
             buttons = [button] if button else None
         state = state.model_copy(
             update={
@@ -523,46 +526,6 @@ class Bot:
             await self._max.send_message(chat_id, reply)
 
 
-# «не уверен» без вопроса — с причиной, а не безличное «покажи взрослому»
-UNCERTAIN_TEXT = {
-    "unreadable": "часть записи неразборчива",
-    "ambiguous_equation": "не уверен в ходе решения уравнений",
-    "answer_unparseable": "не разобрал ответ",
-    "no_answer": "не нашёл итоговый ответ",
-    "steps_unparseable": "не смог разобрать решение",
-    "column_unreadable": "не смог прочитать деление уголком",
-}
-
-
-def _task_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str]] | None]:
-    """Строка вердикта по заданию и кнопка «Разобрать» для ошибки."""
-    label = task_label(item.task)
-    if item.grade.verdict == "correct":
-        return f"{label} — верно ✅", None
-    if item.grade.verdict == "wrong":
-        where = f" (строка {item.grade.first_error_line})" if item.grade.first_error_line else ""
-        button = [callback_button(f"Разобрать {_lower(label)}", f"tutor:{index}")]
-        return f"{label} — есть ошибка{where} ❌", button
-    reason = UNCERTAIN_TEXT.get(item.grade.uncertain_reason or "", "не уверен в проверке")
-    return f"{label} — {reason} 🤔", None
-
-
-def _clarified_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str]] | None]:
-    """Итог после ответа ученика: «не уверен» здесь — ответ понят, но проверка не сошлась."""
-    if item.grade.verdict == "uncertain":
-        return f"{task_label(item.task)} — спасибо, но и так не получилось проверить 🤔", None
-    return _task_line(index, item)
-
-
-def _remaining_buttons(state: ChatState) -> list[list[dict[str, str]]]:
-    """Кнопки для ещё не разобранных ошибок."""
-    return [
-        [callback_button(f"Разобрать {_lower(task_label(t.task))}", f"tutor:{i}")]
-        for i, t in enumerate(state.tasks)
-        if t.grade.verdict == "wrong" and i not in state.resolved_indices
-    ]
-
-
 def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:
     """Payload недоверенный: только 'tutor:<цифры>' в границах списка."""
     raw = payload.split(":", 1)[1] if ":" in payload else ""
@@ -575,24 +538,3 @@ def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:
 def _validator_only_grade(steps: list[str], *, condition: str | None = None) -> GradeResult:
     """Столбик примеров без условия: проверка — только детерминированный пересчёт."""
     return validator_only_grade(steps, condition=condition)
-
-
-def _error_line_value(result: GradeResult) -> str | None:
-    """Верное значение первой ошибочной строки (SymPy) — цель разбора для тьютора."""
-    if result.first_error_line is None:
-        return None
-    check = result.line_checks[result.first_error_line - 1]
-    return check.values[0] if check.status == "mismatch" and check.values else None
-
-
-def _pseudo_ref(result: GradeResult) -> RefSolution:
-    """Для задания без условия: «эталон» — верное значение первой ошибочной строки."""
-    for check in result.line_checks:
-        if check.status == "mismatch" and check.values:
-            return RefSolution(steps=[], answer=check.values[0], units=None)
-    return RefSolution(steps=[], answer="", units=None)
-
-
-def _lower(label: str) -> str:
-    """«Задание 1» посреди фразы: «Разобрать задание 1»; «№19» не меняется."""
-    return label[:1].lower() + label[1:]

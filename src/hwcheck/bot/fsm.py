@@ -18,6 +18,7 @@ from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.tutor import TutorSession
+from hwcheck.subjects.base import Finding
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,8 @@ class CheckedTask(BaseModel):
     task: VisionTask
     ref: RefSolution | None  # None — условия нет, проверка только пересчётом
     grade: GradeResult
+    # находки предметного модуля (спецификация каркаса §4); пусто — вывести из grade (математика)
+    findings: list[Finding] = Field(default_factory=list)
 
 
 class Clarification(BaseModel):
