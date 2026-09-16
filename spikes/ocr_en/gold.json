@@ -1,0 +1,11139 @@
+[
+  {
+    "image": "en_hw2022_01_11.jpg",
+    "split": "test",
+    "words": [
+      {
+        "text": "Writing",
+        "box": [
+          452,
+          21,
+          665,
+          113
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "task",
+        "box": [
+          672,
+          24,
+          800,
+          88
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "1.",
+        "box": [
+          795,
+          38,
+          890,
+          89
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "The",
+        "box": [
+          544,
+          110,
+          665,
+          202
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "following",
+        "box": [
+          682,
+          122,
+          948,
+          239
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "bar",
+        "box": [
+          964,
+          118,
+          1059,
+          203
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "chart",
+        "box": [
+          1064,
+          121,
+          1230,
+          203
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "shows",
+        "box": [
+          1225,
+          118,
+          1381,
+          204
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "five",
+        "box": [
+          1390,
+          105,
+          1527,
+          227
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "world",
+        "box": [
+          1533,
+          121,
+          1720,
+          203
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "region",
+        "box": [
+          1708,
+          138,
+          1907,
+          240
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1911,
+          117,
+          1992,
+          235
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "X",
+        "box": [
+          2014,
+          128,
+          2080,
+          201
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "axis",
+        "box": [
+          2061,
+          143,
+          2195,
+          210
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          2181,
+          133,
+          2333,
+          201
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "also",
+        "box": [
+          2323,
+          126,
+          2475,
+          202
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          443,
+          194,
+          562,
+          279
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "number",
+        "box": [
+          777,
+          207,
+          986,
+          282
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          988,
+          221,
+          1062,
+          282
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "whole",
+        "box": [
+          1065,
+          211,
+          1245,
+          284
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "world;",
+        "box": [
+          1260,
+          208,
+          1461,
+          296
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1468,
+          199,
+          1555,
+          317
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "y-",
+        "box": [
+          1533,
+          226,
+          1641,
+          318
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "axis",
+        "box": [
+          1612,
+          214,
+          1736,
+          282
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "imaged",
+        "box": [
+          1924,
+          208,
+          2131,
+          313
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          2138,
+          209,
+          2250,
+          280
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "amount",
+        "box": [
+          2249,
+          211,
+          2509,
+          281
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          445,
+          272,
+          547,
+          393
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "unemployment",
+        "box": [
+          534,
+          285,
+          1048,
+          401
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1057,
+          292,
+          1149,
+          359
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "percentages.",
+        "box": [
+          1144,
+          280,
+          1500,
+          397
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Two",
+        "box": [
+          1512,
+          290,
+          1642,
+          355
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "colomns",
+        "box": [
+          1649,
+          276,
+          1903,
+          361
+        ],
+        "error": true,
+        "correct": "columns"
+      },
+      {
+        "text": "illustrate",
+        "box": [
+          1915,
+          281,
+          2218,
+          360
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "to",
+        "box": [
+          2230,
+          286,
+          2315,
+          364
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "years,",
+        "box": [
+          2295,
+          303,
+          2520,
+          405
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "first-",
+        "box": [
+          448,
+          360,
+          686,
+          468
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2014",
+        "box": [
+          674,
+          379,
+          832,
+          441
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          831,
+          367,
+          983,
+          444
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "second-",
+        "box": [
+          978,
+          363,
+          1234,
+          442
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2015.",
+        "box": [
+          1232,
+          372,
+          1394,
+          440
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "In",
+        "box": [
+          479,
+          438,
+          597,
+          519
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "two",
+        "box": [
+          623,
+          441,
+          753,
+          520
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1079,
+          438,
+          1204,
+          517
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "unemployment's",
+        "box": [
+          1220,
+          435,
+          1746,
+          551
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "situation",
+        "box": [
+          1750,
+          447,
+          2061,
+          522
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          2068,
+          456,
+          2142,
+          525
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "static",
+        "box": [
+          2166,
+          444,
+          2398,
+          517
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          421,
+          528,
+          603,
+          606
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "don't",
+        "box": [
+          598,
+          527,
+          793,
+          606
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_01_3.jpg",
+    "split": "test",
+    "words": [
+      {
+        "text": "Writing",
+        "box": [
+          922,
+          224,
+          1317,
+          390
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "task",
+        "box": [
+          1367,
+          257,
+          1677,
+          363
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2.",
+        "box": [
+          1663,
+          221,
+          1799,
+          363
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "It",
+        "box": [
+          458,
+          353,
+          580,
+          479
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          598,
+          364,
+          723,
+          485
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "widely",
+        "box": [
+          808,
+          358,
+          1066,
+          519
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "known",
+        "box": [
+          1177,
+          384,
+          1420,
+          476
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          1487,
+          355,
+          1740,
+          473
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "music",
+        "box": [
+          1805,
+          381,
+          2093,
+          486
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "labels",
+        "box": [
+          2113,
+          362,
+          2391,
+          486
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          2414,
+          370,
+          2620,
+          476
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Film",
+        "box": [
+          163,
+          446,
+          397,
+          579
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "makers",
+        "box": [
+          419,
+          486,
+          740,
+          577
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "lose",
+        "box": [
+          811,
+          468,
+          1005,
+          579
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "a",
+        "box": [
+          1068,
+          496,
+          1174,
+          578
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "great",
+        "box": [
+          1194,
+          490,
+          1480,
+          604
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "deal",
+        "box": [
+          1528,
+          464,
+          1727,
+          580
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1749,
+          483,
+          1890,
+          578
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "money",
+        "box": [
+          1929,
+          494,
+          2198,
+          631
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "every",
+        "box": [
+          2267,
+          498,
+          2524,
+          617
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "year",
+        "box": [
+          161,
+          579,
+          394,
+          690
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "from",
+        "box": [
+          409,
+          588,
+          655,
+          688
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "illegal",
+        "box": [
+          700,
+          575,
+          978,
+          714
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "copying",
+        "box": [
+          994,
+          576,
+          1318,
+          720
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1380,
+          580,
+          1580,
+          692
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "free",
+        "box": [
+          1596,
+          592,
+          1819,
+          687
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "internet",
+        "box": [
+          1887,
+          569,
+          2293,
+          687
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "sharing.",
+        "box": [
+          2340,
+          569,
+          2728,
+          717
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Some",
+        "box": [
+          200,
+          674,
+          449,
+          806
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "people",
+        "box": [
+          507,
+          684,
+          787,
+          825
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "say",
+        "box": [
+          795,
+          708,
+          994,
+          827
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          1052,
+          695,
+          1300,
+          802
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "people",
+        "box": [
+          1374,
+          682,
+          1682,
+          825
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "who",
+        "box": [
+          1756,
+          692,
+          1938,
+          797
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "do",
+        "box": [
+          1951,
+          680,
+          2132,
+          806
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          2151,
+          686,
+          2400,
+          799
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "should",
+        "box": [
+          2455,
+          691,
+          2720,
+          820
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "be",
+        "box": [
+          164,
+          776,
+          342,
+          907
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "punished,",
+        "box": [
+          358,
+          792,
+          841,
+          948
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "some",
+        "box": [
+          891,
+          817,
+          1142,
+          906
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "think",
+        "box": [
+          1485,
+          788,
+          1795,
+          901
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          1846,
+          793,
+          2103,
+          911
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "such",
+        "box": [
+          2152,
+          806,
+          2395,
+          916
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "men",
+        "box": [
+          2459,
+          806,
+          2660,
+          912
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "are",
+        "box": [
+          157,
+          909,
+          358,
+          1017
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          405,
+          898,
+          569,
+          1022
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "new",
+        "box": [
+          591,
+          926,
+          803,
+          1025
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "\"Robin",
+        "box": [
+          853,
+          893,
+          1149,
+          1026
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Hoods\".",
+        "box": [
+          1192,
+          882,
+          1480,
+          1024
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Let",
+        "box": [
+          1536,
+          890,
+          1722,
+          1023
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_02_19.jpg",
+    "split": "test",
+    "words": [
+      {
+        "text": "The",
+        "box": [
+          528,
+          125,
+          700,
+          220
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "charts",
+        "box": [
+          705,
+          149,
+          987,
+          222
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "illustrates",
+        "box": [
+          996,
+          135,
+          1412,
+          227
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1426,
+          133,
+          1593,
+          228
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "information",
+        "box": [
+          1587,
+          145,
+          2040,
+          235
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "about",
+        "box": [
+          2078,
+          158,
+          2347,
+          237
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "unemployment",
+        "box": [
+          529,
+          238,
+          1035,
+          336
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rate",
+        "box": [
+          1070,
+          240,
+          1279,
+          313
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in.",
+        "box": [
+          1288,
+          252,
+          1423,
+          311
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "percentage",
+        "box": [
+          1412,
+          245,
+          1800,
+          337
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1853,
+          258,
+          1953,
+          319
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "some",
+        "box": [
+          1974,
+          258,
+          2205,
+          323
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "regions",
+        "box": [
+          2210,
+          242,
+          2517,
+          348
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "comparing",
+        "box": [
+          500,
+          327,
+          937,
+          428
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "data",
+        "box": [
+          971,
+          318,
+          1176,
+          400
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1207,
+          311,
+          1319,
+          399
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2014",
+        "box": [
+          1341,
+          316,
+          1539,
+          392
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1552,
+          329,
+          1733,
+          397
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2015.",
+        "box": [
+          1743,
+          327,
+          1933,
+          402
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Generally",
+        "box": [
+          596,
+          395,
+          926,
+          507
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "speaking,",
+        "box": [
+          937,
+          416,
+          1298,
+          516
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "every",
+        "box": [
+          1289,
+          421,
+          1544,
+          504
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "region",
+        "box": [
+          1561,
+          407,
+          1826,
+          517
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "has",
+        "box": [
+          1860,
+          407,
+          2011,
+          498
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          2060,
+          424,
+          2150,
+          498
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "own",
+        "box": [
+          2158,
+          429,
+          2341,
+          495
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "changing",
+        "box": [
+          503,
+          492,
+          896,
+          593
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          925,
+          501,
+          1026,
+          571
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "unemployment",
+        "box": [
+          1072,
+          494,
+          1618,
+          599
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rate.",
+        "box": [
+          1635,
+          504,
+          1862,
+          582
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "The",
+        "box": [
+          1867,
+          495,
+          2008,
+          580
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "biggest",
+        "box": [
+          2050,
+          491,
+          2334,
+          607
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "unemployment",
+        "box": [
+          479,
+          571,
+          1024,
+          678
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rate",
+        "box": [
+          1028,
+          586,
+          1225,
+          655
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "was",
+        "box": [
+          1242,
+          594,
+          1469,
+          659
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1481,
+          580,
+          1580,
+          659
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "North",
+        "box": [
+          1607,
+          575,
+          1864,
+          664
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Africa",
+        "box": [
+          1890,
+          570,
+          2171,
+          665
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          2221,
+          600,
+          2375,
+          670
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          2396,
+          593,
+          2482,
+          670
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "consisted",
+        "box": [
+          501,
+          660,
+          857,
+          743
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "12,5%.",
+        "box": [
+          876,
+          676,
+          1179,
+          753
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "From",
+        "box": [
+          1194,
+          657,
+          1407,
+          748
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2014.",
+        "box": [
+          1419,
+          667,
+          1650,
+          754
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "to",
+        "box": [
+          1661,
+          678,
+          1778,
+          743
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2015",
+        "box": [
+          1797,
+          682,
+          2009,
+          753
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          2027,
+          688,
+          2165,
+          761
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "situation",
+        "box": [
+          2176,
+          680,
+          2595,
+          762
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          490,
+          764,
+          603,
+          827
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "this",
+        "box": [
+          612,
+          752,
+          796,
+          836
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_03_IMG_20211001_134547.jpg",
+    "split": "test",
+    "words": [
+      {
+        "text": "Writing",
+        "box": [
+          469,
+          22,
+          784,
+          159
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "1.",
+        "box": [
+          754,
+          30,
+          877,
+          122
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "The",
+        "box": [
+          611,
+          177,
+          761,
+          265
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "given",
+        "box": [
+          755,
+          165,
+          991,
+          302
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "pie-charts",
+        "box": [
+          979,
+          160,
+          1408,
+          285
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "represent",
+        "box": [
+          1404,
+          163,
+          1817,
+          271
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1822,
+          157,
+          1987,
+          262
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "amount",
+        "box": [
+          1982,
+          153,
+          2347,
+          265
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2350,
+          133,
+          2492,
+          258
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "materials",
+        "box": [
+          2480,
+          153,
+          2841,
+          253
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          296,
+          262,
+          584,
+          392
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "consumpsion",
+        "box": [
+          602,
+          268,
+          1114,
+          359
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "products",
+        "box": [
+          1130,
+          258,
+          1546,
+          374
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "delievered",
+        "box": [
+          1560,
+          252,
+          2025,
+          349
+        ],
+        "error": true,
+        "correct": "delivered"
+      },
+      {
+        "text": "by",
+        "box": [
+          2033,
+          257,
+          2161,
+          378
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail",
+        "box": [
+          2180,
+          257,
+          2373,
+          350
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "or",
+        "box": [
+          2367,
+          260,
+          2490,
+          338
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "road",
+        "box": [
+          2509,
+          243,
+          2755,
+          347
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          578,
+          345,
+          719,
+          436
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Eastern",
+        "box": [
+          749,
+          336,
+          1082,
+          434
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Europe",
+        "box": [
+          1122,
+          334,
+          1430,
+          440
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1445,
+          337,
+          1579,
+          426
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2008.",
+        "box": [
+          1581,
+          328,
+          1856,
+          430
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "It",
+        "box": [
+          1876,
+          325,
+          1999,
+          421
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1972,
+          327,
+          2067,
+          430
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "obvious",
+        "box": [
+          2085,
+          331,
+          2386,
+          427
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          2381,
+          328,
+          2605,
+          424
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          571,
+          421,
+          731,
+          517
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "number",
+        "box": [
+          763,
+          411,
+          1113,
+          518
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1131,
+          412,
+          1261,
+          504
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "manufactured",
+        "box": [
+          1265,
+          412,
+          1945,
+          512
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods",
+        "box": [
+          1951,
+          418,
+          2251,
+          528
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "delievered",
+        "box": [
+          2264,
+          411,
+          2722,
+          506
+        ],
+        "error": true,
+        "correct": "delivered"
+      },
+      {
+        "text": "by",
+        "box": [
+          544,
+          505,
+          674,
+          635
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail",
+        "box": [
+          706,
+          503,
+          931,
+          607
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          957,
+          501,
+          1061,
+          583
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "quite",
+        "box": [
+          1080,
+          499,
+          1289,
+          609
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "close",
+        "box": [
+          1347,
+          505,
+          1585,
+          592
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "to",
+        "box": [
+          1600,
+          501,
+          1713,
+          601
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1710,
+          505,
+          1864,
+          600
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "number",
+        "box": [
+          1852,
+          505,
+          2236,
+          594
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2266,
+          490,
+          2392,
+          580
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          2390,
+          490,
+          2548,
+          590
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "same",
+        "box": [
+          591,
+          603,
+          833,
+          683
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods",
+        "box": [
+          852,
+          570,
+          1113,
+          705
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "delievered",
+        "box": [
+          1110,
+          574,
+          1586,
+          674
+        ],
+        "error": true,
+        "correct": "delivered"
+      },
+      {
+        "text": "by",
+        "box": [
+          1586,
+          580,
+          1708,
+          702
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "road,",
+        "box": [
+          1742,
+          578,
+          2070,
+          684
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "while",
+        "box": [
+          2079,
+          573,
+          2313,
+          675
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "machinery",
+        "box": [
+          2347,
+          579,
+          2800,
+          697
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_07_IMG_20211001_135103.jpg",
+    "split": "test",
+    "words": [
+      {
+        "text": "Task",
+        "box": [
+          1468,
+          27,
+          1751,
+          119
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "1",
+        "box": [
+          1756,
+          38,
+          1829,
+          131
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "The",
+        "box": [
+          742,
+          229,
+          885,
+          313
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "pie",
+        "box": [
+          1002,
+          236,
+          1135,
+          322
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "charts",
+        "box": [
+          1195,
+          209,
+          1483,
+          306
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "demonstrate",
+        "box": [
+          1595,
+          203,
+          2091,
+          305
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "data",
+        "box": [
+          2213,
+          211,
+          2476,
+          308
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "about",
+        "box": [
+          586,
+          313,
+          841,
+          383
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          938,
+          294,
+          1075,
+          383
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "delivering",
+        "box": [
+          1160,
+          299,
+          1540,
+          421
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods",
+        "box": [
+          1656,
+          309,
+          1894,
+          404
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          2012,
+          312,
+          2102,
+          380
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Eastern",
+        "box": [
+          2154,
+          307,
+          2476,
+          383
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Europe",
+        "box": [
+          625,
+          385,
+          897,
+          477
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          932,
+          387,
+          1030,
+          451
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2008.",
+        "box": [
+          1097,
+          379,
+          1310,
+          452
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Overall,",
+        "box": [
+          1383,
+          364,
+          1700,
+          474
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "there",
+        "box": [
+          1753,
+          372,
+          1956,
+          458
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "are",
+        "box": [
+          2011,
+          395,
+          2183,
+          456
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "different",
+        "box": [
+          2248,
+          372,
+          2591,
+          463
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "pattern",
+        "box": [
+          641,
+          475,
+          990,
+          564
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1065,
+          447,
+          1179,
+          527
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transportation",
+        "box": [
+          1242,
+          460,
+          1836,
+          547
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1951,
+          450,
+          2063,
+          576
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail",
+        "box": [
+          2128,
+          457,
+          2277,
+          534
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          2387,
+          469,
+          2550,
+          531
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          628,
+          532,
+          734,
+          646
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "road.",
+        "box": [
+          805,
+          537,
+          1043,
+          607
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "First",
+        "box": [
+          741,
+          611,
+          954,
+          689
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1001,
+          598,
+          1126,
+          686
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "all,",
+        "box": [
+          1176,
+          612,
+          1325,
+          711
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1398,
+          616,
+          1567,
+          692
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "percentage",
+        "box": [
+          1629,
+          625,
+          2040,
+          730
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2117,
+          608,
+          2221,
+          685
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "manufactured",
+        "box": [
+          2282,
+          617,
+          2748,
+          703
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods",
+        "box": [
+          635,
+          697,
+          883,
+          806
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transported",
+        "box": [
+          932,
+          697,
+          1440,
+          785
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1515,
+          704,
+          1604,
+          812
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail",
+        "box": [
+          1679,
+          705,
+          1836,
+          769
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          685,
+          790,
+          789,
+          847
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "approximately",
+        "box": [
+          956,
+          775,
+          1505,
+          887
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1639,
+          759,
+          1784,
+          848
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "same",
+        "box": [
+          1841,
+          779,
+          2069,
+          850
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "as",
+        "box": [
+          2181,
+          782,
+          2304,
+          847
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          2386,
+          775,
+          2468,
+          887
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "road.",
+        "box": [
+          2515,
+          783,
+          2723,
+          852
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "The",
+        "box": [
+          636,
+          847,
+          809,
+          936
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "number",
+        "box": [
+          865,
+          858,
+          1174,
+          925
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1223,
+          830,
+          1336,
+          919
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "metals",
+        "box": [
+          1438,
+          863,
+          1730,
+          928
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_08_IMG_20211001_134113.jpg",
+    "split": "test",
+    "words": [
+      {
+        "text": "The",
+        "box": [
+          586,
+          35,
+          801,
+          156
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "given",
+        "box": [
+          807,
+          61,
+          1049,
+          164
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "piecharts",
+        "box": [
+          1052,
+          40,
+          1469,
+          166
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "illustrate",
+        "box": [
+          1461,
+          31,
+          1881,
+          157
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1885,
+          52,
+          2032,
+          156
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "percentage",
+        "box": [
+          2007,
+          41,
+          2431,
+          185
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2409,
+          54,
+          2552,
+          146
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transported",
+        "box": [
+          179,
+          136,
+          508,
+          249
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods",
+        "box": [
+          911,
+          132,
+          1141,
+          255
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "oty",
+        "box": [
+          1129,
+          125,
+          1282,
+          261
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "different",
+        "box": [
+          1271,
+          129,
+          1672,
+          233
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "types",
+        "box": [
+          1678,
+          138,
+          1903,
+          263
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1935,
+          140,
+          2063,
+          268
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "road",
+        "box": [
+          2073,
+          140,
+          2268,
+          242
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          2283,
+          147,
+          2431,
+          231
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          2436,
+          136,
+          2537,
+          259
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail.",
+        "box": [
+          2532,
+          140,
+          2723,
+          235
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Overall,",
+        "box": [
+          527,
+          213,
+          869,
+          316
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "if",
+        "box": [
+          869,
+          220,
+          989,
+          301
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          980,
+          216,
+          1146,
+          301
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "be",
+        "box": [
+          1161,
+          210,
+          1265,
+          312
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "seen.",
+        "box": [
+          1264,
+          227,
+          1450,
+          305
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          1435,
+          210,
+          1630,
+          308
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1642,
+          216,
+          1775,
+          308
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "share",
+        "box": [
+          1770,
+          217,
+          1986,
+          315
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1989,
+          226,
+          2114,
+          311
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "manfactured",
+        "box": [
+          2114,
+          213,
+          2611,
+          318
+        ],
+        "error": true,
+        "correct": "manufactured"
+      },
+      {
+        "text": "goods.",
+        "box": [
+          2585,
+          206,
+          2777,
+          332
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          487,
+          293,
+          682,
+          397
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "are",
+        "box": [
+          665,
+          302,
+          810,
+          391
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "delivered",
+        "box": [
+          797,
+          291,
+          1168,
+          386
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "both",
+        "box": [
+          1195,
+          293,
+          1379,
+          397
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1382,
+          293,
+          1509,
+          421
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "trains",
+        "box": [
+          1608,
+          303,
+          1886,
+          398
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1888,
+          300,
+          2063,
+          394
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          2061,
+          299,
+          2170,
+          426
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "trucks,",
+        "box": [
+          2167,
+          300,
+          2483,
+          411
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          2473,
+          298,
+          2561,
+          396
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "practecally",
+        "box": [
+          506,
+          370,
+          953,
+          519
+        ],
+        "error": true,
+        "correct": "practically"
+      },
+      {
+        "text": "the",
+        "box": [
+          994,
+          366,
+          1128,
+          464
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "same,",
+        "box": [
+          1118,
+          379,
+          1358,
+          487
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "However,",
+        "box": [
+          673,
+          450,
+          1008,
+          565
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "there",
+        "box": [
+          1013,
+          451,
+          1177,
+          545
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1203,
+          471,
+          1287,
+          548
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "a",
+        "box": [
+          1294,
+          487,
+          1392,
+          557
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "certain",
+        "box": [
+          1397,
+          445,
+          1697,
+          549
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "difference",
+        "box": [
+          1701,
+          447,
+          2086,
+          553
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "between",
+        "box": [
+          2093,
+          446,
+          2395,
+          552
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          2390,
+          444,
+          2530,
+          554
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "amount",
+        "box": [
+          484,
+          547,
+          801,
+          649
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_08_IMG_20211001_134309.jpg",
+    "split": "test",
+    "words": [
+      {
+        "text": "Writing",
+        "box": [
+          529,
+          97,
+          915,
+          259
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "task",
+        "box": [
+          915,
+          88,
+          1125,
+          223
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "1.",
+        "box": [
+          1147,
+          124,
+          1251,
+          217
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "The",
+        "box": [
+          750,
+          201,
+          911,
+          289
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "figures",
+        "box": [
+          957,
+          199,
+          1266,
+          343
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "illustrate",
+        "box": [
+          1324,
+          202,
+          1723,
+          302
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "how",
+        "box": [
+          1778,
+          196,
+          1971,
+          307
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          2015,
+          200,
+          2162,
+          304
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods",
+        "box": [
+          2157,
+          202,
+          2398,
+          345
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "were",
+        "box": [
+          2451,
+          227,
+          2665,
+          313
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transported",
+        "box": [
+          535,
+          272,
+          1015,
+          395
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "internationally",
+        "box": [
+          1083,
+          280,
+          1676,
+          429
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1716,
+          304,
+          1845,
+          378
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1856,
+          282,
+          2003,
+          376
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "East",
+        "box": [
+          2034,
+          294,
+          2220,
+          391
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2265,
+          290,
+          2367,
+          386
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Europe",
+        "box": [
+          2397,
+          284,
+          2709,
+          443
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          528,
+          371,
+          663,
+          453
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2008.",
+        "box": [
+          678,
+          365,
+          889,
+          442
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "It",
+        "box": [
+          916,
+          347,
+          1027,
+          449
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1029,
+          355,
+          1130,
+          450
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "clear",
+        "box": [
+          1159,
+          342,
+          1365,
+          458
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          1390,
+          353,
+          1590,
+          461
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rails",
+        "box": [
+          1629,
+          363,
+          1844,
+          478
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1860,
+          362,
+          2040,
+          469
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "roads",
+        "box": [
+          2084,
+          354,
+          2310,
+          471
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "were",
+        "box": [
+          2325,
+          390,
+          2540,
+          476
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "used",
+        "box": [
+          2582,
+          342,
+          2774,
+          460
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "differently.",
+        "box": [
+          521,
+          435,
+          989,
+          571
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Almost",
+        "box": [
+          705,
+          510,
+          1006,
+          613
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "one",
+        "box": [
+          1029,
+          518,
+          1179,
+          606
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "third",
+        "box": [
+          1215,
+          492,
+          1450,
+          603
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1457,
+          516,
+          1571,
+          609
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods",
+        "box": [
+          1556,
+          503,
+          1809,
+          660
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transported",
+        "box": [
+          1837,
+          500,
+          2352,
+          654
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          2370,
+          506,
+          2485,
+          675
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail",
+        "box": [
+          2500,
+          502,
+          2688,
+          633
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "was",
+        "box": [
+          504,
+          612,
+          685,
+          703
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "metals,",
+        "box": [
+          742,
+          586,
+          1057,
+          715
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "while",
+        "box": [
+          1064,
+          585,
+          1290,
+          690
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "only",
+        "box": [
+          1352,
+          585,
+          1541,
+          751
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "11%",
+        "box": [
+          1625,
+          600,
+          1811,
+          708
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1857,
+          602,
+          1977,
+          706
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transportation",
+        "box": [
+          2008,
+          600,
+          2664,
+          753
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          504,
+          680,
+          620,
+          834
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "road",
+        "box": [
+          645,
+          659,
+          866,
+          777
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "was",
+        "box": [
+          892,
+          695,
+          1083,
+          772
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "occupied",
+        "box": [
+          1125,
+          678,
+          1493,
+          843
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1541,
+          672,
+          1672,
+          835
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "metals.",
+        "box": [
+          1712,
+          671,
+          2062,
+          785
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_10_336.jpg",
+    "split": "test",
+    "words": [
+      {
+        "text": "artist.",
+        "box": [
+          651,
+          495,
+          801,
+          570
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Further",
+        "box": [
+          806,
+          484,
+          965,
+          568
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "more,",
+        "box": [
+          952,
+          511,
+          1073,
+          574
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "some",
+        "box": [
+          1085,
+          513,
+          1214,
+          571
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "creative",
+        "box": [
+          1226,
+          494,
+          1389,
+          566
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "people",
+        "box": [
+          1398,
+          495,
+          1548,
+          578
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          1555,
+          509,
+          1661,
+          567
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "be",
+        "box": [
+          1675,
+          491,
+          1752,
+          566
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "even",
+        "box": [
+          1756,
+          509,
+          1872,
+          563
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "crazy",
+        "box": [
+          1885,
+          505,
+          2025,
+          586
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          2037,
+          493,
+          2143,
+          564
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "try",
+        "box": [
+          2135,
+          494,
+          2216,
+          577
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "to",
+        "box": [
+          2216,
+          502,
+          2286,
+          562
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "spread",
+        "box": [
+          2294,
+          495,
+          2457,
+          589
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "their",
+        "box": [
+          724,
+          577,
+          841,
+          644
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "ideas",
+        "box": [
+          858,
+          570,
+          997,
+          645
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "which",
+        "box": [
+          998,
+          576,
+          1157,
+          645
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "could",
+        "box": [
+          1157,
+          569,
+          1291,
+          642
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "be",
+        "box": [
+          1294,
+          575,
+          1363,
+          635
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "harmful",
+        "box": [
+          1363,
+          566,
+          1571,
+          639
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "for",
+        "box": [
+          1576,
+          563,
+          1665,
+          638
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "our",
+        "box": [
+          1668,
+          581,
+          1757,
+          633
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "society.",
+        "box": [
+          1774,
+          568,
+          1964,
+          643
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "for",
+        "box": [
+          1971,
+          559,
+          2059,
+          643
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "example,",
+        "box": [
+          2052,
+          569,
+          2256,
+          649
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "there",
+        "box": [
+          2254,
+          573,
+          2368,
+          633
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          2378,
+          586,
+          2457,
+          637
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "arise",
+        "box": [
+          643,
+          662,
+          772,
+          720
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "ideas",
+        "box": [
+          772,
+          637,
+          904,
+          724
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          909,
+          643,
+          976,
+          712
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "racism,",
+        "box": [
+          952,
+          659,
+          1143,
+          735
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "sexism",
+        "box": [
+          1143,
+          659,
+          1307,
+          711
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1318,
+          649,
+          1415,
+          708
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "other",
+        "box": [
+          1416,
+          641,
+          1542,
+          714
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "things,",
+        "box": [
+          1742,
+          646,
+          1922,
+          723
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "However,",
+        "box": [
+          718,
+          721,
+          934,
+          808
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "whith",
+        "box": [
+          936,
+          718,
+          1070,
+          789
+        ],
+        "error": true,
+        "correct": "with"
+      },
+      {
+        "text": "other",
+        "box": [
+          1063,
+          726,
+          1190,
+          788
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "point",
+        "box": [
+          1196,
+          717,
+          1349,
+          806
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1342,
+          715,
+          1419,
+          788
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "view,",
+        "box": [
+          1412,
+          727,
+          1569,
+          800
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "new",
+        "box": [
+          1569,
+          728,
+          1684,
+          783
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "modern",
+        "box": [
+          1676,
+          710,
+          1836,
+          781
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1843,
+          716,
+          1939,
+          787
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "creative",
+        "box": [
+          1942,
+          717,
+          2111,
+          780
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "ideas",
+        "box": [
+          2111,
+          712,
+          2256,
+          787
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          2252,
+          732,
+          2354,
+          785
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "change",
+        "box": [
+          2362,
+          718,
+          2516,
+          794
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "our",
+        "box": [
+          642,
+          815,
+          744,
+          871
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "society",
+        "box": [
+          750,
+          797,
+          940,
+          890
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_10_338.jpg",
+    "split": "test",
+    "words": [
+      {
+        "text": "Margarita\"",
+        "box": [
+          634,
+          253,
+          1032,
+          365
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1035,
+          277,
+          1138,
+          378
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "M.",
+        "box": [
+          1118,
+          282,
+          1189,
+          356
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Bulgakov,",
+        "box": [
+          1160,
+          270,
+          1465,
+          379
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1456,
+          297,
+          1543,
+          351
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Soviet",
+        "box": [
+          1548,
+          274,
+          1755,
+          358
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "time",
+        "box": [
+          1741,
+          282,
+          1972,
+          365
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Nevertheless,",
+        "box": [
+          626,
+          349,
+          1043,
+          439
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "art",
+        "box": [
+          1058,
+          359,
+          1191,
+          432
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1208,
+          371,
+          1302,
+          435
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "21th",
+        "box": [
+          1307,
+          353,
+          1469,
+          436
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "centuary",
+        "box": [
+          1473,
+          359,
+          1743,
+          455
+        ],
+        "error": true,
+        "correct": "century"
+      },
+      {
+        "text": "is",
+        "box": [
+          1853,
+          371,
+          1936,
+          433
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "various.",
+        "box": [
+          1941,
+          357,
+          2226,
+          433
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "And",
+        "box": [
+          2212,
+          360,
+          2389,
+          435
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "sometimes,",
+        "box": [
+          631,
+          432,
+          992,
+          516
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          980,
+          428,
+          1073,
+          507
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          1072,
+          440,
+          1234,
+          510
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "consist",
+        "box": [
+          1260,
+          433,
+          1493,
+          509
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1504,
+          430,
+          1595,
+          502
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "immoral",
+        "box": [
+          1602,
+          435,
+          1898,
+          511
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1903,
+          430,
+          2050,
+          501
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "imposible",
+        "box": [
+          2063,
+          432,
+          2368,
+          526
+        ],
+        "error": true,
+        "correct": "impossible"
+      },
+      {
+        "text": "things.",
+        "box": [
+          2361,
+          438,
+          2572,
+          540
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "For example,",
+        "box": [
+          623,
+          499,
+          1033,
+          608
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "some",
+        "box": [
+          1040,
+          509,
+          1212,
+          583
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "artists",
+        "box": [
+          1210,
+          505,
+          1465,
+          588
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          1478,
+          517,
+          1629,
+          584
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "paint",
+        "box": [
+          1621,
+          515,
+          1812,
+          606
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "sexual",
+        "box": [
+          1846,
+          505,
+          2070,
+          585
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "girls,",
+        "box": [
+          2066,
+          505,
+          2256,
+          602
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "but",
+        "box": [
+          2242,
+          511,
+          2382,
+          589
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "children",
+        "box": [
+          612,
+          572,
+          898,
+          654
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "shouldn't",
+        "box": [
+          915,
+          574,
+          1226,
+          658
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "see",
+        "box": [
+          1258,
+          588,
+          1377,
+          655
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that.",
+        "box": [
+          1374,
+          573,
+          1558,
+          657
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "New",
+        "box": [
+          1589,
+          588,
+          1733,
+          656
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "films",
+        "box": [
+          1746,
+          580,
+          1954,
+          657
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "reflect",
+        "box": [
+          1944,
+          581,
+          2200,
+          656
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "many",
+        "box": [
+          2239,
+          597,
+          2445,
+          687
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "habits,",
+        "box": [
+          630,
+          646,
+          867,
+          740
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "such",
+        "box": [
+          859,
+          656,
+          1020,
+          729
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "as",
+        "box": [
+          1012,
+          665,
+          1119,
+          722
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "drinking",
+        "box": [
+          1111,
+          655,
+          1407,
+          764
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "alcohol,",
+        "box": [
+          1403,
+          655,
+          1695,
+          748
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "taking",
+        "box": [
+          1667,
+          659,
+          1894,
+          753
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "grugs,",
+        "box": [
+          1901,
+          672,
+          2142,
+          764
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "smoking,",
+        "box": [
+          2138,
+          669,
+          2449,
+          753
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          617,
+          725,
+          762,
+          804
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "then",
+        "box": [
+          796,
+          733,
+          993,
+          805
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_14_167.jpg",
+    "split": "test",
+    "words": [
+      {
+        "text": "Task",
+        "box": [
+          385,
+          19,
+          618,
+          140
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "1.",
+        "box": [
+          595,
+          32,
+          710,
+          144
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "The",
+        "box": [
+          422,
+          142,
+          602,
+          266
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "given",
+        "box": [
+          600,
+          163,
+          848,
+          305
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "chart",
+        "box": [
+          856,
+          136,
+          1158,
+          279
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "illustrates",
+        "box": [
+          1163,
+          140,
+          1655,
+          281
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "changes",
+        "box": [
+          1664,
+          153,
+          2050,
+          307
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          2041,
+          165,
+          2172,
+          267
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          2163,
+          156,
+          2348,
+          270
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "percentage",
+        "box": [
+          2306,
+          156,
+          2771,
+          300
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          381,
+          250,
+          521,
+          362
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "unemployment",
+        "box": [
+          514,
+          251,
+          1210,
+          412
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rate",
+        "box": [
+          1194,
+          257,
+          1436,
+          363
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1450,
+          256,
+          1582,
+          363
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2014",
+        "box": [
+          1587,
+          265,
+          1831,
+          370
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1810,
+          249,
+          2051,
+          360
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2015",
+        "box": [
+          2028,
+          258,
+          2301,
+          364
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          2275,
+          248,
+          2457,
+          354
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "five",
+        "box": [
+          393,
+          340,
+          608,
+          450
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "selected",
+        "box": [
+          614,
+          340,
+          1056,
+          451
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "world",
+        "box": [
+          1070,
+          338,
+          1350,
+          453
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "regions",
+        "box": [
+          1321,
+          353,
+          1666,
+          487
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1677,
+          343,
+          1909,
+          457
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "worldwide.",
+        "box": [
+          1893,
+          331,
+          2474,
+          458
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "As",
+        "box": [
+          533,
+          427,
+          685,
+          537
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          672,
+          431,
+          817,
+          537
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          819,
+          448,
+          1006,
+          537
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "be",
+        "box": [
+          994,
+          434,
+          1147,
+          539
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "seen",
+        "box": [
+          1155,
+          453,
+          1359,
+          541
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "from",
+        "box": [
+          1402,
+          432,
+          1623,
+          539
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1632,
+          435,
+          1833,
+          536
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "chart",
+        "box": [
+          1829,
+          426,
+          2150,
+          538
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          2175,
+          423,
+          2363,
+          535
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "biggest",
+        "box": [
+          2364,
+          410,
+          2680,
+          573
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "unemployment",
+        "box": [
+          402,
+          516,
+          1125,
+          678
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rate",
+        "box": [
+          1129,
+          512,
+          1355,
+          628
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1359,
+          521,
+          1493,
+          627
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2014",
+        "box": [
+          1483,
+          528,
+          1741,
+          628
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "was",
+        "box": [
+          1731,
+          536,
+          1919,
+          631
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1950,
+          522,
+          2069,
+          622
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "North",
+        "box": [
+          2059,
+          515,
+          2364,
+          630
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Africa",
+        "box": [
+          2348,
+          522,
+          2666,
+          621
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          398,
+          599,
+          618,
+          712
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          620,
+          606,
+          756,
+          710
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "did",
+        "box": [
+          778,
+          604,
+          1000,
+          716
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "not",
+        "box": [
+          1035,
+          610,
+          1233,
+          713
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "change",
+        "box": [
+          1256,
+          599,
+          1544,
+          756
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1562,
+          612,
+          1694,
+          718
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2015",
+        "box": [
+          1722,
+          616,
+          1976,
+          712
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1938,
+          596,
+          2180,
+          718
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_01_1.jpg",
+    "split": "val",
+    "words": [
+      {
+        "text": "In",
+        "box": [
+          208,
+          198,
+          375,
+          301
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          413,
+          188,
+          590,
+          302
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "chart",
+        "box": [
+          626,
+          189,
+          888,
+          291
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "represents",
+        "box": [
+          924,
+          179,
+          1448,
+          312
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "data",
+        "box": [
+          1485,
+          182,
+          1736,
+          286
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1757,
+          187,
+          1879,
+          298
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1894,
+          195,
+          2078,
+          287
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rate",
+        "box": [
+          2115,
+          185,
+          2347,
+          295
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2384,
+          187,
+          2509,
+          294
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "un-",
+        "box": [
+          2536,
+          227,
+          2716,
+          290
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "employment",
+        "box": [
+          88,
+          298,
+          688,
+          430
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          723,
+          309,
+          836,
+          395
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "several",
+        "box": [
+          865,
+          296,
+          1223,
+          400
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "world",
+        "box": [
+          1263,
+          294,
+          1509,
+          397
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "regions",
+        "box": [
+          1562,
+          306,
+          1939,
+          416
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "from",
+        "box": [
+          1976,
+          306,
+          2215,
+          397
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2014",
+        "box": [
+          2241,
+          330,
+          2453,
+          395
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "to",
+        "box": [
+          2494,
+          302,
+          2614,
+          392
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2015.",
+        "box": [
+          2644,
+          322,
+          2842,
+          401
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "It",
+        "box": [
+          86,
+          402,
+          257,
+          499
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          280,
+          408,
+          396,
+          499
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "cleary",
+        "box": [
+          440,
+          398,
+          772,
+          541
+        ],
+        "error": true,
+        "correct": "clearly"
+      },
+      {
+        "text": "seen",
+        "box": [
+          811,
+          430,
+          1068,
+          503
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          1114,
+          396,
+          1344,
+          497
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "highest",
+        "box": [
+          1395,
+          391,
+          1773,
+          528
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "unemployment",
+        "box": [
+          1821,
+          403,
+          2514,
+          523
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rate",
+        "box": [
+          2524,
+          390,
+          2753,
+          507
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          93,
+          503,
+          231,
+          607
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "North",
+        "box": [
+          274,
+          511,
+          567,
+          610
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Africa",
+        "box": [
+          584,
+          504,
+          936,
+          610
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          955,
+          491,
+          1167,
+          612
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          1199,
+          505,
+          1311,
+          596
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1320,
+          507,
+          1436,
+          604
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "equal",
+        "box": [
+          1476,
+          502,
+          1765,
+          648
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "12,5",
+        "box": [
+          1818,
+          523,
+          2030,
+          604
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "percent.",
+        "box": [
+          2071,
+          499,
+          2532,
+          627
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "On",
+        "box": [
+          2528,
+          502,
+          2679,
+          608
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          59,
+          606,
+          284,
+          715
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "opposite",
+        "box": [
+          319,
+          608,
+          768,
+          738
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "side",
+        "box": [
+          799,
+          604,
+          1064,
+          719
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1081,
+          616,
+          1213,
+          717
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "South",
+        "box": [
+          1271,
+          606,
+          1573,
+          711
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Africa,",
+        "box": [
+          1618,
+          602,
+          2009,
+          742
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "where",
+        "box": [
+          1972,
+          608,
+          2297,
+          715
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "more",
+        "box": [
+          2334,
+          645,
+          2654,
+          715
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "than",
+        "box": [
+          84,
+          720,
+          344,
+          825
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "3",
+        "box": [
+          400,
+          744,
+          518,
+          829
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "time",
+        "box": [
+          516,
+          717,
+          842,
+          835
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "less",
+        "box": [
+          895,
+          724,
+          1124,
+          823
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "unemployment",
+        "box": [
+          1163,
+          711,
+          1945,
+          854
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_03_IMG_20211001_134505.jpg",
+    "split": "val",
+    "words": [
+      {
+        "text": "Task",
+        "box": [
+          614,
+          102,
+          828,
+          283
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "1.",
+        "box": [
+          819,
+          149,
+          929,
+          268
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Both",
+        "box": [
+          772,
+          301,
+          1000,
+          426
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "diagrams",
+        "box": [
+          1026,
+          302,
+          1418,
+          482
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "illustrate",
+        "box": [
+          1454,
+          299,
+          1822,
+          429
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "proportions",
+        "box": [
+          1856,
+          315,
+          2235,
+          481
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2278,
+          323,
+          2402,
+          442
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "different",
+        "box": [
+          2393,
+          312,
+          2731,
+          437
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods,",
+        "box": [
+          489,
+          386,
+          756,
+          597
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transported",
+        "box": [
+          760,
+          399,
+          1147,
+          555
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1212,
+          400,
+          1336,
+          568
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail",
+        "box": [
+          1371,
+          404,
+          1549,
+          516
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1564,
+          408,
+          1752,
+          507
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1781,
+          392,
+          1911,
+          580
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "road",
+        "box": [
+          1958,
+          412,
+          2138,
+          510
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          2173,
+          427,
+          2280,
+          523
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Eastern",
+        "box": [
+          2354,
+          424,
+          2640,
+          538
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Europe",
+        "box": [
+          547,
+          504,
+          808,
+          628
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail",
+        "box": [
+          673,
+          557,
+          828,
+          677
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          865,
+          507,
+          959,
+          591
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "2008.",
+        "box": [
+          1013,
+          511,
+          1229,
+          598
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Overall,",
+        "box": [
+          1280,
+          486,
+          1565,
+          604
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1585,
+          482,
+          1720,
+          595
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "main",
+        "box": [
+          1779,
+          522,
+          1963,
+          588
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods,",
+        "box": [
+          2016,
+          498,
+          2236,
+          663
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          505,
+          571,
+          617,
+          769
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "or",
+        "box": [
+          876,
+          591,
+          1003,
+          680
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          987,
+          587,
+          1100,
+          673
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1138,
+          580,
+          1271,
+          670
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "considered",
+        "box": [
+          1326,
+          581,
+          1692,
+          683
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "year,",
+        "box": [
+          1746,
+          602,
+          1959,
+          742
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1942,
+          609,
+          2012,
+          688
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "metals,",
+        "box": [
+          2185,
+          587,
+          2479,
+          719
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "while",
+        "box": [
+          2502,
+          586,
+          2700,
+          704
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "for",
+        "box": [
+          470,
+          673,
+          612,
+          780
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "road",
+        "box": [
+          654,
+          651,
+          849,
+          773
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          892,
+          652,
+          983,
+          770
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1145,
+          682,
+          1218,
+          775
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "food",
+        "box": [
+          1224,
+          653,
+          1421,
+          773
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "products.",
+        "box": [
+          1451,
+          664,
+          1808,
+          837
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "To",
+        "box": [
+          791,
+          735,
+          907,
+          860
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "start",
+        "box": [
+          949,
+          732,
+          1142,
+          850
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "with,",
+        "box": [
+          1187,
+          743,
+          1389,
+          868
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          1484,
+          745,
+          1579,
+          857
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          1609,
+          773,
+          1778,
+          859
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "be",
+        "box": [
+          1801,
+          744,
+          1908,
+          844
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "seen",
+        "box": [
+          1976,
+          773,
+          2141,
+          855
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "from",
+        "box": [
+          2172,
+          729,
+          2381,
+          871
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          2381,
+          753,
+          2529,
+          861
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "chart",
+        "box": [
+          2558,
+          735,
+          2747,
+          866
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_06_IMG_20211001_135140.jpg",
+    "split": "val",
+    "words": [
+      {
+        "text": "of",
+        "box": [
+          617,
+          414,
+          715,
+          512
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "people's",
+        "box": [
+          714,
+          397,
+          1017,
+          537
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "lives",
+        "box": [
+          1038,
+          411,
+          1245,
+          498
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "That",
+        "box": [
+          1243,
+          402,
+          1387,
+          503
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1382,
+          436,
+          1452,
+          498
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "why",
+        "box": [
+          1466,
+          392,
+          1606,
+          583
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          1614,
+          404,
+          1681,
+          497
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1693,
+          426,
+          1779,
+          497
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "important",
+        "box": [
+          1800,
+          410,
+          2154,
+          555
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "to",
+        "box": [
+          2152,
+          415,
+          2241,
+          491
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "know",
+        "box": [
+          2252,
+          420,
+          2439,
+          499
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          625,
+          503,
+          763,
+          576
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "remember",
+        "box": [
+          775,
+          503,
+          1137,
+          578
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "about",
+        "box": [
+          1132,
+          487,
+          1359,
+          568
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "side-effects",
+        "box": [
+          1383,
+          484,
+          1815,
+          567
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1880,
+          480,
+          1971,
+          560
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "modern",
+        "box": [
+          1977,
+          485,
+          2211,
+          556
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "devices",
+        "box": [
+          2234,
+          480,
+          2446,
+          560
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          625,
+          560,
+          769,
+          644
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "tools",
+        "box": [
+          793,
+          565,
+          976,
+          644
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "because",
+        "box": [
+          995,
+          560,
+          1264,
+          644
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "they",
+        "box": [
+          1260,
+          557,
+          1406,
+          706
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "have",
+        "box": [
+          1419,
+          555,
+          1597,
+          631
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "grea",
+        "box": [
+          1592,
+          569,
+          1757,
+          703
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "bad",
+        "box": [
+          1776,
+          550,
+          1912,
+          627
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "impact",
+        "box": [
+          1905,
+          550,
+          2165,
+          661
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "on",
+        "box": [
+          2159,
+          569,
+          2303,
+          623
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "humanity",
+        "box": [
+          618,
+          632,
+          904,
+          760
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "health.",
+        "box": [
+          932,
+          625,
+          1135,
+          708
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "I",
+        "box": [
+          704,
+          712,
+          803,
+          780
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "agree",
+        "box": [
+          794,
+          723,
+          972,
+          857
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "with",
+        "box": [
+          986,
+          701,
+          1123,
+          781
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "opinion",
+        "box": [
+          1125,
+          712,
+          1317,
+          805
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          1318,
+          702,
+          1471,
+          777
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "people",
+        "box": [
+          1464,
+          695,
+          1675,
+          807
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "should",
+        "box": [
+          1671,
+          684,
+          1895,
+          768
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "be",
+        "box": [
+          1918,
+          683,
+          2008,
+          768
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "careful",
+        "box": [
+          1993,
+          677,
+          2252,
+          762
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "using",
+        "box": [
+          2234,
+          692,
+          2398,
+          809
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "modern",
+        "box": [
+          609,
+          775,
+          839,
+          849
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "technologies",
+        "box": [
+          855,
+          771,
+          1305,
+          890
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1315,
+          766,
+          1415,
+          832
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "their",
+        "box": [
+          1421,
+          767,
+          1617,
+          842
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "every",
+        "box": [
+          1610,
+          775,
+          1809,
+          922
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "day",
+        "box": [
+          1809,
+          758,
+          1942,
+          891
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "life.",
+        "box": [
+          1955,
+          754,
+          2120,
+          833
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Sometimes",
+        "box": [
+          2117,
+          749,
+          2478,
+          834
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "problems",
+        "box": [
+          592,
+          832,
+          902,
+          978
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "with",
+        "box": [
+          931,
+          830,
+          1122,
+          918
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "health",
+        "box": [
+          1144,
+          834,
+          1357,
+          915
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_06_IMG_20211001_135217.jpg",
+    "split": "val",
+    "words": [
+      {
+        "text": "majority",
+        "box": [
+          631,
+          514,
+          825,
+          571
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          899,
+          499,
+          956,
+          546
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "people",
+        "box": [
+          1075,
+          486,
+          1209,
+          545
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "believe",
+        "box": [
+          1375,
+          464,
+          1520,
+          521
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          1624,
+          457,
+          1721,
+          505
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "an",
+        "box": [
+          1756,
+          465,
+          1819,
+          499
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "active",
+        "box": [
+          1856,
+          453,
+          1993,
+          490
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "using",
+        "box": [
+          2081,
+          447,
+          2204,
+          496
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          603,
+          583,
+          657,
+          627
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "different",
+        "box": [
+          739,
+          567,
+          900,
+          625
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "types",
+        "box": [
+          999,
+          567,
+          1112,
+          613
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1198,
+          551,
+          1247,
+          596
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "technology",
+        "box": [
+          1374,
+          535,
+          1611,
+          593
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          1780,
+          529,
+          1876,
+          564
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "have",
+        "box": [
+          1876,
+          515,
+          1961,
+          563
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "bad",
+        "box": [
+          2000,
+          478,
+          2080,
+          522
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "influence",
+        "box": [
+          1984,
+          506,
+          2168,
+          565
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "on",
+        "box": [
+          2230,
+          513,
+          2303,
+          544
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "humans",
+        "box": [
+          608,
+          633,
+          774,
+          690
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "health.",
+        "box": [
+          821,
+          630,
+          1005,
+          682
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "This",
+        "box": [
+          1065,
+          623,
+          1158,
+          665
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "essay",
+        "box": [
+          1276,
+          616,
+          1412,
+          657
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "will",
+        "box": [
+          1535,
+          594,
+          1618,
+          642
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "discuss",
+        "box": [
+          1720,
+          578,
+          1881,
+          632
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "this",
+        "box": [
+          2023,
+          567,
+          2116,
+          618
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "controversial",
+        "box": [
+          644,
+          694,
+          906,
+          760
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "topic",
+        "box": [
+          985,
+          688,
+          1099,
+          743
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1209,
+          670,
+          1285,
+          742
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "taking",
+        "box": [
+          1372,
+          666,
+          1547,
+          725
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "into",
+        "box": [
+          1651,
+          648,
+          1757,
+          702
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "account",
+        "box": [
+          1851,
+          634,
+          2067,
+          686
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "firstly,",
+        "box": [
+          2195,
+          620,
+          2370,
+          684
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "health",
+        "box": [
+          621,
+          773,
+          769,
+          830
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "problems.",
+        "box": [
+          836,
+          759,
+          1076,
+          827
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "which",
+        "box": [
+          1182,
+          737,
+          1326,
+          786
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1397,
+          733,
+          1441,
+          780
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "counting",
+        "box": [
+          1538,
+          725,
+          1749,
+          777
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1818,
+          715,
+          1893,
+          769
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "technology",
+        "box": [
+          2035,
+          694,
+          2310,
+          752
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          605,
+          845,
+          700,
+          891
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "secondly,",
+        "box": [
+          783,
+          827,
+          1040,
+          895
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "itq",
+        "box": [
+          1054,
+          820,
+          1102,
+          867
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "will",
+        "box": [
+          1178,
+          812,
+          1265,
+          859
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "give",
+        "box": [
+          1331,
+          813,
+          1427,
+          865
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "a",
+        "box": [
+          1493,
+          808,
+          1542,
+          849
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "solution",
+        "box": [
+          1595,
+          793,
+          1763,
+          838
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1906,
+          771,
+          1966,
+          824
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "this",
+        "box": [
+          2053,
+          773,
+          2139,
+          814
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "issue.",
+        "box": [
+          2214,
+          763,
+          2344,
+          805
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "First",
+        "box": [
+          645,
+          965,
+          761,
+          1017
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_06_IMG_20211001_135500.jpg",
+    "split": "val",
+    "words": [
+      {
+        "text": "Task",
+        "box": [
+          533,
+          108,
+          756,
+          240
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "1",
+        "box": [
+          755,
+          107,
+          821,
+          211
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "These",
+        "box": [
+          736,
+          224,
+          946,
+          302
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "two",
+        "box": [
+          966,
+          215,
+          1110,
+          290
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "charts",
+        "box": [
+          1140,
+          197,
+          1386,
+          294
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "show",
+        "box": [
+          1431,
+          214,
+          1621,
+          283
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "us",
+        "box": [
+          1623,
+          229,
+          1710,
+          275
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1733,
+          197,
+          1849,
+          284
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "features",
+        "box": [
+          1892,
+          190,
+          2208,
+          275
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2241,
+          185,
+          2346,
+          275
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "shidying",
+        "box": [
+          572,
+          304,
+          860,
+          425
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "process.",
+        "box": [
+          889,
+          310,
+          1192,
+          411
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "In",
+        "box": [
+          686,
+          392,
+          785,
+          458
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          809,
+          376,
+          928,
+          452
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "first",
+        "box": [
+          943,
+          365,
+          1141,
+          448
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "chart",
+        "box": [
+          1142,
+          361,
+          1337,
+          444
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "we",
+        "box": [
+          1354,
+          382,
+          1457,
+          432
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          1482,
+          375,
+          1614,
+          429
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "see",
+        "box": [
+          1631,
+          378,
+          1779,
+          431
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1781,
+          351,
+          1927,
+          429
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "covvelations",
+        "box": [
+          1945,
+          351,
+          2437,
+          429
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "between",
+        "box": [
+          582,
+          460,
+          879,
+          538
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "age",
+        "box": [
+          913,
+          475,
+          1069,
+          572
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1066,
+          441,
+          1166,
+          538
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "students",
+        "box": [
+          1207,
+          435,
+          1555,
+          531
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1588,
+          427,
+          1757,
+          503
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "their",
+        "box": [
+          1793,
+          424,
+          1999,
+          503
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "purpouses",
+        "box": [
+          2010,
+          427,
+          2453,
+          537
+        ],
+        "error": true,
+        "correct": "purposes"
+      },
+      {
+        "text": "for",
+        "box": [
+          594,
+          528,
+          719,
+          625
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "studying",
+        "box": [
+          738,
+          533,
+          1026,
+          662
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "It",
+        "box": [
+          1072,
+          518,
+          1162,
+          609
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1176,
+          526,
+          1245,
+          601
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "clearly",
+        "box": [
+          1253,
+          511,
+          1526,
+          644
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "demonstrated",
+        "box": [
+          1554,
+          503,
+          2005,
+          589
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          2064,
+          499,
+          2250,
+          585
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "amount",
+        "box": [
+          613,
+          622,
+          933,
+          700
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          963,
+          617,
+          1050,
+          699
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "people",
+        "box": [
+          1087,
+          609,
+          1330,
+          718
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "who",
+        "box": [
+          1342,
+          596,
+          1490,
+          675
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "enter",
+        "box": [
+          1532,
+          592,
+          1730,
+          672
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1748,
+          586,
+          1868,
+          663
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "university",
+        "box": [
+          1900,
+          590,
+          2336,
+          708
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "for",
+        "box": [
+          586,
+          704,
+          713,
+          790
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "career",
+        "box": [
+          732,
+          720,
+          964,
+          780
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "reasons",
+        "box": [
+          1004,
+          711,
+          1283,
+          780
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "much",
+        "box": [
+          1305,
+          682,
+          1527,
+          758
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "bigger",
+        "box": [
+          1545,
+          675,
+          1759,
+          787
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1804,
+          669,
+          1887,
+          761
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1900,
+          675,
+          2048,
+          744
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "age",
+        "box": [
+          2062,
+          691,
+          2210,
+          770
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_08_IMG_20211001_134030.jpg",
+    "split": "val",
+    "words": [
+      {
+        "text": "WT",
+        "box": [
+          534,
+          121,
+          709,
+          252
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "1.",
+        "box": [
+          662,
+          136,
+          830,
+          249
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "The",
+        "box": [
+          946,
+          98,
+          1154,
+          248
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "pie",
+        "box": [
+          1177,
+          140,
+          1376,
+          287
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "charts",
+        "box": [
+          1379,
+          115,
+          1734,
+          248
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "represents",
+        "box": [
+          1765,
+          101,
+          2253,
+          277
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          2290,
+          114,
+          2493,
+          251
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "infor",
+        "box": [
+          2493,
+          108,
+          2765,
+          248
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "mation",
+        "box": [
+          502,
+          231,
+          913,
+          335
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "about",
+        "box": [
+          937,
+          222,
+          1216,
+          328
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "world",
+        "box": [
+          1231,
+          221,
+          1469,
+          335
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "market",
+        "box": [
+          1437,
+          227,
+          1774,
+          328
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "import",
+        "box": [
+          1793,
+          229,
+          2097,
+          335
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          2078,
+          230,
+          2294,
+          329
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "export",
+        "box": [
+          2293,
+          222,
+          2594,
+          336
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "between",
+        "box": [
+          493,
+          318,
+          848,
+          418
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "European",
+        "box": [
+          848,
+          311,
+          1221,
+          424
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "countries",
+        "box": [
+          1220,
+          316,
+          1591,
+          411
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1581,
+          304,
+          1801,
+          417
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "kinds",
+        "box": [
+          1764,
+          311,
+          2016,
+          412
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2016,
+          311,
+          2168,
+          407
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transporting",
+        "box": [
+          2166,
+          312,
+          2662,
+          443
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods.",
+        "box": [
+          487,
+          391,
+          789,
+          535
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "overall,",
+        "box": [
+          851,
+          389,
+          1222,
+          500
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail",
+        "box": [
+          1240,
+          391,
+          1447,
+          492
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transportation",
+        "box": [
+          1446,
+          390,
+          1994,
+          515
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          2044,
+          388,
+          2174,
+          486
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "mare",
+        "box": [
+          2195,
+          413,
+          2394,
+          498
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "appropriate",
+        "box": [
+          2386,
+          374,
+          2862,
+          519
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "for",
+        "box": [
+          514,
+          480,
+          691,
+          578
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "metals",
+        "box": [
+          720,
+          472,
+          1013,
+          572
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "whereas",
+        "box": [
+          1132,
+          461,
+          1485,
+          569
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "food",
+        "box": [
+          1489,
+          471,
+          1711,
+          578
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "products",
+        "box": [
+          1712,
+          462,
+          2072,
+          595
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "aro",
+        "box": [
+          2100,
+          482,
+          2255,
+          580
+        ],
+        "error": true,
+        "correct": "are"
+      },
+      {
+        "text": "commonly",
+        "box": [
+          2291,
+          481,
+          2713,
+          638
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transported",
+        "box": [
+          564,
+          537,
+          1106,
+          695
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1115,
+          549,
+          1239,
+          695
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "road.",
+        "box": [
+          1245,
+          547,
+          1549,
+          649
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "It",
+        "box": [
+          895,
+          637,
+          1062,
+          747
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          1074,
+          658,
+          1253,
+          736
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "be",
+        "box": [
+          1274,
+          635,
+          1415,
+          731
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "seen",
+        "box": [
+          1441,
+          636,
+          1682,
+          736
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "from",
+        "box": [
+          1696,
+          630,
+          1942,
+          737
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1966,
+          631,
+          2161,
+          733
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "graph",
+        "box": [
+          2166,
+          625,
+          2467,
+          782
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          2461,
+          635,
+          2776,
+          736
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "fourfold",
+        "box": [
+          533,
+          718,
+          908,
+          845
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          907,
+          708,
+          1059,
+          828
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "all",
+        "box": [
+          1063,
+          726,
+          1258,
+          825
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_11_372.jpg",
+    "split": "val",
+    "words": [
+      {
+        "text": "The",
+        "box": [
+          464,
+          183,
+          589,
+          271
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "pie",
+        "box": [
+          652,
+          162,
+          809,
+          270
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "charts",
+        "box": [
+          865,
+          133,
+          1145,
+          239
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "showo",
+        "box": [
+          1138,
+          130,
+          1379,
+          233
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "thatthere",
+        "box": [
+          1423,
+          111,
+          1847,
+          273
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "are",
+        "box": [
+          1850,
+          146,
+          2048,
+          229
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "good",
+        "box": [
+          2078,
+          136,
+          2296,
+          249
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transpor-",
+        "box": [
+          2302,
+          132,
+          2628,
+          246
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "ded",
+        "box": [
+          488,
+          252,
+          624,
+          340
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "by",
+        "box": [
+          640,
+          236,
+          751,
+          352
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail",
+        "box": [
+          773,
+          237,
+          923,
+          333
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          958,
+          235,
+          1127,
+          330
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1169,
+          225,
+          1269,
+          352
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "road",
+        "box": [
+          1385,
+          245,
+          1601,
+          332
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "6",
+        "box": [
+          1643,
+          237,
+          1726,
+          323
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "lobally,",
+        "box": [
+          1689,
+          227,
+          1970,
+          352
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          2042,
+          251,
+          2110,
+          321
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "bath",
+        "box": [
+          2137,
+          225,
+          2322,
+          316
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "charts",
+        "box": [
+          2387,
+          223,
+          2634,
+          308
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transportation",
+        "box": [
+          472,
+          332,
+          1014,
+          443
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1039,
+          314,
+          1170,
+          399
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods",
+        "box": [
+          1162,
+          325,
+          1397,
+          432
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "consist",
+        "box": [
+          1420,
+          322,
+          1693,
+          408
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1697,
+          321,
+          1829,
+          400
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "metal",
+        "box": [
+          1849,
+          311,
+          2205,
+          408
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "35%",
+        "box": [
+          2253,
+          309,
+          2492,
+          399
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "metals",
+        "box": [
+          2499,
+          301,
+          2746,
+          393
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          442,
+          421,
+          644,
+          522
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "30",
+        "box": [
+          669,
+          426,
+          801,
+          509
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          845,
+          411,
+          967,
+          497
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "food",
+        "box": [
+          1023,
+          399,
+          1223,
+          504
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "products",
+        "box": [
+          1222,
+          407,
+          1621,
+          523
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "respectively.",
+        "box": [
+          1687,
+          387,
+          2248,
+          520
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "35",
+        "box": [
+          2292,
+          416,
+          2421,
+          501
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "In",
+        "box": [
+          580,
+          508,
+          689,
+          603
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "both",
+        "box": [
+          728,
+          485,
+          920,
+          594
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "charts",
+        "box": [
+          1107,
+          498,
+          1379,
+          582
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transportation",
+        "box": [
+          1516,
+          490,
+          2096,
+          587
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "contains",
+        "box": [
+          2175,
+          488,
+          2524,
+          578
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "6'",
+        "box": [
+          467,
+          588,
+          584,
+          701
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "pies.",
+        "box": [
+          542,
+          600,
+          781,
+          727
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "In",
+        "box": [
+          848,
+          585,
+          965,
+          684
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          997,
+          591,
+          1136,
+          673
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "first",
+        "box": [
+          1197,
+          573,
+          1387,
+          671
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "case",
+        "box": [
+          1391,
+          598,
+          1537,
+          665
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1622,
+          576,
+          1765,
+          674
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "partsof",
+        "box": [
+          1799,
+          564,
+          2174,
+          692
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "metats",
+        "box": [
+          2233,
+          572,
+          2520,
+          654
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "(35%),",
+        "box": [
+          2525,
+          561,
+          2735,
+          689
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "manu",
+        "box": [
+          436,
+          708,
+          687,
+          785
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_11_373.jpg",
+    "split": "val",
+    "words": [
+      {
+        "text": "There",
+        "box": [
+          822,
+          247,
+          1008,
+          335
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "is",
+        "box": [
+          1000,
+          261,
+          1089,
+          330
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "no",
+        "box": [
+          1091,
+          268,
+          1215,
+          334
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "doubt",
+        "box": [
+          1220,
+          246,
+          1430,
+          347
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "that",
+        "box": [
+          1522,
+          249,
+          1746,
+          333
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "using",
+        "box": [
+          1816,
+          255,
+          2068,
+          366
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "a",
+        "box": [
+          2084,
+          275,
+          2162,
+          331
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "lot",
+        "box": [
+          2160,
+          248,
+          2340,
+          342
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          640,
+          314,
+          754,
+          399
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "modern",
+        "box": [
+          737,
+          323,
+          1007,
+          406
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "technology",
+        "box": [
+          1029,
+          324,
+          1439,
+          453
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "technology",
+        "box": [
+          1509,
+          323,
+          1907,
+          429
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1982,
+          342,
+          2066,
+          402
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "our",
+        "box": [
+          2110,
+          350,
+          2265,
+          408
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "daily",
+        "box": [
+          2276,
+          337,
+          2488,
+          444
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "routing",
+        "box": [
+          648,
+          397,
+          959,
+          506
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "can",
+        "box": [
+          1032,
+          414,
+          1166,
+          477
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "lead",
+        "box": [
+          1229,
+          390,
+          1437,
+          475
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "to",
+        "box": [
+          1450,
+          400,
+          1544,
+          482
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "irreversibe",
+        "box": [
+          1610,
+          383,
+          1990,
+          481
+        ],
+        "error": true,
+        "correct": "irreversible"
+      },
+      {
+        "text": "can",
+        "box": [
+          2037,
+          422,
+          2166,
+          477
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "sequences",
+        "box": [
+          2144,
+          418,
+          2546,
+          502
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "such",
+        "box": [
+          606,
+          476,
+          782,
+          554
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "as",
+        "box": [
+          839,
+          491,
+          937,
+          545
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "problems",
+        "box": [
+          960,
+          463,
+          1277,
+          576
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "with",
+        "box": [
+          1329,
+          471,
+          1509,
+          541
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "healths.",
+        "box": [
+          1563,
+          465,
+          1865,
+          549
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "This",
+        "box": [
+          1940,
+          469,
+          2099,
+          549
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "essay",
+        "box": [
+          2141,
+          485,
+          2343,
+          577
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "will",
+        "box": [
+          2366,
+          491,
+          2517,
+          570
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "ana",
+        "box": [
+          613,
+          560,
+          756,
+          639
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "lyse",
+        "box": [
+          749,
+          536,
+          916,
+          656
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          969,
+          537,
+          1097,
+          629
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "principal",
+        "box": [
+          1154,
+          533,
+          1572,
+          642
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "this",
+        "box": [
+          1734,
+          542,
+          1880,
+          632
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "problem",
+        "box": [
+          2079,
+          544,
+          2447,
+          656
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          598,
+          618,
+          722,
+          706
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "using",
+        "box": [
+          742,
+          627,
+          971,
+          727
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "godjets",
+        "box": [
+          989,
+          610,
+          1307,
+          725
+        ],
+        "error": true,
+        "correct": "gadgets"
+      },
+      {
+        "text": "everywhere",
+        "box": [
+          1355,
+          617,
+          1808,
+          713
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1859,
+          639,
+          1952,
+          700
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "our",
+        "box": [
+          1981,
+          641,
+          2127,
+          701
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "lite",
+        "box": [
+          2162,
+          622,
+          2329,
+          702
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          2363,
+          619,
+          2588,
+          714
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "offer",
+        "box": [
+          619,
+          683,
+          843,
+          780
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "a",
+        "box": [
+          955,
+          711,
+          1013,
+          778
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "solution",
+        "box": [
+          1004,
+          693,
+          1328,
+          781
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "to",
+        "box": [
+          1364,
+          701,
+          1474,
+          776
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "this",
+        "box": [
+          1526,
+          687,
+          1701,
+          781
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "issue.",
+        "box": [
+          1739,
+          701,
+          2027,
+          781
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_11_IMG_20211001_135115.jpg",
+    "split": "val",
+    "words": [
+      {
+        "text": "1.Graph",
+        "box": [
+          511,
+          68,
+          815,
+          178
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "description",
+        "box": [
+          845,
+          66,
+          1257,
+          164
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "This",
+        "box": [
+          516,
+          169,
+          677,
+          259
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "pie",
+        "box": [
+          698,
+          174,
+          831,
+          275
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "chart",
+        "box": [
+          861,
+          157,
+          1071,
+          244
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "represents",
+        "box": [
+          1123,
+          153,
+          1486,
+          268
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "date",
+        "box": [
+          1508,
+          152,
+          1723,
+          242
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "about",
+        "box": [
+          1739,
+          148,
+          1997,
+          234
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "two",
+        "box": [
+          2026,
+          153,
+          2183,
+          231
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "different",
+        "box": [
+          2229,
+          143,
+          2590,
+          243
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "ways",
+        "box": [
+          535,
+          273,
+          716,
+          370
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          754,
+          253,
+          863,
+          337
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods",
+        "box": [
+          892,
+          256,
+          1095,
+          348
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "delivery.",
+        "box": [
+          1120,
+          251,
+          1450,
+          363
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "As",
+        "box": [
+          1479,
+          246,
+          1568,
+          310
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          1610,
+          243,
+          1691,
+          316
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "evidence",
+        "box": [
+          1727,
+          243,
+          2024,
+          321
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "from",
+        "box": [
+          2050,
+          230,
+          2222,
+          329
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          2236,
+          238,
+          2378,
+          327
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "graph,",
+        "box": [
+          2391,
+          252,
+          2637,
+          363
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          534,
+          338,
+          644,
+          416
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "great",
+        "box": [
+          674,
+          332,
+          875,
+          442
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "majority",
+        "box": [
+          917,
+          332,
+          1206,
+          441
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1234,
+          336,
+          1325,
+          409
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "mefails",
+        "box": [
+          1350,
+          330,
+          1597,
+          412
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "transported",
+        "box": [
+          1635,
+          325,
+          2010,
+          429
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          2028,
+          332,
+          2128,
+          447
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "rail",
+        "box": [
+          2172,
+          334,
+          2303,
+          408
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          2326,
+          330,
+          2489,
+          409
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "food",
+        "box": [
+          509,
+          415,
+          681,
+          516
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "products",
+        "box": [
+          716,
+          415,
+          987,
+          509
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "by",
+        "box": [
+          1035,
+          409,
+          1145,
+          521
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "read.",
+        "box": [
+          1178,
+          416,
+          1378,
+          485
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "There",
+        "box": [
+          574,
+          499,
+          777,
+          577
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "are",
+        "box": [
+          811,
+          508,
+          957,
+          565
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "a",
+        "box": [
+          1030,
+          504,
+          1100,
+          559
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "lot",
+        "box": [
+          1160,
+          485,
+          1291,
+          559
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "de",
+        "box": [
+          1329,
+          482,
+          1424,
+          556
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "diffevence",
+        "box": [
+          1424,
+          474,
+          1772,
+          567
+        ],
+        "error": false,
+        "correct": null,
+        "note": "исключено при визуальной сверке: артефакт разметки, не ошибка ученика"
+      },
+      {
+        "text": "in",
+        "box": [
+          1828,
+          496,
+          1915,
+          554
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1938,
+          483,
+          2077,
+          558
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "structure",
+        "box": [
+          2097,
+          491,
+          2425,
+          565
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2451,
+          483,
+          2561,
+          561
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "transportation",
+        "box": [
+          531,
+          572,
+          1038,
+          696
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          1080,
+          563,
+          1198,
+          642
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "goods",
+        "box": [
+          1204,
+          573,
+          1445,
+          677
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          1475,
+          582,
+          1550,
+          644
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Eastern",
+        "box": [
+          1596,
+          561,
+          1855,
+          642
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "Europe",
+        "box": [
+          1868,
+          568,
+          2136,
+          668
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "in",
+        "box": [
+          2169,
+          593,
+          2251,
+          643
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  },
+  {
+    "image": "en_hw2022_14_154.jpg",
+    "split": "val",
+    "words": [
+      {
+        "text": "however",
+        "box": [
+          677,
+          388,
+          966,
+          490
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "this",
+        "box": [
+          991,
+          387,
+          1162,
+          498
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "touches",
+        "box": [
+          1170,
+          398,
+          1463,
+          503
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "not",
+        "box": [
+          1479,
+          410,
+          1629,
+          504
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "only",
+        "box": [
+          1643,
+          407,
+          1819,
+          518
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "music",
+        "box": [
+          1826,
+          435,
+          2038,
+          501
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          2060,
+          408,
+          2228,
+          495
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "film",
+        "box": [
+          2218,
+          397,
+          2379,
+          498
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "industry,",
+        "box": [
+          691,
+          479,
+          1118,
+          582
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "but",
+        "box": [
+          1108,
+          478,
+          1257,
+          571
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "also",
+        "box": [
+          1269,
+          498,
+          1445,
+          573
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "images,",
+        "box": [
+          1520,
+          504,
+          1759,
+          589
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "games",
+        "box": [
+          1743,
+          506,
+          1969,
+          588
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1980,
+          492,
+          2108,
+          566
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "some",
+        "box": [
+          2115,
+          509,
+          2273,
+          564
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "others.",
+        "box": [
+          2271,
+          486,
+          2490,
+          570
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "\"Pirates\"",
+        "box": [
+          628,
+          540,
+          987,
+          643
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "don't",
+        "box": [
+          1018,
+          550,
+          1220,
+          645
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "help",
+        "box": [
+          1274,
+          559,
+          1440,
+          668
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "to",
+        "box": [
+          1459,
+          564,
+          1552,
+          643
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "the",
+        "box": [
+          1550,
+          558,
+          1713,
+          641
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "creators,",
+        "box": [
+          1745,
+          555,
+          2113,
+          651
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "they",
+        "box": [
+          2109,
+          552,
+          2274,
+          655
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "don't",
+        "box": [
+          677,
+          628,
+          898,
+          709
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "poly",
+        "box": [
+          907,
+          653,
+          1056,
+          731
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "for",
+        "box": [
+          1089,
+          625,
+          1225,
+          714
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "a",
+        "box": [
+          1262,
+          651,
+          1334,
+          716
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "work.",
+        "box": [
+          1359,
+          640,
+          1559,
+          715
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "In",
+        "box": [
+          1574,
+          627,
+          1669,
+          714
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "some",
+        "box": [
+          1701,
+          653,
+          1881,
+          707
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "cases",
+        "box": [
+          1906,
+          645,
+          2114,
+          709
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it",
+        "box": [
+          2135,
+          635,
+          2228,
+          708
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "destruct",
+        "box": [
+          2240,
+          629,
+          2533,
+          709
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "small",
+        "box": [
+          789,
+          695,
+          992,
+          779
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "companies",
+        "box": [
+          1018,
+          730,
+          1366,
+          794
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1392,
+          701,
+          1534,
+          787
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "slows",
+        "box": [
+          1555,
+          712,
+          1733,
+          789
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "development",
+        "box": [
+          1728,
+          694,
+          2146,
+          801
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "of",
+        "box": [
+          2145,
+          690,
+          2289,
+          776
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "whole",
+        "box": [
+          2290,
+          694,
+          2471,
+          780
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "industries.",
+        "box": [
+          706,
+          772,
+          1104,
+          856
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "That's",
+        "box": [
+          1098,
+          773,
+          1353,
+          862
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "why",
+        "box": [
+          1417,
+          783,
+          1571,
+          884
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "it's",
+        "box": [
+          1614,
+          781,
+          1749,
+          857
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "very",
+        "box": [
+          1768,
+          796,
+          1946,
+          893
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "important",
+        "box": [
+          2001,
+          770,
+          2372,
+          868
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "to",
+        "box": [
+          667,
+          848,
+          765,
+          931
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "prevent",
+        "box": [
+          770,
+          845,
+          1080,
+          943
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "copying",
+        "box": [
+          1138,
+          869,
+          1436,
+          961
+        ],
+        "error": false,
+        "correct": null
+      },
+      {
+        "text": "and",
+        "box": [
+          1480,
+          853,
+          1632,
+          929
+        ],
+        "error": false,
+        "correct": null
+      }
+    ]
+  }
+]
