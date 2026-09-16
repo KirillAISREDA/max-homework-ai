@@ -14,6 +14,9 @@ import httpx
 from hwcheck.subjects.base import Box, Word
 
 OcrWord = Word
+# ответ сервиса — это слова одной страницы: больше нескольких мегабайт означает битый или
+# враждебный сервис, и разбирать такой JSON (память бота) уже не стоит
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
 
 class OcrError(Exception):
@@ -43,6 +46,8 @@ class OcrClient:
                 "/recognize", content=image, headers={"Content-Type": "image/jpeg"}
             )
             response.raise_for_status()
+            if len(response.content) > MAX_RESPONSE_BYTES:
+                raise OcrError("ocr: ответ слишком большой")
             data = response.json()
             if not isinstance(data, dict):
                 raise ValueError("ocr: ответ не объект")
@@ -61,7 +66,9 @@ class OcrClient:
         return response.status_code == 200
 
 
-def _word(raw: dict[str, Any]) -> Word:
+def _word(raw: Any) -> Word:
+    if not isinstance(raw, dict):
+        raise ValueError("ocr: слово не объект")
     box = raw.get("box")
     return Word(
         text=str(raw.get("text", "")),

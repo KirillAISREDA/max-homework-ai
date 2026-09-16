@@ -44,8 +44,9 @@ select = ["E", "W", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+# ocr/ — отдельный пакет в корне репозитория (свой образ), но типы проверяем вместе с ботом
 mypy_path = "src"
-packages = ["hwcheck"]
+packages = ["hwcheck", "ocr"]
 
 [[tool.mypy.overrides]]
 module = ["gigachat.*", "sympy.*"]

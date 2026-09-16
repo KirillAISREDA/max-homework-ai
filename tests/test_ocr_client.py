@@ -64,3 +64,20 @@ async def test_health() -> None:
     assert await client(ok).health()
     down = httpx.MockTransport(lambda r: httpx.Response(503))
     assert not await client(down).health()
+
+
+@pytest.mark.parametrize("body", [{"words": ["cat"]}, {"words": [None]}])
+async def test_word_not_an_object_becomes_ocr_error(body: dict[str, object]) -> None:
+    """Элемент words не объект — для предметного модуля это такой же сбой OCR, как обрыв сети."""
+    handler = httpx.MockTransport(lambda r: httpx.Response(200, json=body))
+    with pytest.raises(OcrError):
+        await client(handler).recognize(b"img")
+
+
+async def test_huge_response_becomes_ocr_error() -> None:
+    """Ответ больше кэпа не разбираем: битый/враждебный сервис не должен съесть память бота."""
+    big = httpx.MockTransport(
+        lambda r: httpx.Response(200, json={"words": [{"text": "x" * (5 * 1024 * 1024)}]})
+    )
+    with pytest.raises(OcrError, match="слишком большой"):
+        await client(big).recognize(b"img")
