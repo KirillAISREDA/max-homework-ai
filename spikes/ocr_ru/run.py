@@ -97,12 +97,14 @@ def main() -> None:
         # упрётся в --memory и его убьют (OOM), в логе всё равно останется
         # память по уже обработанным фото, а не только время.
         rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
-        per_image.append({
-            "file": path.name,
-            "seconds": round(elapsed, 2),
-            "words": len(words),
-            "rss_after_mb": round(rss_mb),
-        })
+        per_image.append(
+            {
+                "file": path.name,
+                "seconds": round(elapsed, 2),
+                "words": len(words),
+                "rss_after_mb": round(rss_mb),
+            }
+        )
         print(f"{path.name}: {elapsed:.1f} s, {len(words)} words, RSS={rss_mb:.0f} MB", flush=True)
 
     peak_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
