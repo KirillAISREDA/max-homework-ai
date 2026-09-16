@@ -144,6 +144,53 @@ async def test_parent_keeps_checking_consented_child_while_adding_another(
     assert kit.last(2)[0] == texts.SUBJECT_PARENT  # шаг незавершённого ребёнка 3 класса
 
 
+async def test_whose_homework_while_adding_third_child(tmp_path: Path) -> None:
+    """«Чья домашка?» не застревает, пока заводится незавершённый ребёнок (финальное ревью, F2)."""
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    for payload in ("ob:role:parent", "ob:pgrade:2", "ob:subject:math", "ob:consent"):
+        await ob.route(press(2, payload))
+    for payload in ("ob:addchild", "ob:pgrade:4", "ob:subject:math", "ob:consent"):
+        await ob.route(press(2, payload))
+    for payload in ("ob:addchild", "ob:pgrade:3"):
+        await ob.route(press(2, payload))  # третий ребёнок заведён, но не завершён
+
+    assert await ob.route(photo(2, "u1", "u2")) == "handled"
+    question, buttons = kit.last(2)
+    assert question == texts.WHOSE_HOMEWORK
+    assert await ob.route(press(2, payloads(buttons)[0])) == CheckPhotos(["u1", "u2"])
+
+
+async def test_code_like_answer_in_dialog_goes_to_check(tmp_path: Path) -> None:
+    """Ответ тьютору, похожий на запасной код, не съедается онбордингом (финальное ревью, F3)."""
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    for payload in ("ob:role:parent", "ob:pgrade:2", "ob:subject:math", "ob:consent"):
+        await ob.route(press(2, payload))
+    await kit.ctx.dialogs.set(chat(2), ChatState(phase="tutoring"))
+    assert await ob.route(text(2, "23456789")) == "pass"
+    assert kit.events("invite_opened") == []
+
+
+async def test_group_chat_updates_are_swallowed(tmp_path: Path) -> None:
+    """Ссылки, коды и экран согласия не уходят в групповой чат (финальное ревью, F4)."""
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    group_photo = photo(7, "u", chat_type="chat")
+    group_press = press(7, "ob:role:student", chat_type="chat")
+    assert (group_photo.chat_type, group_press.chat_type) == ("chat", "chat")
+    assert (photo(7, "u").chat_type, press(7, "ob:role:student").chat_type) == (None, None)
+
+    assert await ob.route(group_photo) == "handled"
+    assert await ob.route(group_press) == "handled"
+    assert kit.max.sent == [] and kit.max.to_users == []
+    assert kit.max.callbacks == ["cb-ob:role:student"]
+    assert await kit.repo.get_account(actor(7).user_hash) is None
+
+    assert await ob.route(photo(7, "u", chat_type="dialog")) == "handled"
+    assert kit.last(7)[0] == texts.HELLO  # в диалоге с ботом — как обычно
+
+
 async def test_parent_first_then_child_joins_by_link(tmp_path: Path) -> None:
     kit = make_kit(tmp_path)
     ob = Onboarding(kit.ctx)

@@ -20,6 +20,8 @@ class MaxUser(_Model):
 
 class MaxRecipient(_Model):
     chat_id: int | None = None
+    # «dialog» — личный диалог с ботом; «chat»/«channel» — групповые, туда онбординг не отвечает
+    chat_type: str | None = None
     user_id: int | None = None
 
 
@@ -94,6 +96,13 @@ class MaxUpdate(_Model):
         if self.message is not None and self.message.chat_id is not None:
             return self.message.chat_id
         return self.chat_id
+
+    @property
+    def chat_type(self) -> str | None:
+        """Тип чата из получателя сообщения; у bot_started и нажатия без сообщения — None."""
+        if self.message is not None and self.message.recipient is not None:
+            return self.message.recipient.chat_type
+        return None
 
     @property
     def effective_user_id(self) -> int | None:

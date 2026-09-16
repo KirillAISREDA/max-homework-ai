@@ -88,8 +88,9 @@ class Onboarding:
         if update.update_type not in _UPDATES:
             return "pass"
         chat_id, user_id = update.effective_chat_id, update.effective_user_id
-        if chat_id is None or user_id is None:
-            # без пользователя согласие не проверить — апдейт не должен утечь в сценарий проверки
+        if chat_id is None or user_id is None or update.chat_type not in (None, "dialog"):
+            # без пользователя согласие не проверить, а ссылки, коды и экран согласия не должны
+            # уйти в групповой чат — апдейт не должен утечь и в сценарий проверки
             if update.callback is not None and update.callback.callback_id:
                 await self._ctx.max.answer_callback(update.callback.callback_id)
             return "handled"
@@ -162,14 +163,15 @@ class Onboarding:
     async def _on_text(self, actor: Actor, position: Position, message: str) -> Route:
         if position.step == "student_ready":
             return "pass"  # похожий на код текст тоже: у ученика с родителем код уже не нужен
+        if position.can_check:
+            dialog = await self._ctx.dialogs.get(actor.chat_id)
+            if dialog.phase != "idle":
+                # родитель отвечает на уточнение или в разборе ошибки — даже похожим на код текстом
+                return "pass"
         code = parse_code(message)
         if code is not None:
             await self._linking.open_code(actor, position.account, code)
             return "handled"
-        if position.can_check:
-            dialog = await self._ctx.dialogs.get(actor.chat_id)
-            if dialog.phase != "idle":
-                return "pass"  # родитель отвечает на уточнение или в разборе ошибки
         await self._show(actor, position)
         return "handled"
 
@@ -288,8 +290,11 @@ class Onboarding:
         return "handled"
 
     async def _whose(self, actor: Actor, position: Position, arg: str) -> Route | None:
+        # доступно и при незавершённом ребёнке, как фото; владение и согласие проверяет choose_owner
         account = position.account
-        if position.step != "parent_ready" or account is None or not _PROFILE_ID.fullmatch(arg):
+        if account is None or account.role != "parent" or not position.can_check:
+            return None
+        if not _PROFILE_ID.fullmatch(arg):
             return None
         urls = await self._parents.choose_owner(actor, account, int(arg))
         return CheckPhotos(urls) if urls else "handled"

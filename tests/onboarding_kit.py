@@ -133,32 +133,42 @@ def text(user_id: int, body: str) -> MaxUpdate:
     )
 
 
-def photo(user_id: int, *urls: str) -> MaxUpdate:
+def recipient(user_id: int, chat_type: str | None = None) -> dict[str, Any]:
+    """Получатель сообщения; chat_type не задан — как в диалоге с ботом (поле не пришло)."""
+    value: dict[str, Any] = {"chat_id": chat(user_id)}
+    if chat_type is not None:
+        value["chat_type"] = chat_type
+    return value
+
+
+def photo(user_id: int, *urls: str, chat_type: str | None = None) -> MaxUpdate:
     attachments = [{"type": "image", "payload": {"url": url}} for url in urls]
     return MaxUpdate.model_validate(
         {
             "update_type": "message_created",
             "message": {
                 "sender": {"user_id": user_id},
-                "recipient": {"chat_id": chat(user_id)},
+                "recipient": recipient(user_id, chat_type),
                 "body": {"mid": "m", "text": None, "attachments": attachments},
             },
         }
     )
 
 
-def press(user_id: int, payload: str) -> MaxUpdate:
-    return MaxUpdate.model_validate(
-        {
-            "update_type": "message_callback",
-            "chat_id": chat(user_id),
-            "callback": {
-                "callback_id": f"cb-{payload}",
-                "payload": payload,
-                "user": {"user_id": user_id},
-            },
-        }
-    )
+def press(user_id: int, payload: str, *, chat_type: str | None = None) -> MaxUpdate:
+    """Нажатие кнопки; chat_type задан — с сообщением, к которому кнопка приложена."""
+    update: dict[str, Any] = {
+        "update_type": "message_callback",
+        "chat_id": chat(user_id),
+        "callback": {
+            "callback_id": f"cb-{payload}",
+            "payload": payload,
+            "user": {"user_id": user_id},
+        },
+    }
+    if chat_type is not None:
+        update["message"] = {"recipient": recipient(user_id, chat_type)}
+    return MaxUpdate.model_validate(update)
 
 
 def payloads(buttons: Buttons | None) -> list[str]:
