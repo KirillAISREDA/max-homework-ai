@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     user_id_key: str = ""
     # PostgreSQL: профили, согласия, приглашения; пусто — бот без базы (как до онбординга)
     database_url: str | None = None
+    # онбординг и согласие родителя до проверки (спецификация 2026-09-14); false — аварийный
+    # выключатель: бот проверяет фото без онбординга, как до этапа 2
+    onboarding_required: bool = False
 
     # состояние диалога: пусто — в памяти процесса (локально), иначе Redis (сервер)
     redis_url: str | None = None

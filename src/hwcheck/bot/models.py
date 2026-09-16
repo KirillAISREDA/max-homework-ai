@@ -86,6 +86,8 @@ class MaxUpdate(_Model):
     callback: MaxCallback | None = None
     chat_id: int | None = None
     user: MaxUser | None = None
+    # метка deep link `?start=` из bot_started (приглашение родителя/ребёнка, онбординг §4.4)
+    payload: str | None = None
 
     @property
     def effective_chat_id(self) -> int | None:
