@@ -13,6 +13,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, Field, ValidationError
 from redis.asyncio import Redis
 
+from hwcheck.bot.check import RefStatus
 from hwcheck.events import anonymize
 from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.schemas import VisionTask
@@ -33,6 +34,8 @@ class CheckedTask(BaseModel):
     grade: GradeResult
     # находки предметного модуля (спецификация каркаса §4); пусто — вывести из grade (математика)
     findings: list[Finding] = Field(default_factory=list)
+    # статус эталона (bot/check.py): по умолчанию — старые записи Redis без этого поля
+    ref_status: RefStatus = "no_condition"
 
 
 class Clarification(BaseModel):

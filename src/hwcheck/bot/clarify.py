@@ -139,7 +139,11 @@ def regrade(item: CheckedTask, task: VisionTask, task_index: int) -> CheckedTask
     else:
         result = validator_only_grade(task.student_solution_steps, condition=task.task_text)
     return CheckedTask(
-        task=task, ref=item.ref, grade=result, findings=findings_from_grade(task_index, result)
+        task=task,
+        ref=item.ref,
+        grade=result,
+        findings=findings_from_grade(task_index, result),
+        ref_status=item.ref_status,  # эталон не пересчитывается — статус остаётся тем же
     )
 
 

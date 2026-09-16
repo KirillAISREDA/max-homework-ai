@@ -48,7 +48,7 @@ from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import FileCache, RefSolution
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
-from hwcheck.subjects.base import Finding, Reference, SubjectTask, TaskResult
+from hwcheck.subjects.base import Finding, Reference, SubjectTask, TaskResult, Trust
 from hwcheck.subjects.math.module import _pseudo_ref as _pseudo_ref  # ре-экспорт для тестов
 from hwcheck.subjects.math.module import findings_from_grade, to_subject_task
 from hwcheck.subjects.registry import SubjectDeps, module_for
@@ -321,7 +321,13 @@ class Bot:
             has_answer=bool((task.student_answer or "").strip()),
         )
         await self._record_findings(user_id, subject_task, result.findings)
-        return CheckedTask(task=task, ref=ref, grade=grade, findings=result.findings)
+        return CheckedTask(
+            task=task,
+            ref=ref,
+            grade=grade,
+            findings=result.findings,
+            ref_status=payload["ref_status"],
+        )
 
     async def _record_findings(
         self, user_id: int | None, task: SubjectTask, findings: list[Finding]
@@ -490,27 +496,8 @@ class Bot:
         await self._max.send_message(chat_id, reply)
 
     async def _start_tutoring(self, user_id: int | None, item: CheckedTask) -> TutorSession:
-        subject_task = to_subject_task(item.task)
-        reference = (
-            Reference(
-                task_number=subject_task.number,
-                origin="derived",
-                trust="verified",
-                payload={"ref": item.ref.model_dump()},
-            )
-            if item.ref is not None
-            else None
-        )
-        result = TaskResult(
-            task_index=0,
-            findings=item.findings or findings_from_grade(0, item.grade),
-            reference=reference,
-            payload={
-                "grade": item.grade.model_dump(),
-                "ref_status": "ok" if item.ref is not None else "no_condition",
-            },
-        )
-        session = await self._module.start_tutoring(result, subject_task, kb=None)
+        result = task_result_of(0, item)
+        session = await self._module.start_tutoring(result, to_subject_task(item.task), kb=None)
         if session.error is not None:
             self._events.log(
                 "error_classified",
@@ -578,6 +565,33 @@ class Bot:
             state = state.model_copy(update={"tutor": session})
             await self._store.set(chat_id, state)
             await self._max.send_message(chat_id, reply)
+
+
+def task_result_of(index: int, item: CheckedTask) -> TaskResult:
+    """`TaskResult` для тьютора из уже посчитанного `CheckedTask`.
+
+    Доверие эталону — по `item.ref_status`, а не по одному факту «эталон есть»:
+    `checked.ref` из `bot/check.py` бывает не пуст только когда солвер сам себя проверил
+    (`ref_status == "ok"`), но это поле не должно тихо подменяться в других сценариях.
+    """
+    subject_task = to_subject_task(item.task)
+    trust: Trust = "verified" if item.ref_status == "ok" else "unverified"
+    reference = (
+        Reference(
+            task_number=subject_task.number,
+            origin="derived",
+            trust=trust,
+            payload={"ref": item.ref.model_dump()},
+        )
+        if item.ref is not None
+        else None
+    )
+    return TaskResult(
+        task_index=index,
+        findings=item.findings or findings_from_grade(index, item.grade),
+        reference=reference,
+        payload={"grade": item.grade.model_dump(), "ref_status": item.ref_status},
+    )
 
 
 def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:

@@ -204,6 +204,30 @@ async def test_findings_logged_and_saved(tmp_path: Path) -> None:
     await bot._store.set(7, ChatState(phase="review", tasks=[checked]))
 
 
+def test_task_result_of_trust_follows_ref_status() -> None:
+    """Доверие эталону в разборе — по статусу солвера, а не по факту «эталон не пуст»."""
+    from hwcheck.bot.fsm import CheckedTask
+    from hwcheck.bot.handlers import task_result_of
+    from hwcheck.pipeline.schemas import VisionTask
+    from hwcheck.pipeline.solver import RefSolution
+
+    steps = ["220 + 180 = 400"]
+    ref = RefSolution(steps=steps, answer="400")
+    task = VisionTask(number=19, task_text="Сколько?", student_solution_steps=steps, confidence=1)
+    unverified = CheckedTask(
+        task=task, ref=ref, grade=_validator_only_grade(steps), ref_status="ref_not_verified"
+    )
+    result = task_result_of(0, unverified)
+    assert result.reference is not None and result.reference.trust == "unverified"
+    assert result.payload["ref_status"] == "ref_not_verified"
+
+    verified = unverified.model_copy(update={"ref_status": "ok"})
+    verified_result = task_result_of(0, verified)
+    assert verified_result.reference is not None
+    assert verified_result.reference.trust == "verified"
+    assert verified_result.payload["ref_status"] == "ok"
+
+
 def test_anonymize_stable_and_irreversible() -> None:
     assert anonymize(42) == anonymize(42)
     assert anonymize(42) != anonymize(43)
