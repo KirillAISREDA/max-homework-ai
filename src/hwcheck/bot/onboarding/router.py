@@ -53,6 +53,9 @@ class Position:
     step: Step
     account: Account | None
     profile: StudentProfile | None = None  # профиль, к которому относится шаг
+    # фото/текст/кнопки проверки не блокируются: ученик готов или у родителя есть хотя бы один
+    # ребёнок 1–4 класса с согласием (даже если параллельно заводится ещё один, незавершённый)
+    can_check: bool = False
 
 
 Action = Callable[[Actor, Position, str], Awaitable[Route | None]]
@@ -82,9 +85,14 @@ class Onboarding:
         }
 
     async def route(self, update: MaxUpdate) -> Route:
-        chat_id, user_id = update.effective_chat_id, update.effective_user_id
-        if update.update_type not in _UPDATES or chat_id is None or user_id is None:
+        if update.update_type not in _UPDATES:
             return "pass"
+        chat_id, user_id = update.effective_chat_id, update.effective_user_id
+        if chat_id is None or user_id is None:
+            # без пользователя согласие не проверить — апдейт не должен утечь в сценарий проверки
+            if update.callback is not None and update.callback.callback_id:
+                await self._ctx.max.answer_callback(update.callback.callback_id)
+            return "handled"
         actor = Actor.of(chat_id, user_id)
         position = await self._position(await self._ctx.repo.get_account(actor.user_hash))
         if update.update_type == "bot_started":
@@ -111,15 +119,19 @@ class Onboarding:
                 raise RuntimeError("student account without profile")
             if profile.subject is None:
                 return Position("student_subject", account, profile)
-            step: Step = "student_ready" if profile.has_consent else "waiting_parent"
-            return Position(step, account, profile)
+            if profile.has_consent:
+                return Position("student_ready", account, profile, can_check=True)
+            return Position("waiting_parent", account, profile)
         children = await repo.children(account.id)
+        # хотя бы один ребёнок 1–4 класса с согласием — проверка доступна, даже если родитель
+        # параллельно заводит ещё одного (незавершённого) ребёнка
+        can_check = any(c.sent_by_parent and c.has_consent for c in children)
         unfinished = [c for c in children if c.sent_by_parent and not c.has_consent]
         if unfinished:  # незавершённый ребёнок 1–4 у родителя один (start_child_by_parent)
             child = unfinished[-1]
-            step = "child_subject" if child.subject is None else "child_consent"
-            return Position(step, account, child)
-        return Position("parent_ready", account)
+            step: Step = "child_subject" if child.subject is None else "child_consent"
+            return Position(step, account, child, can_check=can_check)
+        return Position("parent_ready", account, can_check=can_check)
 
     async def _show(self, actor: Actor, position: Position) -> None:
         """Текущий шаг ещё раз: ответ на текст, фото, старую или чужую кнопку."""
@@ -154,7 +166,7 @@ class Onboarding:
         if code is not None:
             await self._linking.open_code(actor, position.account, code)
             return "handled"
-        if position.step == "parent_ready":
+        if position.can_check:
             dialog = await self._ctx.dialogs.get(actor.chat_id)
             if dialog.phase != "idle":
                 return "pass"  # родитель отвечает на уточнение или в разборе ошибки
@@ -164,8 +176,9 @@ class Onboarding:
     async def _on_photo(self, actor: Actor, position: Position, urls: list[str]) -> Route:
         if position.step == "student_ready":
             return "pass"
-        if position.step == "parent_ready" and position.account is not None:
-            chosen = await self._parents.on_photo(actor, position.account, urls)
+        account = position.account
+        if account is not None and (position.step == "parent_ready" or position.can_check):
+            chosen = await self._parents.on_photo(actor, account, urls)
             return CheckPhotos(chosen) if chosen else "handled"
         self._ctx.log("photo_blocked_no_consent", actor, step=position.step)
         if position.step == "waiting_parent":
@@ -177,8 +190,7 @@ class Onboarding:
     async def _on_callback(
         self, actor: Actor, position: Position, payload: str, callback_id: str
     ) -> Route:
-        ready = position.step in ("student_ready", "parent_ready")
-        if not payload.startswith("ob:") and ready:
+        if not payload.startswith("ob:") and position.can_check:
             return "pass"
         await self._ctx.max.answer_callback(callback_id)
         if not payload.startswith("ob:"):  # кнопка проверки у того, кто онбординг не прошёл

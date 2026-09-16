@@ -4,10 +4,11 @@
 from pathlib import Path
 
 from hwcheck.bot.handlers import WELCOME, Bot
+from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.onboarding import texts
 from hwcheck.bot.onboarding.router import Onboarding
 from hwcheck.config import Settings
-from onboarding_kit import Kit, make_kit, photo, press, ready_student, text
+from onboarding_kit import Kit, chat, make_kit, photo, press, ready_student, text
 
 
 def make_bot(tmp_path: Path) -> tuple[Bot, Kit]:
@@ -30,6 +31,27 @@ async def test_photo_before_consent_is_not_downloaded(tmp_path: Path) -> None:
     assert kit.last(1)[0] == texts.HELLO
     types = [e["type"] for e in kit.events()]
     assert "photo_blocked_no_consent" in types and "homework_uploaded" not in types
+
+
+async def test_photo_without_sender_is_dropped(tmp_path: Path) -> None:
+    """Апдейт без отправителя (сбой клиента MAX) не должен утечь мимо согласия в проверку."""
+    bot, kit = make_bot(tmp_path)
+    update = MaxUpdate.model_validate(
+        {
+            "update_type": "message_created",
+            "message": {
+                "recipient": {"chat_id": chat(1)},
+                "body": {
+                    "mid": "m",
+                    "text": None,
+                    "attachments": [{"type": "image", "payload": {"url": "https://files/1.jpg"}}],
+                },
+            },
+        }
+    )
+    await bot.handle_update(update)
+    assert kit.max.downloads == []
+    assert "homework_uploaded" not in [e["type"] for e in kit.events()]
 
 
 async def test_parent_photo_with_young_child_goes_to_check(tmp_path: Path) -> None:

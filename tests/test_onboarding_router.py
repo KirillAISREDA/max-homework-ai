@@ -115,6 +115,35 @@ async def test_parent_with_two_young_children(tmp_path: Path) -> None:
     assert await ob.route(text(2, "получилось 12")) == "pass"  # родитель отвечает тьютору
 
 
+async def test_parent_keeps_checking_consented_child_while_adding_another(
+    tmp_path: Path,
+) -> None:
+    """Незавершённый второй ребёнок не должен запирать проверку уже подключённого (ревью Task 9)."""
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    for payload in ("ob:role:parent", "ob:pgrade:2", "ob:subject:math"):
+        await ob.route(press(2, payload))
+    # пока нет ни одного согласия — фото блокируются, как и раньше
+    assert await ob.route(photo(2, "before")) == "handled"
+    assert kit.events("photo_blocked_no_consent") != []
+
+    await ob.route(press(2, "ob:consent"))  # ребёнок 1 (2 класс) подключён
+    for payload in ("ob:addchild", "ob:pgrade:3"):
+        await ob.route(press(2, payload))  # ребёнок 2 (3 класс) заведён, но не завершён
+    blocked_before = len(kit.events("photo_blocked_no_consent"))
+
+    assert await ob.route(photo(2, "u")) == CheckPhotos(["u"])
+    assert len(kit.events("photo_blocked_no_consent")) == blocked_before
+
+    await kit.ctx.dialogs.set(chat(2), ChatState(phase="tutoring"))
+    assert await ob.route(text(2, "получилось 5")) == "pass"
+    assert await ob.route(press(2, "tutor:0")) == "pass"
+
+    await kit.ctx.dialogs.set(chat(2), ChatState())
+    assert await ob.route(text(2, "что дальше?")) == "handled"
+    assert kit.last(2)[0] == texts.SUBJECT_PARENT  # шаг незавершённого ребёнка 3 класса
+
+
 async def test_parent_first_then_child_joins_by_link(tmp_path: Path) -> None:
     kit = make_kit(tmp_path)
     ob = Onboarding(kit.ctx)
