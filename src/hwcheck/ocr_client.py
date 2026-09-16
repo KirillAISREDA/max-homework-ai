@@ -36,15 +36,22 @@ class OcrClient:
         await self._http.aclose()
 
     async def recognize(self, image: bytes) -> list[Word]:
+        # весь разбор ответа — под тем же перехватом: битый ответ (не JSON-объект, words не
+        # список, слово без нужных полей) для предметного модуля не отличается от сбоя сети
         try:
             response = await self._http.post(
                 "/recognize", content=image, headers={"Content-Type": "image/jpeg"}
             )
             response.raise_for_status()
             data = response.json()
-        except (httpx.HTTPError, ValueError) as exc:
+            if not isinstance(data, dict):
+                raise ValueError("ocr: ответ не объект")
+            words = data.get("words", [])
+            if not isinstance(words, list):
+                raise ValueError("ocr: words не список")
+            return [_word(w) for w in words]
+        except (httpx.HTTPError, ValueError, TypeError, IndexError, KeyError) as exc:
             raise OcrError(f"ocr: {type(exc).__name__}") from exc
-        return [_word(w) for w in data.get("words", [])]
 
     async def health(self) -> bool:
         try:

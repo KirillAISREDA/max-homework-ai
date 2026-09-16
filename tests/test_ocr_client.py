@@ -46,6 +46,19 @@ async def test_failures_become_ocr_error(outcome: httpx.Response | Exception) ->
         await client(httpx.MockTransport(handler)).recognize(b"img")
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"words": [{"text": "x", "box": [1, 2]}]},  # box короче 4 элементов → IndexError
+        {"words": "nope"},  # words не список → ValueError
+    ],
+)
+async def test_malformed_response_becomes_ocr_error(body: dict[str, object]) -> None:
+    handler = httpx.MockTransport(lambda r: httpx.Response(200, json=body))
+    with pytest.raises(OcrError):
+        await client(handler).recognize(b"img")
+
+
 async def test_health() -> None:
     ok = httpx.MockTransport(lambda r: httpx.Response(200, json={"status": "ok", "engine": "fake"}))
     assert await client(ok).health()
