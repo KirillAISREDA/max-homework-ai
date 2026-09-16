@@ -233,7 +233,7 @@ def main() -> None:
                 print("НЕТ:", token, expected)
     total = single + ambiguous + none
     print(
-        f"один кандидат: {single}/{total} (из них неверных {wrong}); несколько: {ambiguous}; ноль: {none}"
+        f"один кандидат: {single}/{total} (неверных {wrong}); несколько: {ambiguous}; ноль: {none}"
     )
 
 
@@ -404,7 +404,12 @@ from hwcheck.subjects.base import Finding, SubjectTask, Word, strength_of_task
 
 
 def finding(strength: str, confirmed: bool | None = None) -> Finding:
-    return Finding(task_index=0, kind="spelling", strength=strength, confirmed=confirmed)  # type: ignore[arg-type]
+    return Finding(
+        task_index=0,
+        kind="spelling",
+        strength=strength,
+        confirmed=confirmed,  # type: ignore[arg-type]
+    )
 
 
 def test_task_strength_is_worst_finding() -> None:
@@ -826,7 +831,7 @@ def to_vision_task(task: SubjectTask) -> VisionTask:
 
 
 def findings_from_grade(task_index: int, grade: GradeResult) -> list[Finding]:
-    """`wrong` → verified арифметическая ошибка в первой строке; `uncertain` → candidate с причиной."""
+    """`wrong` → verified ошибка в первой расходящейся строке; `uncertain` → candidate с причиной."""
     if grade.verdict == "wrong":
         line = grade.first_error_line
         expected = None
@@ -2150,7 +2155,7 @@ Expected: FAIL — нет модулей.
 `ocr/engine.py`:
 
 ```python
-"""Движки распознавания рукописи: контракт и фейк. ReadingPipeline подключается в этапе «русский»."""
+"""Движки распознавания рукописи: контракт и фейк. ReadingPipeline — в этапе «русский»."""
 
 from __future__ import annotations
 
