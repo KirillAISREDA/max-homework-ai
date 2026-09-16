@@ -29,6 +29,28 @@ def _task(row: asyncpg.Record) -> KbTask:
     )
 
 
+async def _find_page(
+    conn: asyncpg.pool.PoolConnectionProxy[asyncpg.Record], subject: str, key: str
+) -> KbPage | None:
+    """Страница по готовому отпечатку на переданном соединении: вызывается и из `save_page`,
+    внутри уже открытой транзакции."""
+    row = await conn.fetchrow(
+        "SELECT * FROM kb_pages WHERE subject = $1 AND fingerprint = $2", subject, key
+    )
+    if row is None:
+        return None
+    tasks = await conn.fetch("SELECT * FROM kb_tasks WHERE page_id = $1 ORDER BY id", row["id"])
+    return KbPage(
+        id=row["id"],
+        subject=row["subject"],
+        grade=row["grade"],
+        fingerprint=row["fingerprint"],
+        text=row["text"],
+        photo_path=row["photo_path"],
+        tasks=[_task(t) for t in tasks],
+    )
+
+
 def _answer(row: asyncpg.Record) -> KbAnswer:
     return KbAnswer(
         id=row["id"],
@@ -46,27 +68,13 @@ class PgKnowledgeBase:
         self._pool = pool
 
     async def find_page(self, subject: str, text: str) -> KbPage | None:
-        row = await self._pool.fetchrow(
-            "SELECT * FROM kb_pages WHERE subject = $1 AND fingerprint = $2",
-            subject,
-            fingerprint(text),
-        )
-        if row is None:
-            return None
-        tasks = await self._pool.fetch(
-            "SELECT * FROM kb_tasks WHERE page_id = $1 ORDER BY id", row["id"]
-        )
-        return KbPage(
-            id=row["id"],
-            subject=row["subject"],
-            grade=row["grade"],
-            fingerprint=row["fingerprint"],
-            text=row["text"],
-            photo_path=row["photo_path"],
-            tasks=[_task(t) for t in tasks],
-        )
+        async with self._pool.acquire() as conn:
+            return await _find_page(conn, subject, fingerprint(text))
 
     async def save_page(self, page: KbPage, tasks: list[KbTask]) -> KbPage:
+        # отпечаток всегда считается по тексту: переданный (устаревший, от другого текста)
+        # спрятал бы страницу от поиска и от ограничения UNIQUE (subject, fingerprint)
+        key = fingerprint(page.text)
         async with self._pool.acquire() as conn, conn.transaction():
             page_id = await conn.fetchval(
                 "INSERT INTO kb_pages (subject, grade, fingerprint, text, photo_path) "
@@ -74,12 +82,14 @@ class PgKnowledgeBase:
                 "RETURNING id",
                 page.subject,
                 page.grade,
-                page.fingerprint,
+                key,
                 page.text,
                 page.photo_path,
             )
             if page_id is None:
-                existing = await self.find_page(page.subject, page.text)
+                # то же фото от другого ученика: читаем по тому же соединению — второе из пула
+                # внутри транзакции этой же корутины на исчерпанном пуле означает тупик
+                existing = await _find_page(conn, page.subject, key)
                 assert existing is not None
                 return existing
             saved: list[KbTask] = []
@@ -93,7 +103,7 @@ class PgKnowledgeBase:
                     task.task_kind,
                 )
                 saved.append(task.model_copy(update={"id": task_id}))
-            return page.model_copy(update={"id": page_id, "tasks": saved})
+            return page.model_copy(update={"id": page_id, "fingerprint": key, "tasks": saved})
 
     async def answers_for(self, task_id: int) -> list[KbAnswer]:
         rows = await self._pool.fetch(

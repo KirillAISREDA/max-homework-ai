@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from hwcheck.db.kb import fingerprint
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
 from hwcheck.events import EventLog
@@ -84,3 +86,41 @@ async def test_review_logs_events(tmp_path: Path) -> None:
     assert records[0]["answer_id"] == ids[0]
     assert records[1]["action"] == "n"
     assert records[1]["answer_id"] == ids[1]
+
+
+async def test_load_words_rejects_malformed_json(tmp_path: Path) -> None:
+    """Файл словаря — из внешнего источника: не тот JSON останавливает загрузку с понятным
+    сообщением, а не падает внутри add_words (ревью 17.09, F1)."""
+    kb = InMemoryKnowledgeBase()
+    as_list = tmp_path / "list.json"
+    as_list.write_text('["собака", "корова"]', encoding="utf-8")
+    with pytest.raises(SystemExit):
+        await load_words(kb, "russian", "grade_list:2", as_list)
+
+    bad_value = tmp_path / "bad.json"
+    bad_value.write_text('{"cat": 5}', encoding="utf-8")
+    with pytest.raises(SystemExit):
+        await load_words(kb, "english", "words", bad_value)
+
+    assert await kb.words("russian", "grade_list:2") == set()
+
+
+async def test_review_strips_control_characters() -> None:
+    """Условие и ответ приходят из распознавания/LLM: управляющие последовательности не должны
+    доезжать до терминала проверяющего (ревью безопасности 17.09, F12)."""
+    kb = InMemoryKnowledgeBase()
+    page = KbPage(subject="russian", grade=2, fingerprint=fingerprint("y"), text="y")
+    saved = await kb.save_page(
+        page, [KbTask(number="34", condition="\x1b[31mп_ляне\x07", task_kind="fill_letters")]
+    )
+    task_id = saved.tasks[0].id
+    assert task_id is not None
+    await kb.save_answer(
+        KbAnswer(task_id=task_id, answer={"text": "\x1b[2Jполяне"}, derived_by="llm:m@v1")
+    )
+    shown: list[str] = []
+
+    await review(kb, "russian", limit=10, read=lambda _: "y", write=shown.append)
+
+    assert "\x1b" not in shown[0] and "\x07" not in shown[0]
+    assert "п_ляне" in shown[0] and "поляне" in shown[0]

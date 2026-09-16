@@ -33,7 +33,14 @@ class InMemoryKnowledgeBase:
         if existing is not None:
             return existing
         saved_tasks = [t.model_copy(update={"id": self._next_id()}) for t in tasks]
-        saved = page.model_copy(update={"id": self._next_id(), "tasks": saved_tasks})
+        # отпечаток — по тексту, как в PgKnowledgeBase: переданный не сверяем и не храним
+        saved = page.model_copy(
+            update={
+                "id": self._next_id(),
+                "fingerprint": fingerprint(page.text),
+                "tasks": saved_tasks,
+            }
+        )
         assert saved.id is not None
         self._pages[saved.id] = saved
         return saved

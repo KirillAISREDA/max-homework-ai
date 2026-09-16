@@ -107,3 +107,14 @@ async def test_rules_and_words(kb: KnowledgeBaseImpl) -> None:
     await kb.add_words("english", "irregular_verbs", {"go": {"past": "went"}})
     assert await kb.words("english", "irregular_verbs") == {"go", "see"}
     assert await kb.words("english", "grade_list:3") == set()
+
+
+async def test_page_fingerprint_comes_from_text(kb: KnowledgeBaseImpl) -> None:
+    """Отпечаток считается по тексту при сохранении: переданный (чужой/битый) не должен
+    прятать страницу от поиска (ревью 17.09, F3)."""
+    text = "Упр. 7. Спиши, вставь буквы."
+    saved = await kb.save_page(KbPage(subject="russian", fingerprint="wrong", text=text), [])
+
+    assert saved.fingerprint == fingerprint(text)
+    found = await kb.find_page("russian", text)
+    assert found is not None and found.id == saved.id

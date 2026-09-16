@@ -164,3 +164,28 @@ async def test_create_pool_applies_migrations(schema: str) -> None:
             assert await conn.fetchval("SELECT count(*) FROM schema_migrations") == 3
     finally:
         await pool.close()
+
+
+async def test_knowledge_base_constraints(schema: str) -> None:
+    """База знаний наполняется с фото и из внешних файлов: длина слова и класс правила
+    ограничены схемой, а не только кодом (ревью 17.09, F13)."""
+    conn = await connect(schema)
+    try:
+        await apply_migrations(conn)
+        with pytest.raises(asyncpg.CheckViolationError):  # слово словаря — не абзац текста
+            await conn.execute(
+                "INSERT INTO kb_words (subject, word, source) VALUES ('russian', $1, 'list')",
+                "я" * 65,
+            )
+        await conn.execute(
+            "INSERT INTO kb_words (subject, word, source) VALUES ('russian', $1, 'list')", "я" * 64
+        )
+        rule = (
+            "INSERT INTO kb_rules (code, subject, grade_from, title, statement, example, "
+            "finding_kinds) VALUES ('c', 'russian', $1, 't', 's', 'e', ARRAY['spelling'])"
+        )
+        with pytest.raises(asyncpg.CheckViolationError):  # правила — для 1–9 классов
+            await conn.execute(rule, 10)
+        await conn.execute(rule, 2)
+    finally:
+        await conn.close()

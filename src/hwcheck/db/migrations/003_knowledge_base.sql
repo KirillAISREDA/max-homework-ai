@@ -38,7 +38,7 @@ CREATE INDEX kb_answers_review ON kb_answers (status) WHERE status = 'unverified
 CREATE TABLE kb_rules (
   code          text PRIMARY KEY,
   subject       text NOT NULL,
-  grade_from    smallint NOT NULL,
+  grade_from    smallint NOT NULL CHECK (grade_from BETWEEN 1 AND 9),
   title         text NOT NULL,
   statement     text NOT NULL,
   example       text NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE kb_rules (
 
 CREATE TABLE kb_words (
   subject       text NOT NULL,
-  word          text NOT NULL,
+  word          text NOT NULL CHECK (char_length(word) <= 64),  -- слово, а не абзац текста
   source        text NOT NULL,
   attrs         jsonb,
   PRIMARY KEY (subject, word, source)

@@ -31,7 +31,8 @@ async def review(
     done = 0
     for task, answer in await kb.unverified_answers(subject, limit):
         assert answer.id is not None
-        write(f"[{task.number or '—'}] {task.condition}\n  наш ответ: {answer.answer}")
+        condition, shown = _printable(task.condition), _printable(str(answer.answer))
+        write(f"[{_printable(task.number or '—')}] {condition}\n  наш ответ: {shown}")
         while True:
             choice = read("y — верно, n — неверно, e — исправить, q — выйти: ").strip().lower()
             if choice in ("y", "n", "e", "q"):
@@ -59,12 +60,34 @@ async def review(
     return done
 
 
+def _printable(text: str) -> str:
+    """Условие и ответ приходят из распознавания и от LLM: управляющие последовательности
+    (очистка экрана, цвета) не должны доезжать до терминала проверяющего."""
+    return "".join(ch for ch in text if ch.isprintable() or ch in "\n\t")
+
+
 async def load_words(kb: KnowledgeBaseImpl, subject: str, source: str, path: Path) -> int:
     raw = path.read_text(encoding="utf-8")
     words: dict[str, dict[str, Any] | None]
     if path.suffix == ".json":
-        words = json.loads(raw)
+        words = _words_from_json(raw)
     else:
         words = {line.strip(): None for line in raw.splitlines() if line.strip()}
     await kb.add_words(subject, source, words)
     return len(words)
+
+
+def _words_from_json(raw: str) -> dict[str, dict[str, Any] | None]:
+    """Файл словаря приходит извне: не та форма останавливает загрузку понятным сообщением,
+    а не падает где-то внутри INSERT."""
+    error = SystemExit("load-words: ожидается JSON-объект {слово: {атрибуты} | null}")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise error from exc
+    if not isinstance(data, dict):
+        raise error
+    for value in data.values():
+        if value is not None and not isinstance(value, dict):
+            raise error
+    return data
