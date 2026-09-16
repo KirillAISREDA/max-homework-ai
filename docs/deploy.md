@@ -73,6 +73,32 @@ docker exec homework-postgres psql -U homework -c 'SELECT * FROM schema_migratio
 ls -la var/backups                                                       # ежедневные дампы, хранение 7 дней
 ```
 
+## Онбординг: включение и аварийный выключатель (этап 2)
+
+Миграция `002_children.sql` применяется при старте бота и пересоздаёт пустые таблицы профилей и согласий;
+если в них уже есть данные — бот не стартует (в логе `002_children: в student_profiles…`).
+
+```bash
+# на VPS, в /opt/max-homework-ai; перед этим — нет событий за 10 минут
+grep -q '^ONBOARDING_REQUIRED=' .env \
+  && sed -i 's/^ONBOARDING_REQUIRED=.*/ONBOARDING_REQUIRED=true/' .env \
+  || echo 'ONBOARDING_REQUIRED=true' >> .env
+docker compose up -d --force-recreate bot        # env_file перечитывается только при пересоздании
+docker compose logs --tail 20 bot                # «onboarding: required»
+```
+
+Выключить (поломка онбординга мешает проверке): то же с `ONBOARDING_REQUIRED=false`, в логе
+`onboarding: off`. Профили и согласия в базе остаются.
+
+Сбросить тестовый аккаунт для повторного прохода (хэш — поле `user` в `var/events.jsonl`):
+
+```bash
+docker exec homework-postgres psql -U homework -c "
+  DELETE FROM student_profiles WHERE user_id IS NULL
+    AND parent_user_id = (SELECT id FROM users WHERE max_user_hash = '<хэш>');
+  DELETE FROM users WHERE max_user_hash = '<хэш>';"
+```
+
 ## Диагностика
 
 ```bash
