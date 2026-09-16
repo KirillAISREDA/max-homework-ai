@@ -48,6 +48,23 @@ def test_consent_summary_names_transfer_and_version() -> None:
     assert "GigaChat API (ПАО Сбербанк)" in summary and POLICY_VERSION in summary
     text = texts.consent_text(texts.CHILD_ASKS_CONSENT.format(grade=7))
     assert text.startswith("Ваш ребёнок (7 класс)") and len(text) <= MAX_MESSAGE_LEN
+    intros = [
+        texts.CHILD_ASKS_CONSENT.format(grade=9),
+        texts.PARENT_FIRST_CONSENT.format(grade=9),
+        texts.PARENT_SENDS_CONSENT,
+    ]
+    assert all(len(texts.consent_text(intro)) <= MAX_MESSAGE_LEN for intro in intros)
+
+
+def test_consent_summary_promises_only_what_exists() -> None:
+    """Меню отзыва появится на этапе 3 — до него отзыв через оператора (финальное ревью, F10)."""
+    lines = texts.CONSENT_SUMMARY.splitlines()
+    assert "меню" not in texts.CONSENT_SUMMARY
+    assert "Как отозвать: написать оператору — контакт в полном тексте." in lines
+    assert lines[-2:] == [
+        "Нажимая «Согласен», вы подтверждаете, что вы родитель или законный представитель ребёнка.",
+        f"Полный текст — кнопка «Полный текст» (политика {POLICY_VERSION}).",
+    ]
 
 
 def test_grade_and_role_keyboards() -> None:

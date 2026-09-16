@@ -76,28 +76,55 @@ ls -la var/backups                                                       # еж�
 ## Онбординг: включение и аварийный выключатель (этап 2)
 
 Миграция `002_children.sql` применяется при старте бота и пересоздаёт пустые таблицы профилей и согласий;
-если в них уже есть данные — бот не стартует (в логе `002_children: в student_profiles…`).
+если в них уже есть данные — бот не стартует (в логе `002_children: в student_profiles…`). Перед выкаткой
+миграции — проверка, что таблицы пусты:
+
+```bash
+docker exec homework-postgres psql -U homework -c 'SELECT (SELECT count(*) FROM student_profiles) sp, (SELECT count(*) FROM consents) c, (SELECT count(*) FROM homeworks) h'
+```
+
+Все три числа — нули, иначе миграция 002 не применится и бот уйдёт в перезапуски.
+
+Включить:
 
 ```bash
 # на VPS, в /opt/max-homework-ai; перед этим — нет событий за 10 минут
+# printf, а не echo: если .env не кончается переводом строки, echo склеил бы строки
 grep -q '^ONBOARDING_REQUIRED=' .env \
   && sed -i 's/^ONBOARDING_REQUIRED=.*/ONBOARDING_REQUIRED=true/' .env \
-  || echo 'ONBOARDING_REQUIRED=true' >> .env
+  || printf '\nONBOARDING_REQUIRED=true\n' >> .env
 docker compose up -d --force-recreate bot        # env_file перечитывается только при пересоздании
 docker compose logs --tail 20 bot                # «onboarding: required»
 ```
 
-Выключить (поломка онбординга мешает проверке): то же с `ONBOARDING_REQUIRED=false`, в логе
-`onboarding: off`. Профили и согласия в базе остаются.
+Флаг `ONBOARDING_REQUIRED=true` в prod держится только на время живого теста, пока нет меню отзыва согласия
+(этап 3), вычитки политики юристом и реквизитов оператора в политике (§14 спецификации); после теста —
+`false`, если Кирилл не решил иначе.
 
-Сбросить тестовый аккаунт для повторного прохода (хэш — поле `user` в `var/events.jsonl`):
+Выключить (поломка онбординга мешает проверке): то же с `ONBOARDING_REQUIRED=false`, в логе
+`onboarding: off` (в prod ещё предупреждение «фото проверяются без согласия родителя»). Профили и согласия
+в базе остаются.
+
+Сбросить тестовый аккаунт для повторного прохода (хэш — поле `user` в `var/events.jsonl`). Команды одного
+`psql -c` выполняются одной транзакцией; порядок важен — дети 1–4 удаляются раньше родителя:
 
 ```bash
 docker exec homework-postgres psql -U homework -c "
+  UPDATE consents SET revoked_at = now() WHERE revoked_at IS NULL
+    AND (parent_hash = '<хэш>' OR student_hash = '<хэш>');
   DELETE FROM student_profiles WHERE user_id IS NULL
     AND parent_user_id = (SELECT id FROM users WHERE max_user_hash = '<хэш>');
-  DELETE FROM users WHERE max_user_hash = '<хэш>';"
+  DELETE FROM users WHERE max_user_hash = '<хэш>';
+  DELETE FROM login_attempts WHERE user_hash = '<хэш>';
+  DELETE FROM subject_waitlist WHERE user_hash = '<хэш>';"
+docker exec homework-redis redis-cli DEL 'onb:<хэш>'
 ```
+
+- Сброс родителя: профили его детей 1–4 удаляются, а у ребёнка 5–9 класса со своим MAX связь с родителем
+  обнуляется (профиль остаётся, согласие отозвано) — для чистого повтора сбрасывать оба хэша, родителя и ребёнка.
+- Записи согласий не удаляются, а остаются с `revoked_at` — это юридическая запись. Без отзыва ребёнок остался
+  бы «с согласием», а связка с другим родителем упала бы на `consents_one_active`.
+- Это сброс тестового аккаунта, а не процедура удаления данных пользователя (этап 3).
 
 ## Диагностика
 
