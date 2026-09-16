@@ -279,7 +279,8 @@ class Bot:
                 )
             return
         checked = [
-            await self._check_task(user_id, task) for task in attach_conditions(notebook, textbook)
+            await self._check_task(user_id, task, index)
+            for index, task in enumerate(attach_conditions(notebook, textbook))
         ]
         plan = plan_clarifications(checked)
         new_state = ChatState(
@@ -295,9 +296,12 @@ class Bot:
         if plan:
             await self._ask_clarification(chat_id, user_id, new_state)
 
-    async def _check_task(self, user_id: int | None, task: VisionTask) -> CheckedTask:
+    async def _check_task(self, user_id: int | None, task: VisionTask, index: int) -> CheckedTask:
+        """`index` — номер задания в альбоме: модуль проверяет задания по одному и о своём
+        месте в альбоме не знает, поэтому `Finding.task_index` проставляет бот."""
         subject_task = to_subject_task(task)
         [result] = await self._module.check([subject_task], [])
+        findings = [f.model_copy(update={"task_index": index}) for f in result.findings]
         payload = result.payload
         if payload.get("solver_from_cache") is not None:
             self._events.log(
@@ -333,12 +337,12 @@ class Bot:
             n_parsed=sum(1 for c in grade.line_checks if c.status in ("ok", "mismatch")),
             has_answer=bool((task.student_answer or "").strip()),
         )
-        await self._record_findings(user_id, subject_task, result.findings)
+        await self._record_findings(user_id, subject_task, findings)
         return CheckedTask(
             task=task,
             ref=ref,
             grade=grade,
-            findings=result.findings,
+            findings=findings,
             ref_status=payload["ref_status"],
         )
 
@@ -482,9 +486,11 @@ class Bot:
             buttons = None
         else:
             tasks[clarification.task_index] = updated
-            if clarification.kind == "word" and clarification.finding_index is not None:
+            confirmed_finding = next(
+                (f for f in updated.findings if f.id == clarification.finding_id), None
+            )
+            if clarification.kind == "word" and confirmed_finding is not None:
                 # спецификация каркаса §8: доля «нет» — мера ложных срабатываний OCR по предмету
-                confirmed_finding = updated.findings[clarification.finding_index]
                 self._events.log(
                     "finding_confirmed",
                     user_id=user_id,
@@ -549,7 +555,7 @@ class Bot:
             callback_id, notification=f"Разбираем {_lower(task_label(item.task))}"
         )
         try:
-            session = await self._start_tutoring(user_id, item)
+            session = await self._start_tutoring(user_id, index, item)
             reply, session = await tutor_reply(
                 self._llm, session, "Помоги найти ошибку", model=self._settings.tutor_model
             )
@@ -572,8 +578,10 @@ class Bot:
         await self._store.set(chat_id, state)
         await self._max.send_message(chat_id, reply)
 
-    async def _start_tutoring(self, user_id: int | None, item: CheckedTask) -> TutorSession:
-        result = task_result_of(0, item)
+    async def _start_tutoring(
+        self, user_id: int | None, index: int, item: CheckedTask
+    ) -> TutorSession:
+        result = task_result_of(index, item)
         session = await self._module.start_tutoring(result, to_subject_task(item.task), kb=None)
         if session.error is not None:
             self._events.log(

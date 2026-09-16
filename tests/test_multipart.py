@@ -155,7 +155,7 @@ async def test_bot_sets_tutor_target_from_error_line() -> None:
         ref=None,
         grade=_validator_only_grade(steps),
     )
-    session = await bot._start_tutoring(None, item)
+    session = await bot._start_tutoring(None, 0, item)
     assert session.expected == "872"
 
 

@@ -40,7 +40,7 @@ def item_with_word() -> CheckedTask:
 def test_word_question_and_answers() -> None:
     item = item_with_word()
     [clarification] = plan_clarifications([item])
-    assert (clarification.kind, clarification.finding_index) == ("word", 0)
+    assert (clarification.kind, clarification.finding_id) == ("word", item.findings[0].id)
     text, buttons = question(item, clarification)
     assert text == "№3: здесь написано «машына»?"
     assert buttons is not None and [b["payload"] for b in buttons[0]] == [
@@ -101,7 +101,36 @@ def test_regrade_preserves_word_finding_and_replaces_math() -> None:
     assert result.findings[0].kind == "arithmetic" and result.findings[0].strength == "verified"
 
 
-def test_finding_returns_none_past_end() -> None:
+def test_finding_returns_none_for_unknown_id() -> None:
     item = item_with_word()
-    clarification = Clarification(task_index=0, kind="word", finding_index=5)
+    clarification = Clarification(task_index=0, kind="word", finding_id="deadbeef")
     assert _finding(item, clarification) is None
+
+
+def test_word_finding_found_by_id_after_regrade_drops_math_finding() -> None:
+    """Пересчёт убрал математическую находку — word-находка сдвинулась, но вопрос к ней
+    привязан по `id`, а не по позиции в списке (финальное ревью 17.09, F9)."""
+    task = VisionTask(
+        number=1, task_text="", student_solution_steps=["<неразборчиво>"], confidence=1
+    )
+    math_finding = Finding(
+        task_index=0, kind="uncertain", strength="candidate", detail="не уверен в проверке"
+    )
+    word = Word(text="машына", box=Box(x0=1, y0=1, x1=9, y1=9), confidence=0.4)
+    word_finding = Finding(
+        task_index=0, kind="spelling", strength="candidate", actual="машына", word=word
+    )
+    item = CheckedTask(
+        task=task,
+        ref=None,
+        grade=validator_only_grade(["<неразборчиво>"]),
+        findings=[math_finding, word_finding],
+    )
+    clarification = Clarification(task_index=0, kind="word", finding_id=word_finding.id)
+
+    result = regrade(item, task.model_copy(update={"student_solution_steps": ["2 + 2 = 4"]}), 0)
+
+    assert [f.id for f in result.findings] == [word_finding.id]  # математической находки не стало
+    assert _finding(result, clarification) == word_finding
+    confirmed = apply_word(result, clarification, "yes")
+    assert confirmed is not None and confirmed.findings[0].confirmed is True

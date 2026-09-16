@@ -44,7 +44,7 @@ class Clarification(BaseModel):
     task_index: int
     kind: Literal["answer", "sign", "line", "word"]
     line_index: int | None = None  # строка решения для sign/line
-    finding_index: int | None = None  # находка item.findings для word
+    finding_id: str | None = None  # `Finding.id` находки item.findings для word
     attempts: int = 0  # неразобранных ответов
     # метка вопроса в payload кнопок: старая кнопка не должна ответить на следующий вопрос
     token: str = Field(default_factory=lambda: token_hex(4))

@@ -204,7 +204,7 @@ async def test_findings_logged_and_saved(tmp_path: Path) -> None:
     findings = InMemoryFindingsRepository()
     bot._findings = findings
     task = VisionTask(number=7, task_text="", student_solution_steps=["2 + 2 = 5"], confidence=1)
-    checked = await bot._check_task(42, task)
+    checked = await bot._check_task(42, task, 0)
     assert checked.grade.verdict == "wrong" and checked.findings[0].strength == "verified"
     [record] = findings.saved
     assert (record.user_hash, record.task_number, record.kind) == (anonymize(42), "7", "arithmetic")
@@ -432,7 +432,7 @@ def _word_clarification_state(photo_paths: list[str]) -> Any:
         task_index=0, kind="spelling", strength="candidate", actual="машына", word=word
     )
     item = CheckedTask(task=task, ref=None, grade=_validator_only_grade([]), findings=[finding])
-    clarification = Clarification(task_index=0, kind="word", finding_index=0, token="tok1")
+    clarification = Clarification(task_index=0, kind="word", finding_id=finding.id, token="tok1")
     return ChatState(
         phase="clarifying",
         tasks=[item],
@@ -493,3 +493,18 @@ async def test_word_clarification_falls_back_to_text_without_photo(tmp_path: Pat
     assert fake_max.sent[-1][1] == "№3: здесь написано «машына»?"
     asked = [e for e in read_events(events_path) if e["type"] == "clarification_asked"][-1]
     assert asked["kind"] == "word" and asked["with_image"] is False
+
+
+async def test_check_task_marks_findings_with_task_index(tmp_path: Path) -> None:
+    """Находки основного пути помечены номером задания в альбоме, а не нулём (ревью 17.09, F10)."""
+    from hwcheck.pipeline.schemas import VisionTask
+
+    bot, _fake_max, _events = make_bot(tmp_path)
+    task = VisionTask(
+        number=7, task_text="", student_solution_steps=["2 + 2 = 5"], confidence=1
+    )  # без условия солвер не зовётся — LLM не нужен
+
+    checked = await bot._check_task(42, task, 3)
+
+    assert [f.task_index for f in checked.findings] == [3]
+    assert checked.findings[0].kind == "arithmetic"

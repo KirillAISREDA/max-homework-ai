@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from secrets import token_hex
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
@@ -92,6 +93,9 @@ class Reference(BaseModel):
 
 
 class Finding(BaseModel):
+    # ссылка на находку переживает пересчёт: позиция в списке находок задания не устойчива
+    # (`clarify._merge_findings` заменяет математические находки), а `id` — да
+    id: str = Field(default_factory=lambda: token_hex(4))
     task_index: int
     kind: str  # arithmetic, spelling, verb_form, missing_word, …
     strength: Strength

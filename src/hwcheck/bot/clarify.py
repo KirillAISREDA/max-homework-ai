@@ -48,13 +48,11 @@ def plan_clarifications(tasks: list[CheckedTask]) -> list[Clarification]:
         if len(plan) == MAX_QUESTIONS:
             return plan
     for index, item in enumerate(tasks):
-        for finding_index, finding in enumerate(item.findings):
+        for finding in item.findings:
             if len(plan) == MAX_QUESTIONS:
                 return plan
             if _is_word_candidate(finding):
-                plan.append(
-                    Clarification(task_index=index, kind="word", finding_index=finding_index)
-                )
+                plan.append(Clarification(task_index=index, kind="word", finding_id=finding.id))
     return plan
 
 
@@ -182,8 +180,8 @@ def apply_word(item: CheckedTask, clarification: Clarification, key: str) -> Che
     if clarification.kind != "word" or key not in ("yes", "no"):
         return None
     findings = list(item.findings)
-    index = clarification.finding_index
-    if index is None or not 0 <= index < len(findings):
+    index = next((i for i, f in enumerate(findings) if f.id == clarification.finding_id), None)
+    if index is None:
         return None
     findings[index] = findings[index].model_copy(update={"confirmed": key == "yes"})
     return item.model_copy(update={"findings": findings})
@@ -251,13 +249,15 @@ def _line_index(clarification: Clarification) -> int:
 
 def _finding(item: CheckedTask, clarification: Clarification) -> Finding | None:
     """Находка `word`-вопроса — если она ещё живая (кандидат без ответа, со словом), иначе None:
-    её могли снять пересчётом другого вопроса той же задачи или уже ответить на неё раньше."""
-    if clarification.finding_index is None:
+    её могли снять пересчётом другого вопроса той же задачи или уже ответить на неё раньше.
+
+    Ищем по `Finding.id`: пересчёт меняет состав списка находок (`_merge_findings`), поэтому
+    позиция в нём — не ссылка."""
+    if clarification.finding_id is None:
         return None
-    index = clarification.finding_index
-    if not 0 <= index < len(item.findings):
+    finding = next((f for f in item.findings if f.id == clarification.finding_id), None)
+    if finding is None:
         return None
-    finding = item.findings[index]
     if finding.word is None or finding.strength != "candidate" or finding.confirmed is not None:
         return None
     return finding
