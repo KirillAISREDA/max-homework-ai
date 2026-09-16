@@ -20,6 +20,8 @@ class MaxUser(_Model):
 
 class MaxRecipient(_Model):
     chat_id: int | None = None
+    # «dialog» — личный диалог с ботом; «chat»/«channel» — групповые, туда онбординг не отвечает
+    chat_type: str | None = None
     user_id: int | None = None
 
 
@@ -86,6 +88,8 @@ class MaxUpdate(_Model):
     callback: MaxCallback | None = None
     chat_id: int | None = None
     user: MaxUser | None = None
+    # метка deep link `?start=` из bot_started (приглашение родителя/ребёнка, онбординг §4.4)
+    payload: str | None = None
 
     @property
     def effective_chat_id(self) -> int | None:
@@ -94,9 +98,18 @@ class MaxUpdate(_Model):
         return self.chat_id
 
     @property
+    def chat_type(self) -> str | None:
+        """Тип чата из получателя сообщения; у bot_started и нажатия без сообщения — None."""
+        if self.message is not None and self.message.recipient is not None:
+            return self.message.recipient.chat_type
+        return None
+
+    @property
     def effective_user_id(self) -> int | None:
-        if self.callback is not None and self.callback.user is not None:
-            return self.callback.user.user_id
+        if self.update_type == "message_callback":
+            # нажал callback.user; message.sender — автор сообщения с кнопкой, то есть сам бот
+            user = self.callback.user if self.callback is not None else None
+            return user.user_id if user is not None else None
         if self.message is not None and self.message.sender is not None:
             return self.message.sender.user_id
         return self.user.user_id if self.user else None

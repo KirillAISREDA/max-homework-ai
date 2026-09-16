@@ -75,6 +75,7 @@ def test_digest_is_keyed_in_prod() -> None:
 
     from hwcheck.events import set_id_hash_key
 
-    assert digest("4F7K92QD") == hashlib.sha256(b"4F7K92QD").hexdigest()
+    assert digest("4F7K92QD") == hashlib.sha256(b"invite:4F7K92QD").hexdigest()
     set_id_hash_key("secret-key")
-    assert digest("4F7K92QD") == hmac.new(b"secret-key", b"4F7K92QD", hashlib.sha256).hexdigest()
+    expected = hmac.new(b"secret-key", b"invite:4F7K92QD", hashlib.sha256).hexdigest()
+    assert digest("4F7K92QD") == expected

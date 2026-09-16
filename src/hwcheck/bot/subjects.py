@@ -10,6 +10,9 @@ from datetime import date
 
 MIN_GRADE = 1
 MAX_GRADE = 9
+# 1–4 класс: фото домашки присылает родитель из своего MAX — рекомендации Минпросвещения 13.09.2026
+# (спецификация онбординга §4.7)
+PARENT_SENDS_UP_TO_GRADE = 4
 
 
 @dataclass(frozen=True)

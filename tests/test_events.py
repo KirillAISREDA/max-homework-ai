@@ -7,7 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from hwcheck.config import Settings
-from hwcheck.events import EventLog, anonymize, legacy_anonymize, set_id_hash_key, trace
+from hwcheck.events import (
+    EventLog,
+    anonymize,
+    keyed_digest,
+    legacy_anonymize,
+    set_id_hash_key,
+    trace,
+)
 
 
 def read_events(path: Path) -> list[dict[str, Any]]:
@@ -57,6 +64,15 @@ def test_anonymize_with_key_is_hmac() -> None:
     assert anonymize(42) == expected
     assert anonymize(42) != legacy_anonymize(42)
     assert anonymize(None) is None
+
+
+def test_invite_digest_and_user_hash_are_separate_domains() -> None:
+    """Код из одних цифр не должен давать хэш, совпадающий с обезличенным id (F6)."""
+    set_id_hash_key("secret-key")
+    user = anonymize(12345678)
+    assert user is not None
+    assert keyed_digest("12345678") != user
+    assert not keyed_digest("12345678").startswith(user)
 
 
 def test_tester_listed_by_legacy_hash_is_still_test(tmp_path: Path) -> None:

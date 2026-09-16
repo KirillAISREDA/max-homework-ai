@@ -86,10 +86,26 @@ class MaxClient:
         *,
         buttons: Buttons | None = None,
     ) -> None:
+        await self._post_message({"chat_id": chat_id}, text, buttons)
+
+    async def send_to_user(
+        self,
+        user_id: int,
+        text: str,
+        *,
+        buttons: Buttons | None = None,
+    ) -> None:
+        """Сообщение пользователю по id MAX, а не в чат, где идёт диалог: второй стороне связки
+        «ребёнок ↔ родитель» (онбординг §4.2)."""
+        await self._post_message({"user_id": user_id}, text, buttons)
+
+    async def _post_message(
+        self, params: dict[str, int], text: str, buttons: Buttons | None
+    ) -> None:
         body: dict[str, Any] = {"text": text}
         if buttons:
             body["attachments"] = [{"type": "inline_keyboard", "payload": {"buttons": buttons}}]
-        response = await self._http.post("/messages", params={"chat_id": chat_id}, json=body)
+        response = await self._http.post("/messages", params=params, json=body)
         response.raise_for_status()
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> None:

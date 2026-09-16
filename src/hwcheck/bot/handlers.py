@@ -29,6 +29,7 @@ from hwcheck.bot.clarify import (
 from hwcheck.bot.fsm import ChatState, CheckedTask, StateStore
 from hwcheck.bot.max_api import MaxClient, callback_button
 from hwcheck.bot.models import MaxUpdate
+from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
 from hwcheck.bot.pages import (
     MAX_PHOTOS,
     attach_conditions,
@@ -76,6 +77,7 @@ class Bot:
         settings: Settings,
         *,
         photos: PhotoStore | None = None,
+        onboarding: Onboarding | None = None,
     ) -> None:
         self._max = max_client
         self._llm = llm
@@ -83,6 +85,8 @@ class Bot:
         self._events = events
         self._settings = settings
         self._photos = photos
+        # None — ONBOARDING_REQUIRED=false: проверка без онбординга, как до этапа 2
+        self._onboarding = onboarding
         self._cache = FileCache(Path(".cache/solver"))
 
     @property
@@ -122,6 +126,14 @@ class Bot:
         if chat_id is None:
             return
         user_id = update.effective_user_id
+        if self._onboarding is not None:
+            # онбординг первым: до согласия фото не скачивается (спецификация онбординга §10.2)
+            route = await self._onboarding.route(update)
+            if isinstance(route, CheckPhotos):
+                await self._on_photo(chat_id, user_id, route.urls)
+                return
+            if route == "handled":
+                return
         if update.update_type == "bot_started":
             self._events.log("bot_started", user_id=user_id, user_initiated=True)
             await self._max.send_message(chat_id, WELCOME)
