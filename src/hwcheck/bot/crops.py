@@ -18,7 +18,8 @@ def crop_word(image: bytes, box: Box, *, margin: int = 12) -> bytes:
             min(width, box.x1 + margin),
             min(height, box.y1 + margin),
         )
-        crop = source.convert("RGB").crop(area)
+        # сначала crop, потом convert: RGB-копия делается только с фрагмента, а не со всего фото
+        crop = source.crop(area).convert("RGB")
         out = io.BytesIO()
         crop.save(out, format="JPEG", quality=90)
         return out.getvalue()

@@ -121,3 +121,12 @@ def test_load_rejects_path_traversal_outside_root(tmp_path: Path) -> None:
 
     with pytest.raises(FileNotFoundError):
         store.load("../secret.txt")
+
+
+def test_load_rejects_empty_path(tmp_path: Path) -> None:
+    """Пустой ключ (фото альбома не сохранилось) — «файла нет», а не чтение самого каталога."""
+    store = PhotoStore(tmp_path / "photos", ttl_days=30)
+    store.save("u1", JPEG)  # каталог существует — путь «» указывал бы на него
+
+    with pytest.raises(FileNotFoundError):
+        store.load("")

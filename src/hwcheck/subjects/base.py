@@ -42,10 +42,11 @@ TaskStrength = Literal["ok", "verified", "candidate", "feedback"]
 
 
 class Box(BaseModel):
-    x0: int
-    y0: int
-    x1: int
-    y1: int
+    # координаты приходят от OCR и из состояния чата: отрицательных пикселей не бывает
+    x0: int = Field(ge=0)
+    y0: int = Field(ge=0)
+    x1: int = Field(ge=0)
+    y1: int = Field(ge=0)
 
 
 class Word(BaseModel):
@@ -58,7 +59,7 @@ class Word(BaseModel):
     # номер фото в альбоме (`ChatState.photo_paths`), к которому относятся координаты box;
     # `recognize(image)` видит один снимок и не знает его места в альбоме — проставляет бот при
     # сборке альбома (этап 3, когда бот перейдёт на `SubjectPage`), пока всегда 0
-    photo_index: int = 0
+    photo_index: int = Field(default=0, ge=0)  # отрицательный индекс брал бы последнее фото
 
 
 class SubjectTask(BaseModel):

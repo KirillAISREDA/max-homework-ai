@@ -508,3 +508,75 @@ async def test_check_task_marks_findings_with_task_index(tmp_path: Path) -> None
 
     assert [f.task_index for f in checked.findings] == [3]
     assert checked.findings[0].kind == "arithmetic"
+
+
+async def test_word_crop_runs_in_worker_thread(tmp_path: Path, monkeypatch: Any) -> None:
+    """Кроп PIL — блокирующий: он уходит в поток, а не держит цикл событий бота (F7)."""
+    import io
+    import threading
+
+    from PIL import Image
+
+    from hwcheck.bot import handlers as handlers_module
+
+    photos = PhotoStore(tmp_path / "photos", ttl_days=30)
+    buffer = io.BytesIO()
+    Image.new("RGB", (100, 50), "white").save(buffer, format="JPEG")
+    photo_path = photos.save("u1", buffer.getvalue())
+    threads: list[str] = []
+
+    def spy(image: bytes, box: Any) -> bytes:
+        threads.append(threading.current_thread().name)
+        return b"crop"
+
+    monkeypatch.setattr(handlers_module, "crop_word", spy)
+    bot, fake_max, _events = make_bot(tmp_path, photos=photos)
+    state = _word_clarification_state([photo_path])
+
+    await bot._ask_clarification(7, 42, state)
+
+    assert fake_max.image_tokens[-1] == "tok"
+    assert threads and threads[0] != threading.current_thread().name
+
+
+async def test_word_crop_skips_photo_index_outside_album(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Номер фото вне альбома — вопрос уходит текстом; это не сбой кропа, в лог не пишем (F11)."""
+    photos = PhotoStore(tmp_path / "photos", ttl_days=30)
+    bot, fake_max, _events = make_bot(tmp_path, photos=photos)
+    state = _word_clarification_state([])  # альбома в состоянии нет (старое состояние Redis)
+    item = state.tasks[0]
+
+    with caplog.at_level("WARNING"):
+        token = await bot._word_image_token(state, item, state.clarifications[0])
+
+    assert token is None
+    assert not [r for r in caplog.records if "crop" in r.message]
+
+
+async def test_recognize_all_keeps_album_order_for_failed_photos(tmp_path: Path) -> None:
+    """Пути фото — индекс `Word.photo_index`: упавшее фото занимает своё место пустой строкой."""
+    from hwcheck.bot.check import RecognizedPhoto
+    from hwcheck.pipeline.vision import RecognizedPage
+
+    bot, fake_max, _events = make_bot(tmp_path, photos=PhotoStore(tmp_path / "photos", ttl_days=30))
+
+    async def download(url: str) -> bytes:
+        if url.endswith("2.jpg"):
+            raise RuntimeError("сеть отвалилась на втором фото")
+        return b"fake-image"
+
+    async def recognize(user_id: int | None, image: bytes, photo: str | None) -> Any:
+        page = RecognizedPage(
+            page=None, orientation=0, attempts=0, tokens_in=0, tokens_out=0, latency_s=0.0, raw=""
+        )
+        return RecognizedPhoto(page=None, role="notebook", rec=page)
+
+    fake_max.download = download  # type: ignore[method-assign]
+    bot._recognize = recognize  # type: ignore[method-assign]
+
+    results, paths = await bot._recognize_all(42, ["u/1.jpg", "u/2.jpg", "u/3.jpg"])
+
+    assert len(results) == 2
+    assert len(paths) == 3 and paths[1] == "" and paths[0] and paths[2]

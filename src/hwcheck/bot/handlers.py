@@ -4,6 +4,7 @@
 Каждый вызов компонента логируется в EventLog (конкурсная метрика + антифрод).
 """
 
+import asyncio
 import contextlib
 import logging
 import time
@@ -229,8 +230,9 @@ class Bot:
     ) -> tuple[list[RecognizedPhoto], list[str]]:
         """Сбой одного фото (сеть, vision) не теряет остальные; упали все — наверх.
 
-        Пути идут в одном порядке с результатами (album order): это и есть индекс,
-        на который ссылается `Word.photo_index` для кропа в уточняющем вопросе.
+        Пути идут в порядке альбома, по одному на каждое фото сообщения: упавшее занимает своё
+        место пустой строкой. Это и есть индекс, на который ссылается `Word.photo_index`
+        для кропа в уточняющем вопросе.
         """
         results: list[RecognizedPhoto] = []
         paths: list[str] = []
@@ -245,6 +247,7 @@ class Bot:
                 paths.append(photo or "")
             except Exception as exc:
                 failed += 1
+                paths.append("")  # место в альбоме сохраняется: индексы не должны съезжать
                 logger.exception("photo failed: %s", url.split("?")[0])
                 self._events.log(
                     "photo_failed", user_id=user_id, error=type(exc).__name__, photo=photo
@@ -447,11 +450,16 @@ class Bot:
             word = finding.word if finding is not None else None
             if word is None or word.box is None:
                 return None
+            if not 0 <= word.photo_index < len(state.photo_paths):
+                # альбом в состоянии короче, чем ждёт находка (старое состояние Redis,
+                # упавшее фото): это не сбой кропа — вопрос просто уходит текстом
+                return None
             path = state.photo_paths[word.photo_index]
             image = self._photos.load(path) if self._photos is not None else None
             if image is None:
                 return None
-            crop = crop_word(image, word.box)
+            # PIL блокирует поток: кроп уходит в отдельный, цикл событий бота остаётся свободным
+            crop = await asyncio.to_thread(crop_word, image, word.box)
             return await self._max.upload_image(crop)
         except Exception:
             logger.warning("word crop/upload failed", exc_info=True)

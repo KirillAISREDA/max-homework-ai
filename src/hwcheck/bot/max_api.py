@@ -120,12 +120,20 @@ class MaxClient:
 
     async def upload_image(self, image: bytes) -> str:
         """Токен вложения: POST /uploads?type=image даёт адрес загрузки, файл уходит туда
-        multipart-полем data (без токена бота — хост сторонний), в ответ — token (dev.max.ru)."""
+        multipart-полем data (без токена бота — хост сторонний), в ответ — token (dev.max.ru).
+
+        Адрес приходит из ответа MAX, а уходит по нему фрагмент домашки ребёнка: только https
+        и без редиректов — 30x не должен молча переслать файл на другой хост.
+        """
         response = await self._http.post("/uploads", params={"type": "image"})
         response.raise_for_status()
-        upload_url = response.json()["url"]
+        upload_url = httpx.URL(str(response.json()["url"]))
+        if upload_url.scheme != "https":
+            raise ValueError("MAX /uploads: адрес загрузки не по https")
         uploaded = await self._files.post(
-            upload_url, files={"data": ("word.jpg", image, "image/jpeg")}
+            upload_url,
+            files={"data": ("word.jpg", image, "image/jpeg")},
+            follow_redirects=False,
         )
         uploaded.raise_for_status()
         token: str = uploaded.json()["token"]

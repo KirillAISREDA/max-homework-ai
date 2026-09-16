@@ -34,3 +34,18 @@ def test_subject_task_defaults() -> None:
     assert task.number_on_page and task.answer is None and task.words == []
     word = Word(text="машына", confidence=0.4)
     assert word.box is None and word.line is None
+
+
+def test_coordinates_and_photo_index_are_not_negative() -> None:
+    """Координаты и номер фото приходят из OCR и состояния чата: отрицательный индекс молча
+    брал бы последнее фото альбома (ревью безопасности 17.09, F11)."""
+    import pytest
+    from pydantic import ValidationError
+
+    from hwcheck.subjects.base import Box
+
+    with pytest.raises(ValidationError):
+        Word(text="машына", photo_index=-1)
+    with pytest.raises(ValidationError):
+        Box(x0=-1, y0=0, x1=10, y1=10)
+    assert Word(text="машына", photo_index=2).photo_index == 2
