@@ -831,7 +831,7 @@ def to_vision_task(task: SubjectTask) -> VisionTask:
 
 
 def findings_from_grade(task_index: int, grade: GradeResult) -> list[Finding]:
-    """`wrong` → verified ошибка в первой расходящейся строке; `uncertain` → candidate с причиной."""
+    """`wrong` → verified ошибка в первой расходящейся строке; `uncertain` → candidate."""
     if grade.verdict == "wrong":
         line = grade.first_error_line
         expected = None
