@@ -25,6 +25,7 @@ pytestmark = pytest.mark.skipif(
 TABLES = {
     "schema_migrations", "users", "student_profiles", "parent_settings", "consents", "invites",
     "homeworks", "subject_waitlist", "login_attempts",
+    "kb_pages", "kb_tasks", "kb_answers", "kb_rules", "kb_words", "findings",
 }  # fmt: skip
 
 
@@ -53,7 +54,9 @@ async def connect(schema: str) -> asyncpg.Connection[asyncpg.Record]:
 async def test_migrations_create_schema_once(schema: str) -> None:
     conn = await connect(schema)
     try:
-        assert await apply_migrations(conn) == ["001_onboarding.sql", "002_children.sql"]
+        assert await apply_migrations(conn) == [
+            "001_onboarding.sql", "002_children.sql", "003_knowledge_base.sql",
+        ]  # fmt: skip
         assert await apply_migrations(conn) == []
         rows = await conn.fetch(
             "SELECT table_name FROM information_schema.tables WHERE table_schema = $1", schema
@@ -158,6 +161,6 @@ async def test_create_pool_applies_migrations(schema: str) -> None:
     pool = await create_pool(database_url(), server_settings={"search_path": schema})
     try:
         async with pool.acquire() as conn:
-            assert await conn.fetchval("SELECT count(*) FROM schema_migrations") == 2
+            assert await conn.fetchval("SELECT count(*) FROM schema_migrations") == 3
     finally:
         await pool.close()
