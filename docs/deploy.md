@@ -182,6 +182,27 @@ docker exec homework-bot python -m hwcheck report var/events.jsonl
 Разобрать спорную проверку: найти в `var/events.jsonl` событие `task_checked` с нужным вердиктом,
 по его `trace_id` — `vision_recognized` с полем `photo`, открыть `var/photos/<photo>`.
 
+## Проверка базы знаний
+
+Консольные команды для проверки ответов в базе знаний и загрузки словарей:
+
+```bash
+# Проверить непроверенные ответы по русскому языку (максимум 20 за раз)
+docker compose exec bot python -m hwcheck kb review --subject russian
+
+# Проверить ответы по английскому (другой предмет и лимит)
+docker compose exec bot python -m hwcheck kb review --subject english --limit 10
+
+# Загрузить словарь из файла
+docker compose exec bot python -m hwcheck kb load-words --subject russian --source grade_list:2 /path/to/words.txt
+```
+
+Формат ввода при проверке:
+- `y` — ответ верный, подтвердить
+- `n` — ответ неправильный, отклонить
+- `e` — исправить (вводится верный ответ, оригинальный отклоняется, исправленный сохраняется как проверенный)
+- `q` — выйти из проверки
+
 ## Переключение dev → prod
 
 В `.env` на VPS: `ENVIRONMENT=prod` и `TEST_USERS=<хэш>,<хэш>` — обезличенные id команды и
