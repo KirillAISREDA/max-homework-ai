@@ -1,0 +1,357 @@
+{
+ "seconds": 4.701493559987284,
+ "words": [
+  {
+   "text": "л",
+   "box": [
+    438,
+    1892,
+    463,
+    1916
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": ",",
+   "box": [
+    932,
+    1761,
+    944,
+    1779
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "было",
+   "box": [
+    4,
+    1607,
+    105,
+    1651
+   ],
+   "confidence": null,
+   "line": 6
+  },
+  {
+   "text": "а",
+   "box": [
+    0,
+    1549,
+    15,
+    1576
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "5л",
+   "box": [
+    94,
+    1315,
+    166,
+    1348
+   ],
+   "confidence": null,
+   "line": 5
+  },
+  {
+   "text": "в",
+   "box": [
+    64,
+    1290,
+    82,
+    1353
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "о",
+   "box": [
+    249,
+    947,
+    267,
+    982
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "ь",
+   "box": [
+    244,
+    923,
+    256,
+    943
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "3",
+   "box": [
+    196,
+    912,
+    226,
+    941
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "3",
+   "box": [
+    212,
+    885,
+    224,
+    905
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "6",
+   "box": [
+    239,
+    882,
+    254,
+    911
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "1",
+   "box": [
+    162,
+    855,
+    189,
+    877
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "2",
+   "box": [
+    199,
+    852,
+    216,
+    873
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "15",
+   "box": [
+    167,
+    814,
+    224,
+    838
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "6",
+   "box": [
+    171,
+    784,
+    187,
+    806
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "2",
+   "box": [
+    308,
+    771,
+    332,
+    800
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "6",
+   "box": [
+    337,
+    769,
+    365,
+    802
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "?",
+   "box": [
+    11,
+    747,
+    39,
+    856
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "756",
+   "box": [
+    157,
+    741,
+    237,
+    768
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "в",
+   "box": [
+    274,
+    732,
+    293,
+    796
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "о",
+   "box": [
+    17,
+    642,
+    28,
+    667
+   ],
+   "confidence": null,
+   "line": 1
+  },
+  {
+   "text": "з",
+   "box": [
+    6,
+    570,
+    25,
+    633
+   ],
+   "confidence": null,
+   "line": 1
+  },
+  {
+   "text": "?",
+   "box": [
+    77,
+    469,
+    86,
+    487
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "3",
+   "box": [
+    40,
+    467,
+    50,
+    491
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "у",
+   "box": [
+    3,
+    426,
+    10,
+    457
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "п",
+   "box": [
+    36,
+    289,
+    57,
+    309
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "Ответ:",
+   "box": [
+    401,
+    267,
+    566,
+    311
+   ],
+   "confidence": null,
+   "line": 0
+  },
+  {
+   "text": "работа",
+   "box": [
+    81,
+    263,
+    240,
+    313
+   ],
+   "confidence": null,
+   "line": 0
+  },
+  {
+   "text": "-35",
+   "box": [
+    739,
+    259,
+    820,
+    288
+   ],
+   "confidence": null,
+   "line": 0
+  },
+  {
+   "text": "луковец",
+   "box": [
+    851,
+    255,
+    1034,
+    301
+   ],
+   "confidence": null,
+   "line": 0
+  },
+  {
+   "text": "было",
+   "box": [
+    605,
+    244,
+    706,
+    286
+   ],
+   "confidence": null,
+   "line": 0
+  },
+  {
+   "text": "С",
+   "box": [
+    17,
+    188,
+    41,
+    217
+   ],
+   "confidence": null,
+   "line": null
+  }
+ ]
+}

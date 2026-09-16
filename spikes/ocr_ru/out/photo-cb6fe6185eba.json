@@ -1,0 +1,489 @@
+{
+ "seconds": 5.793904475052841,
+ "words": [
+  {
+   "text": ",",
+   "box": [
+    744,
+    1881,
+    769,
+    1903
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": ",",
+   "box": [
+    216,
+    1343,
+    221,
+    1363
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": ",",
+   "box": [
+    1,
+    1307,
+    18,
+    1331
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "с",
+   "box": [
+    147,
+    1251,
+    211,
+    1312
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": ",",
+   "box": [
+    167,
+    1236,
+    181,
+    1252
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "у",
+   "box": [
+    152,
+    1032,
+    217,
+    1119
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "321-35963",
+   "box": [
+    278,
+    859,
+    581,
+    916
+   ],
+   "confidence": null,
+   "line": 5
+  },
+  {
+   "text": "6",
+   "box": [
+    713,
+    846,
+    732,
+    881
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "98",
+   "box": [
+    795,
+    840,
+    841,
+    875
+   ],
+   "confidence": null,
+   "line": 7
+  },
+  {
+   "text": "=612",
+   "box": [
+    866,
+    833,
+    995,
+    862
+   ],
+   "confidence": null,
+   "line": 7
+  },
+  {
+   "text": "453",
+   "box": [
+    287,
+    799,
+    359,
+    836
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "2-",
+   "box": [
+    416,
+    795,
+    473,
+    823
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "906",
+   "box": [
+    480,
+    792,
+    566,
+    817
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": ".",
+   "box": [
+    747,
+    784,
+    761,
+    791
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "5",
+   "box": [
+    710,
+    769,
+    737,
+    806
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "1715905",
+   "box": [
+    795,
+    743,
+    1027,
+    798
+   ],
+   "confidence": null,
+   "line": 6
+  },
+  {
+   "text": "379",
+   "box": [
+    268,
+    694,
+    373,
+    729
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "=",
+   "box": [
+    507,
+    690,
+    541,
+    712
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "253",
+   "box": [
+    414,
+    685,
+    497,
+    718
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "1000",
+   "box": [
+    564,
+    672,
+    679,
+    706
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "-",
+   "box": [
+    1062,
+    642,
+    1087,
+    654
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "402-243-",
+   "box": [
+    821,
+    640,
+    1040,
+    684
+   ],
+   "confidence": null,
+   "line": 5
+  },
+  {
+   "text": "я",
+   "box": [
+    1178,
+    627,
+    1203,
+    656
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "15",
+   "box": [
+    1105,
+    627,
+    1166,
+    663
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "7",
+   "box": [
+    379,
+    627,
+    396,
+    656
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "651",
+   "box": [
+    274,
+    623,
+    356,
+    652
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "(126",
+   "box": [
+    409,
+    619,
+    491,
+    648
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "=8",
+   "box": [
+    517,
+    604,
+    573,
+    637
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "50",
+   "box": [
+    586,
+    602,
+    643,
+    631
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "О6",
+   "box": [
+    834,
+    582,
+    888,
+    611
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "3",
+   "box": [
+    806,
+    582,
+    830,
+    618
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "-13",
+   "box": [
+    920,
+    572,
+    987,
+    603
+   ],
+   "confidence": null,
+   "line": 1
+  },
+  {
+   "text": "8=",
+   "box": [
+    1014,
+    563,
+    1082,
+    603
+   ],
+   "confidence": null,
+   "line": 1
+  },
+  {
+   "text": "16",
+   "box": [
+    1096,
+    559,
+    1146,
+    594
+   ],
+   "confidence": null,
+   "line": 1
+  },
+  {
+   "text": "2",
+   "box": [
+    1173,
+    557,
+    1211,
+    588
+   ],
+   "confidence": null,
+   "line": 1
+  },
+  {
+   "text": "№52",
+   "box": [
+    263,
+    550,
+    397,
+    586
+   ],
+   "confidence": null,
+   "line": 1
+  },
+  {
+   "text": "Д/З.",
+   "box": [
+    718,
+    417,
+    802,
+    474
+   ],
+   "confidence": null,
+   "line": 0
+  },
+  {
+   "text": "11,",
+   "box": [
+    377,
+    400,
+    454,
+    446
+   ],
+   "confidence": null,
+   "line": 0
+  },
+  {
+   "text": "Спр",
+   "box": [
+    268,
+    390,
+    341,
+    448
+   ],
+   "confidence": null,
+   "line": 0
+  },
+  {
+   "text": "52",
+   "box": [
+    575,
+    383,
+    626,
+    421
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "б.",
+   "box": [
+    1121,
+    175,
+    1191,
+    253
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": ".",
+   "box": [
+    1251,
+    165,
+    1265,
+    178
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "с",
+   "box": [
+    64,
+    130,
+    103,
+    153
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "3",
+   "box": [
+    1298,
+    117,
+    1336,
+    148
+   ],
+   "confidence": null,
+   "line": null
+  }
+ ]
+}

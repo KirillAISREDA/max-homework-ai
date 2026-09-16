@@ -1,0 +1,49 @@
+{
+ "per_image": [
+  {
+   "file": "notebook-55-57.jpg",
+   "seconds": 11.72,
+   "words": 99,
+   "rss_after_mb": 2275
+  },
+  {
+   "file": "notebook-answer57.jpg",
+   "seconds": 4.7,
+   "words": 32,
+   "rss_after_mb": 2463
+  },
+  {
+   "file": "photo-19a7d3b74aa8.jpg",
+   "seconds": 5.42,
+   "words": 42,
+   "rss_after_mb": 2475
+  },
+  {
+   "file": "photo-322df5819bcb.jpg",
+   "seconds": 19.79,
+   "words": 182,
+   "rss_after_mb": 3010
+  },
+  {
+   "file": "photo-a0ad9df9a34f.jpg",
+   "seconds": 5.71,
+   "words": 41,
+   "rss_after_mb": 3010
+  },
+  {
+   "file": "photo-cb6fe6185eba.jpg",
+   "seconds": 5.79,
+   "words": 44,
+   "rss_after_mb": 3010
+  },
+  {
+   "file": "textbook-p12.jpg",
+   "seconds": 30.03,
+   "words": 205,
+   "rss_after_mb": 3063
+  }
+ ],
+ "p50_seconds": 5.79,
+ "p95_seconds": 30.03,
+ "peak_rss_mb": 3063
+}

@@ -1,0 +1,2260 @@
+{
+ "seconds": 30.028043632977642,
+ "words": [
+  {
+   "text": "о",
+   "box": [
+    192,
+    1770,
+    250,
+    1826
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "12",
+   "box": [
+    856,
+    1611,
+    902,
+    1640
+   ],
+   "confidence": null,
+   "line": 37
+  },
+  {
+   "text": "(17",
+   "box": [
+    1243,
+    1515,
+    1288,
+    1531
+   ],
+   "confidence": null,
+   "line": 35
+  },
+  {
+   "text": "678:6",
+   "box": [
+    832,
+    1515,
+    917,
+    1539
+   ],
+   "confidence": null,
+   "line": 36
+  },
+  {
+   "text": "8",
+   "box": [
+    1184,
+    1502,
+    1201,
+    1511
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "771:3",
+   "box": [
+    649,
+    1502,
+    721,
+    1518
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "слн.",
+   "box": [
+    541,
+    1500,
+    581,
+    1511
+   ],
+   "confidence": null,
+   "line": 34
+  },
+  {
+   "text": "Вы",
+   "box": [
+    469,
+    1489,
+    496,
+    1505
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "ч)",
+   "box": [
+    1041,
+    1480,
+    1064,
+    1496
+   ],
+   "confidence": null,
+   "line": 33
+  },
+  {
+   "text": ",",
+   "box": [
+    1028,
+    1442,
+    1042,
+    1449
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "9",
+   "box": [
+    459,
+    1422,
+    471,
+    1438
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "16)",
+   "box": [
+    777,
+    1405,
+    830,
+    1434
+   ],
+   "confidence": null,
+   "line": 32
+  },
+  {
+   "text": "(86-",
+   "box": [
+    713,
+    1399,
+    764,
+    1421
+   ],
+   "confidence": null,
+   "line": 32
+  },
+  {
+   "text": "мнппиметрах",
+   "box": [
+    1195,
+    1380,
+    1379,
+    1415
+   ],
+   "confidence": null,
+   "line": 31
+  },
+  {
+   "text": "В",
+   "box": [
+    1153,
+    1371,
+    1169,
+    1389
+   ],
+   "confidence": null,
+   "line": 31
+  },
+  {
+   "text": "многоугольника",
+   "box": [
+    914,
+    1341,
+    1127,
+    1378
+   ],
+   "confidence": null,
+   "line": 31
+  },
+  {
+   "text": "какдого",
+   "box": [
+    781,
+    1326,
+    886,
+    1348
+   ],
+   "confidence": null,
+   "line": 31
+  },
+  {
+   "text": "сначала?",
+   "box": [
+    1163,
+    1320,
+    1289,
+    1346
+   ],
+   "confidence": null,
+   "line": 30
+  },
+  {
+   "text": "периметр",
+   "box": [
+    638,
+    1313,
+    751,
+    1336
+   ],
+   "confidence": null,
+   "line": 31
+  },
+  {
+   "text": "было",
+   "box": [
+    1067,
+    1300,
+    1134,
+    1325
+   ],
+   "confidence": null,
+   "line": 30
+  },
+  {
+   "text": "НайgH",
+   "box": [
+    536,
+    1298,
+    610,
+    1321
+   ],
+   "confidence": null,
+   "line": 31
+  },
+  {
+   "text": "луком",
+   "box": [
+    1277,
+    1294,
+    1365,
+    1316
+   ],
+   "confidence": null,
+   "line": 29
+  },
+  {
+   "text": "ных",
+   "box": [
+    994,
+    1294,
+    1040,
+    1314
+   ],
+   "confidence": null,
+   "line": 30
+  },
+  {
+   "text": "58.",
+   "box": [
+    470,
+    1292,
+    500,
+    1310
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "х",
+   "box": [
+    954,
+    1287,
+    970,
+    1310
+   ],
+   "confidence": null,
+   "line": 30
+  },
+  {
+   "text": "10",
+   "box": [
+    1223,
+    1279,
+    1252,
+    1301
+   ],
+   "confidence": null,
+   "line": 29
+  },
+  {
+   "text": "тюльпанов",
+   "box": [
+    797,
+    1275,
+    931,
+    1299
+   ],
+   "confidence": null,
+   "line": 30
+  },
+  {
+   "text": "осталось",
+   "box": [
+    1075,
+    1268,
+    1193,
+    1293
+   ],
+   "confidence": null,
+   "line": 29
+  },
+  {
+   "text": "ПукОВни",
+   "box": [
+    668,
+    1262,
+    767,
+    1284
+   ],
+   "confidence": null,
+   "line": 30
+  },
+  {
+   "text": "ных",
+   "box": [
+    1004,
+    1257,
+    1048,
+    1276
+   ],
+   "confidence": null,
+   "line": 29
+  },
+  {
+   "text": "х",
+   "box": [
+    965,
+    1251,
+    982,
+    1271
+   ],
+   "confidence": null,
+   "line": 29
+  },
+  {
+   "text": "Сколько",
+   "box": [
+    540,
+    1247,
+    642,
+    1269
+   ],
+   "confidence": null,
+   "line": 30
+  },
+  {
+   "text": "внучка",
+   "box": [
+    1216,
+    1242,
+    1309,
+    1265
+   ],
+   "confidence": null,
+   "line": 28
+  },
+  {
+   "text": "этого",
+   "box": [
+    877,
+    1242,
+    946,
+    1263
+   ],
+   "confidence": null,
+   "line": 29
+  },
+  {
+   "text": "a",
+   "box": [
+    1174,
+    1236,
+    1191,
+    1254
+   ],
+   "confidence": null,
+   "line": 28
+  },
+  {
+   "text": "Поспе",
+   "box": [
+    781,
+    1227,
+    856,
+    1250
+   ],
+   "confidence": null,
+   "line": 29
+  },
+  {
+   "text": "меньше.",
+   "box": [
+    654,
+    1221,
+    753,
+    1239
+   ],
+   "confidence": null,
+   "line": 29
+  },
+  {
+   "text": "толыпанов,",
+   "box": [
+    999,
+    1217,
+    1148,
+    1250
+   ],
+   "confidence": null,
+   "line": 28
+  },
+  {
+   "text": "разa",
+   "box": [
+    573,
+    1212,
+    629,
+    1231
+   ],
+   "confidence": null,
+   "line": 29
+  },
+  {
+   "text": "А",
+   "box": [
+    541,
+    1206,
+    553,
+    1222
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "пуковни",
+   "box": [
+    871,
+    1202,
+    973,
+    1228
+   ],
+   "confidence": null,
+   "line": 28
+  },
+  {
+   "text": "о",
+   "box": [
+    226,
+    1200,
+    237,
+    1207
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "20",
+   "box": [
+    816,
+    1187,
+    846,
+    1211
+   ],
+   "confidence": null,
+   "line": 28
+  },
+  {
+   "text": "посадила",
+   "box": [
+    679,
+    1182,
+    793,
+    1205
+   ],
+   "confidence": null,
+   "line": 28
+  },
+  {
+   "text": "Бабушка",
+   "box": [
+    546,
+    1165,
+    651,
+    1190
+   ],
+   "confidence": null,
+   "line": 28
+  },
+  {
+   "text": "пля",
+   "box": [
+    1358,
+    1157,
+    1404,
+    1177
+   ],
+   "confidence": null,
+   "line": 25
+  },
+  {
+   "text": "57.",
+   "box": [
+    480,
+    1157,
+    516,
+    1181
+   ],
+   "confidence": null,
+   "line": 27
+  },
+  {
+   "text": "нужно",
+   "box": [
+    1229,
+    1146,
+    1320,
+    1166
+   ],
+   "confidence": null,
+   "line": 25
+  },
+  {
+   "text": "ящиков",
+   "box": [
+    1081,
+    1131,
+    1190,
+    1153
+   ],
+   "confidence": null,
+   "line": 25
+  },
+  {
+   "text": "яблок?",
+   "box": [
+    662,
+    1125,
+    751,
+    1145
+   ],
+   "confidence": null,
+   "line": 26
+  },
+  {
+   "text": "ы",
+   "box": [
+    141,
+    1125,
+    304,
+    1226
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "кr",
+   "box": [
+    610,
+    1120,
+    635,
+    1138
+   ],
+   "confidence": null,
+   "line": 26
+  },
+  {
+   "text": "таких",
+   "box": [
+    969,
+    1118,
+    1045,
+    1141
+   ],
+   "confidence": null,
+   "line": 25
+  },
+  {
+   "text": "100",
+   "box": [
+    551,
+    1112,
+    590,
+    1132
+   ],
+   "confidence": null,
+   "line": 26
+  },
+  {
+   "text": "яблок",
+   "box": [
+    1327,
+    1110,
+    1404,
+    1130
+   ],
+   "confidence": null,
+   "line": 24
+  },
+  {
+   "text": "в",
+   "box": [
+    0,
+    1105,
+    25,
+    1134
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "Сколько",
+   "box": [
+    819,
+    1099,
+    933,
+    1126
+   ],
+   "confidence": null,
+   "line": 25
+  },
+  {
+   "text": "килограммов",
+   "box": [
+    1100,
+    1092,
+    1294,
+    1121
+   ],
+   "confidence": null,
+   "line": 24
+  },
+  {
+   "text": "ящике?",
+   "box": [
+    686,
+    1090,
+    783,
+    1111
+   ],
+   "confidence": null,
+   "line": 25
+  },
+  {
+   "text": "этом",
+   "box": [
+    593,
+    1082,
+    653,
+    1100
+   ],
+   "confidence": null,
+   "line": 25
+  },
+  {
+   "text": "В",
+   "box": [
+    549,
+    1080,
+    561,
+    1091
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "Сколько",
+   "box": [
+    953,
+    1073,
+    1066,
+    1100
+   ],
+   "confidence": null,
+   "line": 24
+  },
+  {
+   "text": "пустого",
+   "box": [
+    1306,
+    1069,
+    1402,
+    1087
+   ],
+   "confidence": null,
+   "line": 23
+  },
+  {
+   "text": "меньше.",
+   "box": [
+    811,
+    1062,
+    917,
+    1085
+   ],
+   "confidence": null,
+   "line": 24
+  },
+  {
+   "text": "macca",
+   "box": [
+    1182,
+    1058,
+    1267,
+    1078
+   ],
+   "confidence": null,
+   "line": 23
+  },
+  {
+   "text": "раз",
+   "box": [
+    739,
+    1056,
+    783,
+    1070
+   ],
+   "confidence": null,
+   "line": 24
+  },
+  {
+   "text": "a",
+   "box": [
+    1129,
+    1052,
+    1146,
+    1068
+   ],
+   "confidence": null,
+   "line": 23
+  },
+  {
+   "text": "6",
+   "box": [
+    699,
+    1047,
+    712,
+    1066
+   ],
+   "confidence": null,
+   "line": 24
+  },
+  {
+   "text": "В",
+   "box": [
+    660,
+    1045,
+    674,
+    1063
+   ],
+   "confidence": null,
+   "line": 24
+  },
+  {
+   "text": "кр.",
+   "box": [
+    1059,
+    1043,
+    1095,
+    1066
+   ],
+   "confidence": null,
+   "line": 23
+  },
+  {
+   "text": "яшика",
+   "box": [
+    552,
+    1041,
+    635,
+    1059
+   ],
+   "confidence": null,
+   "line": 24
+  },
+  {
+   "text": "12",
+   "box": [
+    999,
+    1035,
+    1027,
+    1055
+   ],
+   "confidence": null,
+   "line": 23
+  },
+  {
+   "text": "е",
+   "box": [
+    6,
+    1026,
+    41,
+    1061
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "яблоками",
+   "box": [
+    827,
+    1022,
+    957,
+    1048
+   ],
+   "confidence": null,
+   "line": 23
+  },
+  {
+   "text": "с",
+   "box": [
+    782,
+    1020,
+    794,
+    1033
+   ],
+   "confidence": null,
+   "line": 23
+  },
+  {
+   "text": "яшика",
+   "box": [
+    668,
+    1011,
+    749,
+    1029
+   ],
+   "confidence": null,
+   "line": 23
+  },
+  {
+   "text": "Macca",
+   "box": [
+    557,
+    996,
+    632,
+    1018
+   ],
+   "confidence": null,
+   "line": 23
+  },
+  {
+   "text": "56.",
+   "box": [
+    493,
+    990,
+    529,
+    1012
+   ],
+   "confidence": null,
+   "line": 23
+  },
+  {
+   "text": "156:6",
+   "box": [
+    1099,
+    987,
+    1193,
+    1012
+   ],
+   "confidence": null,
+   "line": 22
+  },
+  {
+   "text": ",",
+   "box": [
+    12,
+    979,
+    28,
+    1003
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "618:A",
+   "box": [
+    911,
+    972,
+    1002,
+    997
+   ],
+   "confidence": null,
+   "line": 21
+  },
+  {
+   "text": "987:3",
+   "box": [
+    732,
+    957,
+    819,
+    980
+   ],
+   "confidence": null,
+   "line": 21
+  },
+  {
+   "text": "7A8:2",
+   "box": [
+    559,
+    942,
+    643,
+    967
+   ],
+   "confidence": null,
+   "line": 21
+  },
+  {
+   "text": "проверку.",
+   "box": [
+    879,
+    930,
+    1008,
+    950
+   ],
+   "confidence": null,
+   "line": 20
+  },
+  {
+   "text": "н",
+   "box": [
+    835,
+    921,
+    851,
+    941
+   ],
+   "confidence": null,
+   "line": 20
+  },
+  {
+   "text": "деленне",
+   "box": [
+    703,
+    915,
+    809,
+    933
+   ],
+   "confidence": null,
+   "line": 20
+  },
+  {
+   "text": "Выполны",
+   "box": [
+    565,
+    900,
+    676,
+    924
+   ],
+   "confidence": null,
+   "line": 20
+  },
+  {
+   "text": "с",
+   "box": [
+    40,
+    900,
+    57,
+    918
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "55.",
+   "box": [
+    501,
+    891,
+    536,
+    913
+   ],
+   "confidence": null,
+   "line": 20
+  },
+  {
+   "text": "]",
+   "box": [
+    38,
+    863,
+    52,
+    888
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "меленне",
+   "box": [
+    1309,
+    861,
+    1404,
+    881
+   ],
+   "confidence": null,
+   "line": 18
+  },
+  {
+   "text": "проверь",
+   "box": [
+    1166,
+    852,
+    1280,
+    873
+   ],
+   "confidence": null,
+   "line": 18
+  },
+  {
+   "text": "множеннем.",
+   "box": [
+    567,
+    852,
+    738,
+    875
+   ],
+   "confidence": null,
+   "line": 19
+  },
+  {
+   "text": "н",
+   "box": [
+    1120,
+    844,
+    1138,
+    866
+   ],
+   "confidence": null,
+   "line": 18
+  },
+  {
+   "text": "на",
+   "box": [
+    1018,
+    840,
+    1050,
+    860
+   ],
+   "confidence": null,
+   "line": 18
+  },
+  {
+   "text": "A.",
+   "box": [
+    1070,
+    837,
+    1098,
+    864
+   ],
+   "confidence": null,
+   "line": 18
+  },
+  {
+   "text": "867",
+   "box": [
+    948,
+    829,
+    994,
+    853
+   ],
+   "confidence": null,
+   "line": 18
+  },
+  {
+   "text": "раздечнли",
+   "box": [
+    779,
+    827,
+    918,
+    849
+   ],
+   "confidence": null,
+   "line": 18
+  },
+  {
+   "text": "как",
+   "box": [
+    711,
+    818,
+    754,
+    838
+   ],
+   "confidence": null,
+   "line": 18
+  },
+  {
+   "text": "Объясны,",
+   "box": [
+    572,
+    810,
+    685,
+    832
+   ],
+   "confidence": null,
+   "line": 18
+  },
+  {
+   "text": "54.",
+   "box": [
+    507,
+    801,
+    542,
+    821
+   ],
+   "confidence": null,
+   "line": 18
+  },
+  {
+   "text": "объясненне.",
+   "box": [
+    687,
+    765,
+    846,
+    787
+   ],
+   "confidence": null,
+   "line": 17
+  },
+  {
+   "text": "Продолжи",
+   "box": [
+    525,
+    752,
+    656,
+    776
+   ],
+   "confidence": null,
+   "line": 17
+  },
+  {
+   "text": "Bсe.",
+   "box": [
+    1139,
+    741,
+    1188,
+    759
+   ],
+   "confidence": null,
+   "line": 16
+  },
+  {
+   "text": "разделнын",
+   "box": [
+    959,
+    735,
+    1108,
+    753
+   ],
+   "confidence": null,
+   "line": 16
+  },
+  {
+   "text": "Лесятки",
+   "box": [
+    822,
+    724,
+    928,
+    746
+   ],
+   "confidence": null,
+   "line": 16
+  },
+  {
+   "text": "1-2]=о",
+   "box": [
+    679,
+    715,
+    791,
+    738
+   ],
+   "confidence": null,
+   "line": 15
+  },
+  {
+   "text": "2)",
+   "box": [
+    633,
+    711,
+    661,
+    731
+   ],
+   "confidence": null,
+   "line": 15
+  },
+  {
+   "text": "Выигу:",
+   "box": [
+    528,
+    709,
+    608,
+    731
+   ],
+   "confidence": null,
+   "line": 15
+  },
+  {
+   "text": "дес.",
+   "box": [
+    1054,
+    698,
+    1106,
+    714
+   ],
+   "confidence": null,
+   "line": 14
+  },
+  {
+   "text": "2)",
+   "box": [
+    994,
+    687,
+    1024,
+    710
+   ],
+   "confidence": null,
+   "line": 14
+  },
+  {
+   "text": "Разделнлн",
+   "box": [
+    822,
+    683,
+    966,
+    706
+   ],
+   "confidence": null,
+   "line": 14
+  },
+  {
+   "text": "дей",
+   "box": [
+    11,
+    681,
+    55,
+    695
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "3=21",
+   "box": [
+    726,
+    679,
+    791,
+    697
+   ],
+   "confidence": null,
+   "line": 13
+  },
+  {
+   "text": "9.3",
+   "box": [
+    663,
+    672,
+    716,
+    693
+   ],
+   "confidence": null,
+   "line": 13
+  },
+  {
+   "text": "Умножу:",
+   "box": [
+    530,
+    668,
+    639,
+    693
+   ],
+   "confidence": null,
+   "line": 13
+  },
+  {
+   "text": "Вес.",
+   "box": [
+    1153,
+    660,
+    1203,
+    678
+   ],
+   "confidence": null,
+   "line": 12
+  },
+  {
+   "text": "9",
+   "box": [
+    1112,
+    651,
+    1126,
+    673
+   ],
+   "confidence": null,
+   "line": 12
+  },
+  {
+   "text": "будет",
+   "box": [
+    1007,
+    651,
+    1082,
+    671
+   ],
+   "confidence": null,
+   "line": 12
+  },
+  {
+   "text": "ВыП",
+   "box": [
+    1,
+    651,
+    36,
+    661
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "частНом",
+   "box": [
+    867,
+    647,
+    974,
+    665
+   ],
+   "confidence": null,
+   "line": 12
+  },
+  {
+   "text": "на",
+   "box": [
+    721,
+    640,
+    751,
+    656
+   ],
+   "confidence": null,
+   "line": 12
+  },
+  {
+   "text": "В",
+   "box": [
+    822,
+    638,
+    841,
+    658
+   ],
+   "confidence": null,
+   "line": 12
+  },
+  {
+   "text": "3.",
+   "box": [
+    774,
+    638,
+    794,
+    658
+   ],
+   "confidence": null,
+   "line": 12
+  },
+  {
+   "text": "2)",
+   "box": [
+    666,
+    634,
+    696,
+    654
+   ],
+   "confidence": null,
+   "line": 12
+  },
+  {
+   "text": "Разделю",
+   "box": [
+    533,
+    632,
+    643,
+    652
+   ],
+   "confidence": null,
+   "line": 12
+  },
+  {
+   "text": "Aес.",
+   "box": [
+    1248,
+    623,
+    1302,
+    643
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": "-",
+   "box": [
+    1059,
+    619,
+    1085,
+    626
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": "это",
+   "box": [
+    1115,
+    617,
+    1162,
+    633
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": ",",
+   "box": [
+    22,
+    617,
+    28,
+    631
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "2)",
+   "box": [
+    1189,
+    612,
+    1219,
+    635
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": "Дес.",
+   "box": [
+    972,
+    610,
+    1026,
+    628
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": "?",
+   "box": [
+    932,
+    604,
+    949,
+    624
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": "сот.",
+   "box": [
+    819,
+    604,
+    864,
+    622
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": "н",
+   "box": [
+    883,
+    600,
+    907,
+    624
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": "месатки:",
+   "box": [
+    634,
+    600,
+    751,
+    616
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": "2",
+   "box": [
+    776,
+    597,
+    793,
+    618
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": "deгюо",
+   "box": [
+    535,
+    593,
+    608,
+    613
+   ],
+   "confidence": null,
+   "line": 11
+  },
+  {
+   "text": "лепенне.",
+   "box": [
+    1102,
+    570,
+    1227,
+    586
+   ],
+   "confidence": null,
+   "line": 10
+  },
+  {
+   "text": "продолжать",
+   "box": [
+    903,
+    561,
+    1072,
+    579
+   ],
+   "confidence": null,
+   "line": 10
+  },
+  {
+   "text": "можно",
+   "box": [
+    785,
+    557,
+    873,
+    573
+   ],
+   "confidence": null,
+   "line": 10
+  },
+  {
+   "text": "чем",
+   "box": [
+    666,
+    552,
+    712,
+    571
+   ],
+   "confidence": null,
+   "line": 10
+  },
+  {
+   "text": "3;",
+   "box": [
+    736,
+    550,
+    759,
+    575
+   ],
+   "confidence": null,
+   "line": 10
+  },
+  {
+   "text": "меньше,",
+   "box": [
+    538,
+    550,
+    639,
+    568
+   ],
+   "confidence": null,
+   "line": 10
+  },
+  {
+   "text": "выраж.",
+   "box": [
+    8,
+    544,
+    92,
+    560
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "сотен",
+   "box": [
+    1332,
+    542,
+    1391,
+    562
+   ],
+   "confidence": null,
+   "line": 9
+  },
+  {
+   "text": "оставшихся",
+   "box": [
+    1137,
+    529,
+    1301,
+    549
+   ],
+   "confidence": null,
+   "line": 9
+  },
+  {
+   "text": "инсго",
+   "box": [
+    1022,
+    522,
+    1101,
+    538
+   ],
+   "confidence": null,
+   "line": 9
+  },
+  {
+   "text": "делителем:",
+   "box": [
+    835,
+    520,
+    989,
+    536
+   ],
+   "confidence": null,
+   "line": 9
+  },
+  {
+   "text": "с",
+   "box": [
+    793,
+    518,
+    809,
+    532
+   ],
+   "confidence": null,
+   "line": 9
+  },
+  {
+   "text": "остаток",
+   "box": [
+    666,
+    516,
+    766,
+    530
+   ],
+   "confidence": null,
+   "line": 8
+  },
+  {
+   "text": "Сравню",
+   "box": [
+    541,
+    510,
+    637,
+    528
+   ],
+   "confidence": null,
+   "line": 8
+  },
+  {
+   "text": "число",
+   "box": [
+    20,
+    510,
+    97,
+    526
+   ],
+   "confidence": null,
+   "line": 1
+  },
+  {
+   "text": "сот.",
+   "box": [
+    1173,
+    486,
+    1225,
+    502
+   ],
+   "confidence": null,
+   "line": 7
+  },
+  {
+   "text": "разделить",
+   "box": [
+    957,
+    482,
+    1101,
+    498
+   ],
+   "confidence": null,
+   "line": 7
+  },
+  {
+   "text": "2",
+   "box": [
+    1129,
+    477,
+    1148,
+    502
+   ],
+   "confidence": null,
+   "line": 7
+  },
+  {
+   "text": "осталось",
+   "box": [
+    806,
+    475,
+    931,
+    496
+   ],
+   "confidence": null,
+   "line": 7
+  },
+  {
+   "text": "=2",
+   "box": [
+    728,
+    471,
+    775,
+    491
+   ],
+   "confidence": null,
+   "line": 6
+  },
+  {
+   "text": "6",
+   "box": [
+    700,
+    469,
+    717,
+    489
+   ],
+   "confidence": null,
+   "line": 6
+  },
+  {
+   "text": "8",
+   "box": [
+    649,
+    469,
+    664,
+    489
+   ],
+   "confidence": null,
+   "line": 6
+  },
+  {
+   "text": "ВыиTу:",
+   "box": [
+    543,
+    469,
+    622,
+    489
+   ],
+   "confidence": null,
+   "line": 6
+  },
+  {
+   "text": "сот.",
+   "box": [
+    1036,
+    441,
+    1087,
+    457
+   ],
+   "confidence": null,
+   "line": 5
+  },
+  {
+   "text": "6",
+   "box": [
+    994,
+    435,
+    1008,
+    455
+   ],
+   "confidence": null,
+   "line": 5
+  },
+  {
+   "text": "Разделнлн",
+   "box": [
+    822,
+    435,
+    966,
+    455
+   ],
+   "confidence": null,
+   "line": 5
+  },
+  {
+   "text": "Умножу:",
+   "box": [
+    546,
+    432,
+    651,
+    451
+   ],
+   "confidence": null,
+   "line": 5
+  },
+  {
+   "text": "2-356.",
+   "box": [
+    678,
+    430,
+    791,
+    451
+   ],
+   "confidence": null,
+   "line": 5
+  },
+  {
+   "text": "су",
+   "box": [
+    49,
+    428,
+    74,
+    444
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "в",
+   "box": [
+    30,
+    422,
+    42,
+    436
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "сот.",
+   "box": [
+    1153,
+    402,
+    1204,
+    421
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "частном",
+   "box": [
+    867,
+    398,
+    974,
+    414
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "на",
+   "box": [
+    723,
+    396,
+    751,
+    412
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "2",
+   "box": [
+    1108,
+    394,
+    1130,
+    418
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "бхдеT",
+   "box": [
+    1007,
+    394,
+    1082,
+    416
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "Разделю",
+   "box": [
+    548,
+    394,
+    659,
+    412
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "В",
+   "box": [
+    822,
+    392,
+    841,
+    412
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "3.",
+   "box": [
+    774,
+    392,
+    796,
+    412
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "А",
+   "box": [
+    93,
+    392,
+    105,
+    412
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "8",
+   "box": [
+    683,
+    390,
+    700,
+    412
+   ],
+   "confidence": null,
+   "line": 4
+  },
+  {
+   "text": "6",
+   "box": [
+    1414,
+    385,
+    1424,
+    397
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "о",
+   "box": [
+    54,
+    375,
+    84,
+    399
+   ],
+   "confidence": null,
+   "line": 0
+  },
+  {
+   "text": "сотен",
+   "box": [
+    763,
+    357,
+    835,
+    371
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "соГнИ:",
+   "box": [
+    649,
+    355,
+    737,
+    371
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "denюо",
+   "box": [
+    549,
+    355,
+    622,
+    371
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "8.",
+   "box": [
+    861,
+    349,
+    883,
+    373
+   ],
+   "confidence": null,
+   "line": 3
+  },
+  {
+   "text": "на",
+   "box": [
+    1125,
+    310,
+    1156,
+    331
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "разделнть",
+   "box": [
+    954,
+    310,
+    1095,
+    326
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "3.",
+   "box": [
+    1182,
+    308,
+    1204,
+    333
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "нaдо",
+   "box": [
+    789,
+    308,
+    849,
+    328
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "оБъясненне:",
+   "box": [
+    551,
+    304,
+    761,
+    324
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "816",
+   "box": [
+    879,
+    302,
+    923,
+    324
+   ],
+   "confidence": null,
+   "line": 2
+  },
+  {
+   "text": "оор",
+   "box": [
+    776,
+    154,
+    796,
+    241
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "ь",
+   "box": [
+    1152,
+    152,
+    1174,
+    245
+   ],
+   "confidence": null,
+   "line": 1
+  },
+  {
+   "text": "?",
+   "box": [
+    755,
+    87,
+    770,
+    140
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "fo",
+   "box": [
+    1123,
+    85,
+    1142,
+    208
+   ],
+   "confidence": null,
+   "line": 0
+  },
+  {
+   "text": "6",
+   "box": [
+    1293,
+    70,
+    1309,
+    93
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "1",
+   "box": [
+    1264,
+    66,
+    1278,
+    84
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "92",
+   "box": [
+    890,
+    51,
+    937,
+    76
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": ")",
+   "box": [
+    1232,
+    27,
+    1248,
+    82
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "С",
+   "box": [
+    723,
+    23,
+    740,
+    144
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "4",
+   "box": [
+    1165,
+    21,
+    1177,
+    39
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "6",
+   "box": [
+    792,
+    21,
+    806,
+    46
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "3",
+   "box": [
+    856,
+    19,
+    873,
+    76
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "7",
+   "box": [
+    758,
+    19,
+    775,
+    48
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "6",
+   "box": [
+    1129,
+    17,
+    1146,
+    41
+   ],
+   "confidence": null,
+   "line": null
+  },
+  {
+   "text": "оол",
+   "box": [
+    1094,
+    15,
+    1113,
+    73
+   ],
+   "confidence": null,
+   "line": null
+  }
+ ]
+}
