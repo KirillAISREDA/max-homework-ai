@@ -40,17 +40,27 @@ class FakeMax:
     def __init__(self) -> None:
         self.sent: list[tuple[int, str, Buttons | None]] = []
         self.callbacks: list[str] = []
+        self.image_tokens: list[str | None] = []
 
     async def send_message(
-        self, chat_id: int, text: str, *, buttons: Buttons | None = None
+        self,
+        chat_id: int,
+        text: str,
+        *,
+        buttons: Buttons | None = None,
+        image_token: str | None = None,
     ) -> None:
         self.sent.append((chat_id, text, buttons))
+        self.image_tokens.append(image_token)
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> None:
         self.callbacks.append(callback_id)
 
     async def download(self, url: str) -> bytes:
         return b"fake-image"
+
+    async def upload_image(self, image: bytes) -> str:
+        return "tok"
 
 
 def make_bot(tmp_path: Path, photos: PhotoStore | None = None) -> tuple[Bot, FakeMax, Path]:

@@ -85,8 +85,9 @@ class MaxClient:
         text: str,
         *,
         buttons: Buttons | None = None,
+        image_token: str | None = None,
     ) -> None:
-        await self._post_message({"chat_id": chat_id}, text, buttons)
+        await self._post_message({"chat_id": chat_id}, text, buttons, image_token)
 
     async def send_to_user(
         self,
@@ -100,13 +101,35 @@ class MaxClient:
         await self._post_message({"user_id": user_id}, text, buttons)
 
     async def _post_message(
-        self, params: dict[str, int], text: str, buttons: Buttons | None
+        self,
+        params: dict[str, int],
+        text: str,
+        buttons: Buttons | None,
+        image_token: str | None = None,
     ) -> None:
         body: dict[str, Any] = {"text": text}
+        attachments: list[dict[str, Any]] = []
+        if image_token:
+            attachments.append({"type": "image", "payload": {"token": image_token}})
         if buttons:
-            body["attachments"] = [{"type": "inline_keyboard", "payload": {"buttons": buttons}}]
+            attachments.append({"type": "inline_keyboard", "payload": {"buttons": buttons}})
+        if attachments:
+            body["attachments"] = attachments
         response = await self._http.post("/messages", params=params, json=body)
         response.raise_for_status()
+
+    async def upload_image(self, image: bytes) -> str:
+        """Токен вложения: POST /uploads?type=image даёт адрес загрузки, файл уходит туда
+        multipart-полем data (без токена бота — хост сторонний), в ответ — token (dev.max.ru)."""
+        response = await self._http.post("/uploads", params={"type": "image"})
+        response.raise_for_status()
+        upload_url = response.json()["url"]
+        uploaded = await self._files.post(
+            upload_url, files={"data": ("word.jpg", image, "image/jpeg")}
+        )
+        uploaded.raise_for_status()
+        token: str = uploaded.json()["token"]
+        return token
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> None:
         body: dict[str, Any] = {}

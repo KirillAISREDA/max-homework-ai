@@ -42,8 +42,9 @@ class Clarification(BaseModel):
     """Вопрос ученику по спорному заданию (bot/clarify.py)."""
 
     task_index: int
-    kind: Literal["answer", "sign", "line"]
+    kind: Literal["answer", "sign", "line", "word"]
     line_index: int | None = None  # строка решения для sign/line
+    finding_index: int | None = None  # находка item.findings для word
     attempts: int = 0  # неразобранных ответов
     # метка вопроса в payload кнопок: старая кнопка не должна ответить на следующий вопрос
     token: str = Field(default_factory=lambda: token_hex(4))
@@ -60,6 +61,8 @@ class ChatState(BaseModel):
     textbook_tasks: list[VisionTask] = Field(default_factory=list)
     textbook_saved_at: float | None = None  # время сохранения условий (TTL в pages.py)
     clarifications: list[Clarification] = Field(default_factory=list)  # очередь вопросов
+    # относительные пути PhotoStore фото альбома по порядку (Word.photo_index — индекс сюда)
+    photo_paths: list[str] = Field(default_factory=list)
 
 
 class StateStore(Protocol):

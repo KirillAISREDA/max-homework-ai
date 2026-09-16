@@ -20,12 +20,14 @@ from hwcheck.bot.clarify import (
     MAX_ATTEMPTS,
     apply_sign,
     apply_text,
+    apply_word,
     parse_sign_payload,
     plan_clarifications,
     question,
     retry_prompt,
 )
-from hwcheck.bot.fsm import ChatState, CheckedTask, StateStore
+from hwcheck.bot.crops import crop_word
+from hwcheck.bot.fsm import ChatState, CheckedTask, Clarification, StateStore
 from hwcheck.bot.max_api import MaxClient
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
@@ -221,9 +223,16 @@ class Bot:
         )
         return recognized
 
-    async def _recognize_all(self, user_id: int | None, urls: list[str]) -> list[RecognizedPhoto]:
-        """Сбой одного фото (сеть, vision) не теряет остальные; упали все — наверх."""
+    async def _recognize_all(
+        self, user_id: int | None, urls: list[str]
+    ) -> tuple[list[RecognizedPhoto], list[str]]:
+        """Сбой одного фото (сеть, vision) не теряет остальные; упали все — наверх.
+
+        Пути идут в одном порядке с результатами (album order): это и есть индекс,
+        на который ссылается `Word.photo_index` для кропа в уточняющем вопросе.
+        """
         results: list[RecognizedPhoto] = []
+        paths: list[str] = []
         failed = 0
         for url in urls:
             photo: str | None = None
@@ -232,6 +241,7 @@ class Bot:
                 # до vision: фото, на которых распознавание упало, — самые ценные для разбора
                 photo = self._save_photo(user_id, image)
                 results.append(await self._recognize(user_id, image, photo))
+                paths.append(photo or "")
             except Exception as exc:
                 failed += 1
                 logger.exception("photo failed: %s", url.split("?")[0])
@@ -240,7 +250,7 @@ class Bot:
                 )
         if urls and failed == len(urls):
             raise RuntimeError("all photos failed")
-        return results
+        return results, paths
 
     async def _process_photos(self, chat_id: int, user_id: int | None, urls: list[str]) -> None:
         """Все фото сообщения: учебник даёт условия, тетрадь — решения.
@@ -250,7 +260,8 @@ class Bot:
         """
         state = await self._store.get(chat_id)
         known = list(state.textbook_tasks) if textbook_is_fresh(state.textbook_saved_at) else []
-        album = split_pages(await self._recognize_all(user_id, urls), known)
+        recognized, photo_paths = await self._recognize_all(user_id, urls)
+        album = split_pages(recognized, known)
         notebook, textbook = album.notebook, album.textbook
         new_textbook, comment = album.new_textbook, album.comment
         if not notebook:
@@ -276,6 +287,7 @@ class Bot:
             textbook_tasks=textbook,
             textbook_saved_at=time.time() if textbook else None,
             clarifications=plan,
+            photo_paths=photo_paths,
         )
         await self._store.set(chat_id, new_state)
         await self._send_review(chat_id, new_state)
@@ -384,6 +396,16 @@ class Bot:
         clarification = state.clarifications[0]
         item = state.tasks[clarification.task_index]
         text, buttons = question(item, clarification)
+        if clarification.kind == "word":
+            image_token = await self._word_image_token(state, item, clarification)
+            self._events.log(
+                "clarification_asked",
+                user_id=user_id,
+                kind=clarification.kind,
+                with_image=image_token is not None,
+            )
+            await self._max.send_message(chat_id, text, buttons=buttons, image_token=image_token)
+            return
         self._events.log(
             "clarification_asked",
             user_id=user_id,
@@ -391,6 +413,27 @@ class Bot:
             reason=item.grade.uncertain_reason,
         )
         await self._max.send_message(chat_id, text, buttons=buttons)
+
+    async def _word_image_token(
+        self, state: ChatState, item: CheckedTask, clarification: Clarification
+    ) -> str | None:
+        """Кроп слова для вопроса «здесь написано …?»: любой сбой — вопрос уходит текстом."""
+        if clarification.finding_index is None:
+            return None
+        finding = item.findings[clarification.finding_index]
+        word = finding.word
+        if word is None or word.box is None:
+            return None
+        try:
+            path = state.photo_paths[word.photo_index]
+            image = self._photos.load(path) if self._photos is not None else None
+            if image is None:
+                return None
+            crop = crop_word(image, word.box)
+            return await self._max.upload_image(crop)
+        except Exception:
+            logger.warning("word crop/upload failed", exc_info=True)
+            return None
 
     async def _answer_clarification(
         self, chat_id: int, user_id: int | None, state: ChatState, updated: CheckedTask | None
@@ -421,6 +464,15 @@ class Bot:
             buttons = None
         else:
             tasks[clarification.task_index] = updated
+            if clarification.kind == "word" and clarification.finding_index is not None:
+                # спецификация каркаса §8: доля «нет» — мера ложных срабатываний OCR по предмету
+                confirmed = updated.findings[clarification.finding_index].confirmed
+                self._events.log(
+                    "finding_confirmed",
+                    user_id=user_id,
+                    user_initiated=True,
+                    answer="yes" if confirmed else "no",
+                )
             # отдельное событие: задание уже учтено в task_checked, в отчёте не дублируем
             self._events.log(
                 "task_clarified",
@@ -458,7 +510,12 @@ class Bot:
             current = state.clarifications[0]
             if token != current.token:
                 return  # кнопка прошлого вопроса: следующий вопрос она не отвечает
-            updated = apply_sign(state.tasks[current.task_index], current, key)
+            item = state.tasks[current.task_index]
+            updated = (
+                apply_word(item, current, key)
+                if current.kind == "word"
+                else apply_sign(item, current, key)
+            )
             await self._answer_clarification(chat_id, user_id, state, updated)
             return
         index = (

@@ -46,6 +46,10 @@ class PhotoStore:
         path.write_bytes(data)
         return key
 
+    def load(self, rel_path: str) -> bytes:
+        """Читает фото по ключу из `save`; отсутствующий файл (удалён по TTL/запросу) — наверх."""
+        return (self._root / rel_path).read_bytes()
+
     def purge_expired(self) -> int:
         """Удаляет файлы старше TTL и опустевшие каталоги дней; возвращает число файлов."""
         if not self._root.is_dir():

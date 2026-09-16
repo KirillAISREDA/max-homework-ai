@@ -15,6 +15,7 @@ from hwcheck.bot.pages import task_label
 from hwcheck.pipeline.grade import grade
 from hwcheck.pipeline.mathparse import parse_value
 from hwcheck.pipeline.schemas import VisionTask
+from hwcheck.subjects.base import Finding
 from hwcheck.subjects.math.module import findings_from_grade
 
 MAX_QUESTIONS = 2  # на одну домашку: больше — трение вместо помощи
@@ -32,6 +33,7 @@ SIGNS: dict[str, tuple[str, str]] = {
 }
 _TYPED_SIGNS = {"+": "plus", "-": "minus", "−": "minus", "*": "mul", "·": "mul", "×": "mul",
                 ":": "div", "÷": "div", "/": "div"}  # fmt: skip
+_TYPED_YES_NO = {"да": "yes", "нет": "no"}
 
 
 def plan_clarifications(tasks: list[CheckedTask]) -> list[Clarification]:
@@ -41,8 +43,25 @@ def plan_clarifications(tasks: list[CheckedTask]) -> list[Clarification]:
         if clarification is not None:
             plan.append(clarification)
         if len(plan) == MAX_QUESTIONS:
-            break
+            return plan
+    for index, item in enumerate(tasks):
+        for finding_index, finding in enumerate(item.findings):
+            if len(plan) == MAX_QUESTIONS:
+                return plan
+            if _is_word_candidate(finding):
+                plan.append(
+                    Clarification(task_index=index, kind="word", finding_index=finding_index)
+                )
     return plan
+
+
+def _is_word_candidate(finding: Finding) -> bool:
+    return (
+        finding.strength == "candidate"
+        and finding.word is not None
+        and finding.word.box is not None
+        and finding.confirmed is None
+    )
 
 
 def _clarification_for(index: int, item: CheckedTask) -> Clarification | None:
@@ -72,6 +91,10 @@ def question(item: CheckedTask, clarification: Clarification) -> tuple[str, Butt
         if item.grade.uncertain_reason == "no_answer":
             return f"{label}: не нашёл итоговый ответ. Какой ответ у тебя получился?", None
         return f"{label}: не разобрал ответ. Напиши его числом, как в тетради.", None
+    if clarification.kind == "word":
+        finding = _finding(item, clarification)
+        word = finding.word.text if finding.word is not None else ""
+        return f"{label}: здесь написано «{finding.actual or word}»?", word_buttons(clarification)
     line = _line(item, clarification)
     if clarification.kind == "sign":
         shown = _UNREADABLE.sub("?", line, count=1)
@@ -89,12 +112,24 @@ def retry_prompt(clarification: Clarification) -> tuple[str, Buttons | None]:
         return "Не понял 🙂 Напиши только число, без слов.", None
     if clarification.kind == "line":
         return "Не понял 🙂 Перепиши строку целиком, со знаком «=».", None
+    if clarification.kind == "word":
+        return "Нажми «Да» или «Нет» 👇", word_buttons(clarification)
     return "Нажми кнопку со знаком 👇", sign_buttons(clarification)
 
 
 def sign_buttons(clarification: Clarification) -> Buttons:
     token = clarification.token
     return [[callback_button(shown, f"clarify:{token}:{key}") for key, (shown, _) in SIGNS.items()]]
+
+
+def word_buttons(clarification: Clarification) -> Buttons:
+    token = clarification.token
+    return [
+        [
+            callback_button("Да", f"clarify:{token}:yes"),
+            callback_button("Нет", f"clarify:{token}:no"),
+        ]
+    ]
 
 
 def parse_sign_payload(payload: str) -> tuple[str, str] | None:
@@ -118,6 +153,9 @@ def apply_text(item: CheckedTask, clarification: Clarification, text: str) -> Ch
     if clarification.kind == "sign":
         key = _TYPED_SIGNS.get(text.strip())
         return apply_sign(item, clarification, key) if key else None
+    if clarification.kind == "word":
+        key = _TYPED_YES_NO.get(text.strip().lower())
+        return apply_word(item, clarification, key) if key else None
     if "=" not in text:
         return None
     return _replace_line(item, clarification, text.strip())
@@ -129,6 +167,18 @@ def apply_sign(item: CheckedTask, clarification: Clarification, key: str) -> Che
         return None
     line = _UNREADABLE.sub(SIGNS[key][1], _line(item, clarification), count=1)
     return _replace_line(item, clarification, line)
+
+
+def apply_word(item: CheckedTask, clarification: Clarification, key: str) -> CheckedTask | None:
+    """Ответ «здесь написано …?»; payload/текст недоверенные — не yes/no означает None."""
+    if clarification.kind != "word" or key not in ("yes", "no"):
+        return None
+    findings = list(item.findings)
+    index = clarification.finding_index
+    if index is None or not 0 <= index < len(findings):
+        return None
+    findings[index] = findings[index].model_copy(update={"confirmed": key == "yes"})
+    return item.model_copy(update={"findings": findings})
 
 
 def regrade(item: CheckedTask, task: VisionTask, task_index: int) -> CheckedTask:
@@ -169,3 +219,9 @@ def _line_index(clarification: Clarification) -> int:
     if clarification.line_index is None:
         raise ValueError(f"clarification {clarification.kind!r} without line_index")
     return clarification.line_index
+
+
+def _finding(item: CheckedTask, clarification: Clarification) -> Finding:
+    if clarification.finding_index is None:
+        raise ValueError(f"clarification {clarification.kind!r} without finding_index")
+    return item.findings[clarification.finding_index]

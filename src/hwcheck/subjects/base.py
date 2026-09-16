@@ -54,6 +54,9 @@ class Word(BaseModel):
     box: Box | None = None
     confidence: float | None = None
     line: int | None = None
+    # номер фото в альбоме (`ChatState.photo_paths`), к которому относятся координаты box;
+    # проставляет предметный модуль в `recognize`
+    photo_index: int = 0
 
 
 class SubjectTask(BaseModel):
