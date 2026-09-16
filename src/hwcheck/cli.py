@@ -16,7 +16,7 @@ from hwcheck.crypto import new_user_id_key
 from hwcheck.db.kb import PgKnowledgeBase
 from hwcheck.db.pool import create_pool
 from hwcheck.eval.offline import run_offline_eval
-from hwcheck.events import read_events, summarize_events
+from hwcheck.events import EventLog, read_events, summarize_events
 from hwcheck.kb_cli import load_words, review
 from hwcheck.llm import ChatMessage, GigaChatClient
 from hwcheck.pipeline.classifier import classify_error
@@ -158,7 +158,8 @@ async def _run(args: argparse.Namespace) -> None:
         try:
             kb = PgKnowledgeBase(pool)
             if args.kb_command == "review":
-                await review(kb, args.subject, limit=args.limit)
+                events = EventLog(Path(settings.events_path), settings.environment)
+                await review(kb, args.subject, limit=args.limit, events=events)
             elif args.kb_command == "load-words":
                 count = await load_words(kb, args.subject, args.source, args.path)
                 print(f"Загружено {count} слов")

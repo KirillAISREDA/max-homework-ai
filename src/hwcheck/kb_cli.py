@@ -13,6 +13,7 @@ from typing import Any
 
 from hwcheck.db.kb import PgKnowledgeBase
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
+from hwcheck.events import EventLog
 from hwcheck.subjects.kb_models import KbAnswer
 
 KnowledgeBaseImpl = PgKnowledgeBase | InMemoryKnowledgeBase
@@ -25,6 +26,7 @@ async def review(
     limit: int,
     read: Callable[[str], str] = input,
     write: Callable[[str], object] = print,
+    events: EventLog | None = None,
 ) -> int:
     done = 0
     for task, answer in await kb.unverified_answers(subject, limit):
@@ -51,6 +53,8 @@ async def review(
                         status="verified",
                     )  # fmt: skip
                 )
+        if events is not None:
+            events.log("kb_review", action=choice, subject=subject, answer_id=answer.id)
         done += 1
     return done
 

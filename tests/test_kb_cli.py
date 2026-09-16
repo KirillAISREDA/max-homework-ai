@@ -1,9 +1,11 @@
 """Консольная проверка базы знаний: очередь непроверенных ответов, загрузка словарей."""
 
+import json
 from pathlib import Path
 
 from hwcheck.db.kb import fingerprint
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
+from hwcheck.events import EventLog
 from hwcheck.kb_cli import load_words, review
 from hwcheck.subjects.kb_models import KbAnswer, KbPage, KbTask
 
@@ -62,3 +64,23 @@ async def test_load_words(tmp_path: Path) -> None:
     verbs = tmp_path / "verbs.json"
     verbs.write_text('{"go": {"past": "went"}}', encoding="utf-8")
     assert await load_words(kb, "english", "irregular_verbs", verbs) == 1
+
+
+async def test_review_logs_events(tmp_path: Path) -> None:
+    kb = InMemoryKnowledgeBase()
+    task_id, ids = await seed(kb)
+    answers = iter(["y", "n"])
+    events_file = tmp_path / "events.jsonl"
+    events = EventLog(events_file, "dev")
+    done = await review(
+        kb, "russian", limit=10, read=lambda _: next(answers), write=lambda _: None, events=events
+    )
+    assert done == 2
+    records = [json.loads(line) for line in events_file.read_text(encoding="utf-8").splitlines()]
+    assert len(records) == 2
+    assert records[0]["type"] == "kb_review"
+    assert records[0]["action"] == "y"
+    assert records[0]["subject"] == "russian"
+    assert records[0]["answer_id"] == ids[0]
+    assert records[1]["action"] == "n"
+    assert records[1]["answer_id"] == ids[1]
