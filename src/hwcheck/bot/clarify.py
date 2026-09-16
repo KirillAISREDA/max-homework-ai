@@ -15,6 +15,7 @@ from hwcheck.bot.pages import task_label
 from hwcheck.pipeline.grade import grade
 from hwcheck.pipeline.mathparse import parse_value
 from hwcheck.pipeline.schemas import VisionTask
+from hwcheck.subjects.math.module import findings_from_grade
 
 MAX_QUESTIONS = 2  # на одну домашку: больше — трение вместо помощи
 MAX_ATTEMPTS = 2  # неразобранный ответ: одна подсказка, затем оставляем как есть
@@ -109,7 +110,11 @@ def apply_text(item: CheckedTask, clarification: Clarification, text: str) -> Ch
     if clarification.kind == "answer":
         if parse_value(text) is None:
             return None
-        return regrade(item, item.task.model_copy(update={"student_answer": text.strip()}))
+        return regrade(
+            item,
+            item.task.model_copy(update={"student_answer": text.strip()}),
+            clarification.task_index,
+        )
     if clarification.kind == "sign":
         key = _TYPED_SIGNS.get(text.strip())
         return apply_sign(item, clarification, key) if key else None
@@ -126,20 +131,26 @@ def apply_sign(item: CheckedTask, clarification: Clarification, key: str) -> Che
     return _replace_line(item, clarification, line)
 
 
-def regrade(item: CheckedTask, task: VisionTask) -> CheckedTask:
+def regrade(item: CheckedTask, task: VisionTask, task_index: int) -> CheckedTask:
     if item.ref is not None:
         result = grade(
             task.student_solution_steps, task.student_answer, item.ref, condition=task.task_text
         )
     else:
         result = validator_only_grade(task.student_solution_steps, condition=task.task_text)
-    return CheckedTask(task=task, ref=item.ref, grade=result)
+    return CheckedTask(
+        task=task, ref=item.ref, grade=result, findings=findings_from_grade(task_index, result)
+    )
 
 
 def _replace_line(item: CheckedTask, clarification: Clarification, line: str) -> CheckedTask:
     steps = list(item.task.student_solution_steps)
     steps[_line_index(clarification)] = line
-    return regrade(item, item.task.model_copy(update={"student_solution_steps": steps}))
+    return regrade(
+        item,
+        item.task.model_copy(update={"student_solution_steps": steps}),
+        clarification.task_index,
+    )
 
 
 def _line(item: CheckedTask, clarification: Clarification) -> str:

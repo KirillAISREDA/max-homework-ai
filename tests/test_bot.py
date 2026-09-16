@@ -184,6 +184,26 @@ def test_pseudo_ref_uses_computed_value() -> None:
     assert ref.answer == "340"  # правильное значение, посчитанное валидатором
 
 
+async def test_findings_logged_and_saved(tmp_path: Path) -> None:
+    """Каждая находка — событие finding_created и запись в репозитории; всё в одном trace_id."""
+    from hwcheck.bot.fsm import ChatState
+    from hwcheck.db.findings import InMemoryFindingsRepository
+    from hwcheck.pipeline.schemas import VisionTask
+
+    bot, fake_max, events_path = make_bot(tmp_path)
+    findings = InMemoryFindingsRepository()
+    bot._findings = findings
+    task = VisionTask(number=7, task_text="", student_solution_steps=["2 + 2 = 5"], confidence=1)
+    checked = await bot._check_task(42, task)
+    assert checked.grade.verdict == "wrong" and checked.findings[0].strength == "verified"
+    [record] = findings.saved
+    assert (record.user_hash, record.task_number, record.kind) == (anonymize(42), "7", "arithmetic")
+    created = [e for e in read_events(events_path) if e["type"] == "finding_created"]
+    assert [(e["subject"], e["strength"]) for e in created] == [("math", "verified")]
+    assert record.trace_id is None  # trace_id есть только внутри handle_update
+    await bot._store.set(7, ChatState(phase="review", tasks=[checked]))
+
+
 def test_anonymize_stable_and_irreversible() -> None:
     assert anonymize(42) == anonymize(42)
     assert anonymize(42) != anonymize(43)

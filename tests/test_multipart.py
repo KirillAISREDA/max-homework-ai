@@ -12,6 +12,7 @@ import pytest
 from conftest import FakeLLMClient
 from hwcheck.bot.fsm import CheckedTask
 from hwcheck.bot.handlers import Bot, _validator_only_grade
+from hwcheck.config import Settings
 from hwcheck.pipeline.grade import grade, is_multipart
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import RefSolution
@@ -146,7 +147,8 @@ async def test_level_3_context_names_error_line_value() -> None:
 
 
 async def test_bot_sets_tutor_target_from_error_line() -> None:
-    bot = Bot(None, None, None, None, None)  # type: ignore[arg-type]
+    # settings реальный: конструктор строит self._module через self._models (Task 8)
+    bot = Bot(None, None, None, None, Settings(_env_file=None))  # type: ignore[arg-type]
     steps = ["803 + 169 = 972", "972 - 100 = 862"]
     item = CheckedTask(
         task=VisionTask(number=1, task_text="", student_solution_steps=steps, confidence=1),

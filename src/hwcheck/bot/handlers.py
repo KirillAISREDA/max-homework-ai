@@ -12,7 +12,6 @@ from pathlib import Path
 from hwcheck.bot.check import (
     CheckModels,
     RecognizedPhoto,
-    check_task,
     recognize_photo,
     split_pages,
     validator_only_grade,
@@ -41,15 +40,18 @@ from hwcheck.bot.summary import clarified_line, review_header, task_line
 from hwcheck.bot.summary import lower as _lower
 from hwcheck.bot.summary import remaining_buttons as _remaining_buttons
 from hwcheck.config import Settings
-from hwcheck.events import EventLog, anonymize, trace
+from hwcheck.db.findings import FindingRecord, FindingsRepository
+from hwcheck.events import EventLog, anonymize, current_trace_id, trace
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
-from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.schemas import VisionTask
-from hwcheck.pipeline.solver import FileCache, StructuredOutputError
+from hwcheck.pipeline.solver import FileCache, RefSolution
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
-from hwcheck.subjects.math.module import _error_line_value, _pseudo_ref
+from hwcheck.subjects.base import Finding, Reference, SubjectTask, TaskResult
+from hwcheck.subjects.math.module import _pseudo_ref as _pseudo_ref  # ре-экспорт для тестов
+from hwcheck.subjects.math.module import findings_from_grade, to_subject_task
+from hwcheck.subjects.registry import SubjectDeps, module_for
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,8 @@ class Bot:
         *,
         photos: PhotoStore | None = None,
         onboarding: Onboarding | None = None,
+        subjects: SubjectDeps | None = None,
+        findings: FindingsRepository | None = None,
     ) -> None:
         self._max = max_client
         self._llm = llm
@@ -91,7 +95,10 @@ class Bot:
         self._photos = photos
         # None — ONBOARDING_REQUIRED=false: проверка без онбординга, как до этапа 2
         self._onboarding = onboarding
+        self._findings = findings
         self._cache = FileCache(Path(".cache/solver"))
+        # математика — единственный реализованный предмет; профиль ученика определит код позже
+        self._module = module_for("math", subjects or SubjectDeps(llm, self._models, self._cache))
 
     @property
     def _models(self) -> CheckModels:
@@ -276,31 +283,79 @@ class Bot:
             await self._ask_clarification(chat_id, user_id, new_state)
 
     async def _check_task(self, user_id: int | None, task: VisionTask) -> CheckedTask:
-        checked = await check_task(self._llm, task, self._models, self._cache)
-        if checked.solved is not None:
-            result_tokens = checked.solver_result
+        subject_task = to_subject_task(task)
+        [result] = await self._module.check([subject_task], [])
+        payload = result.payload
+        if payload.get("solver_from_cache") is not None:
             self._events.log(
                 "solver_call",
                 user_id=user_id,
                 component="solver",
-                from_cache=checked.solved.from_cache,
-                tokens=(result_tokens.tokens_in + result_tokens.tokens_out) if result_tokens else 0,
+                from_cache=payload["solver_from_cache"],
+                tokens=payload["solver_tokens"],
             )
-        result = checked.grade
+        grade = GradeResult.model_validate(payload["grade"])
+        ref = (
+            RefSolution.model_validate(result.reference.payload["ref"])
+            if result.reference is not None and "ref" in result.reference.payload
+            else None
+        )
+        if result.reference is not None:
+            self._events.log(
+                "reference_resolved",
+                user_id=user_id,
+                subject=self._module.code,
+                origin=result.reference.origin,
+                trust=result.reference.trust,
+            )
         # что стало с эталоном — вторая половина ответа на вопрос «почему не уверен»
-        ref_status = checked.ref_status
         self._events.log(
             "task_checked",
             user_id=user_id,
             component="validator",
-            verdict=result.verdict,
-            reason=result.uncertain_reason,
-            ref_status=ref_status,
+            verdict=grade.verdict,
+            reason=grade.uncertain_reason,
+            ref_status=payload["ref_status"],
             n_steps=len(task.student_solution_steps),
-            n_parsed=sum(1 for c in result.line_checks if c.status in ("ok", "mismatch")),
+            n_parsed=sum(1 for c in grade.line_checks if c.status in ("ok", "mismatch")),
             has_answer=bool((task.student_answer or "").strip()),
         )
-        return CheckedTask(task=task, ref=checked.ref, grade=result)
+        await self._record_findings(user_id, subject_task, result.findings)
+        return CheckedTask(task=task, ref=ref, grade=grade, findings=result.findings)
+
+    async def _record_findings(
+        self, user_id: int | None, task: SubjectTask, findings: list[Finding]
+    ) -> None:
+        for finding in findings:
+            self._events.log(
+                "finding_created",
+                user_id=user_id,
+                subject=self._module.code,
+                kind=finding.kind,
+                strength=finding.strength,
+                rule_code=finding.rule_code,
+            )
+        user_hash = anonymize(user_id)
+        if self._findings is None or user_hash is None or not findings:
+            return
+        records = [
+            FindingRecord(
+                user_hash=user_hash,
+                subject=self._module.code,
+                trace_id=current_trace_id(),
+                task_number=task.number,
+                kind=f.kind,
+                strength=f.strength,
+                rule_code=f.rule_code,
+                confirmed=f.confirmed,
+            )
+            for f in findings
+        ]
+        try:
+            await self._findings.save(records)
+        except Exception:
+            # аналитика не должна ломать проверку: ребёнок ждёт сводку
+            logger.exception("findings save failed")
 
     async def _send_review(self, chat_id: int, state: ChatState) -> None:
         asked = {c.task_index for c in state.clarifications}
@@ -435,36 +490,35 @@ class Bot:
         await self._max.send_message(chat_id, reply)
 
     async def _start_tutoring(self, user_id: int | None, item: CheckedTask) -> TutorSession:
-        ref = item.ref or _pseudo_ref(item.grade)
-        error = None
-        if item.ref is not None:
-            try:
-                error = await classify_error(
-                    self._llm,
-                    item.task.task_text,
-                    item.task.student_solution_steps,
-                    item.task.student_answer,
-                    item.ref,
-                    item.grade,
-                    model=self._settings.tutor_model,
-                )
-                self._events.log(
-                    "error_classified",
-                    user_id=user_id,
-                    component="classifier",
-                    error_type=error.error_type,
-                )
-            except StructuredOutputError:
-                logger.warning("classifier failed")
-        return TutorSession(
-            task_text=item.task.task_text or "\n".join(item.task.student_solution_steps),
-            student_steps=item.task.student_solution_steps,
-            student_answer=item.task.student_answer,
-            ref=ref,
-            error=error,
-            first_error_line=item.grade.first_error_line,
-            expected=_error_line_value(item.grade),
+        subject_task = to_subject_task(item.task)
+        reference = (
+            Reference(
+                task_number=subject_task.number,
+                origin="derived",
+                trust="verified",
+                payload={"ref": item.ref.model_dump()},
+            )
+            if item.ref is not None
+            else None
         )
+        result = TaskResult(
+            task_index=0,
+            findings=item.findings or findings_from_grade(0, item.grade),
+            reference=reference,
+            payload={
+                "grade": item.grade.model_dump(),
+                "ref_status": "ok" if item.ref is not None else "no_condition",
+            },
+        )
+        session = await self._module.start_tutoring(result, subject_task, kb=None)
+        if session.error is not None:
+            self._events.log(
+                "error_classified",
+                user_id=user_id,
+                component="classifier",
+                error_type=session.error.error_type,
+            )
+        return session
 
     async def _on_text(self, chat_id: int, user_id: int | None, text: str) -> None:
         self._events.log("message_received", user_id=user_id, user_initiated=True)
