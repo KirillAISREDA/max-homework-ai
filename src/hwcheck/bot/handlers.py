@@ -18,6 +18,7 @@ from hwcheck.bot.check import (
 )
 from hwcheck.bot.clarify import (
     MAX_ATTEMPTS,
+    _finding,
     apply_sign,
     apply_text,
     apply_word,
@@ -395,6 +396,12 @@ class Bot:
     async def _ask_clarification(self, chat_id: int, user_id: int | None, state: ChatState) -> None:
         clarification = state.clarifications[0]
         item = state.tasks[clarification.task_index]
+        if clarification.kind == "word" and _finding(item, clarification) is None:
+            # находка пропала/устарела между постановкой в очередь и вопросом (пересчёт другого
+            # вопроса той же задачи — code review 17.09): молча снимаем вопрос, а не падаем
+            # и не спрашиваем про случайную находку по тому же индексу
+            await self._skip_clarification(chat_id, user_id, state, clarification)
+            return
         text, buttons = question(item, clarification)
         if clarification.kind == "word":
             image_token = await self._word_image_token(state, item, clarification)
@@ -414,17 +421,28 @@ class Bot:
         )
         await self._max.send_message(chat_id, text, buttons=buttons)
 
+    async def _skip_clarification(
+        self, chat_id: int, user_id: int | None, state: ChatState, clarification: Clarification
+    ) -> None:
+        """Вопрос без живой находки — снимается без сообщения ребёнку, переходим к следующему."""
+        rest = state.clarifications[1:]
+        state = state.model_copy(
+            update={"clarifications": rest, "phase": "clarifying" if rest else "review"}
+        )
+        await self._store.set(chat_id, state)
+        self._events.log("clarification_skipped", user_id=user_id, kind=clarification.kind)
+        if rest:
+            await self._ask_clarification(chat_id, user_id, state)
+
     async def _word_image_token(
         self, state: ChatState, item: CheckedTask, clarification: Clarification
     ) -> str | None:
         """Кроп слова для вопроса «здесь написано …?»: любой сбой — вопрос уходит текстом."""
-        if clarification.finding_index is None:
-            return None
-        finding = item.findings[clarification.finding_index]
-        word = finding.word
-        if word is None or word.box is None:
-            return None
         try:
+            finding = _finding(item, clarification)
+            word = finding.word if finding is not None else None
+            if word is None or word.box is None:
+                return None
             path = state.photo_paths[word.photo_index]
             image = self._photos.load(path) if self._photos is not None else None
             if image is None:
@@ -466,12 +484,14 @@ class Bot:
             tasks[clarification.task_index] = updated
             if clarification.kind == "word" and clarification.finding_index is not None:
                 # спецификация каркаса §8: доля «нет» — мера ложных срабатываний OCR по предмету
-                confirmed = updated.findings[clarification.finding_index].confirmed
+                confirmed_finding = updated.findings[clarification.finding_index]
                 self._events.log(
                     "finding_confirmed",
                     user_id=user_id,
                     user_initiated=True,
-                    answer="yes" if confirmed else "no",
+                    subject=self._module.code,
+                    kind=confirmed_finding.kind,
+                    answer="yes" if confirmed_finding.confirmed else "no",
                 )
             # отдельное событие: задание уже учтено в task_checked, в отчёте не дублируем
             self._events.log(

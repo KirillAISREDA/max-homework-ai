@@ -55,7 +55,8 @@ class Word(BaseModel):
     confidence: float | None = None
     line: int | None = None
     # номер фото в альбоме (`ChatState.photo_paths`), к которому относятся координаты box;
-    # проставляет предметный модуль в `recognize`
+    # `recognize(image)` видит один снимок и не знает его места в альбоме — проставляет бот при
+    # сборке альбома (этап 3, когда бот перейдёт на `SubjectPage`), пока всегда 0
     photo_index: int = 0
 
 

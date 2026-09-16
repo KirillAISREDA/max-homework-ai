@@ -6,9 +6,16 @@ from pathlib import Path
 from PIL import Image
 
 from hwcheck.bot.check import validator_only_grade
-from hwcheck.bot.clarify import apply_word, plan_clarifications, question
+from hwcheck.bot.clarify import (
+    _finding,
+    apply_text,
+    apply_word,
+    plan_clarifications,
+    question,
+    regrade,
+)
 from hwcheck.bot.crops import crop_word
-from hwcheck.bot.fsm import CheckedTask
+from hwcheck.bot.fsm import CheckedTask, Clarification
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.subjects.base import Box, Finding, Word
 
@@ -54,3 +61,47 @@ def test_word_questions_share_limit_with_math(tmp_path: Path) -> None:
     math_item = CheckedTask(task=unsure, ref=None, grade=validator_only_grade(["<неразборчиво>"]))
     plan = plan_clarifications([math_item, item_with_word(), item_with_word()])
     assert [c.kind for c in plan] == ["line", "word"]  # MAX_QUESTIONS = 2
+
+
+def test_word_apply_text_accepts_da_net() -> None:
+    item = item_with_word()
+    [clarification] = plan_clarifications([item])
+    confirmed = apply_text(item, clarification, "Да")
+    assert confirmed is not None and confirmed.findings[0].confirmed is True
+    denied = apply_text(item, clarification, "нет")
+    assert denied is not None and denied.findings[0].confirmed is False
+    assert apply_text(item, clarification, "может быть") is None
+
+
+def test_regrade_preserves_word_finding_and_replaces_math() -> None:
+    """Пересчёт другого (математического) вопроса той же задачи не должен терять word-находку —
+    иначе очередная word-clarification указывает на чужую находку (code review 17.09)."""
+    task = VisionTask(
+        number=1, task_text="", student_solution_steps=["<неразборчиво>"], confidence=1
+    )
+    math_finding = Finding(
+        task_index=0, kind="uncertain", strength="candidate", detail="не уверен в проверке"
+    )
+    word = Word(text="машына", box=Box(x0=1, y0=1, x1=9, y1=9), confidence=0.4)
+    word_finding = Finding(
+        task_index=0, kind="spelling", strength="candidate", actual="машына", word=word
+    )
+    item = CheckedTask(
+        task=task,
+        ref=None,
+        grade=validator_only_grade(["<неразборчиво>"]),
+        findings=[math_finding, word_finding],
+    )
+    fixed = task.model_copy(update={"student_solution_steps": ["2 + 2 = 5"]})
+
+    result = regrade(item, fixed, 0)
+
+    assert result.grade.verdict == "wrong"
+    assert result.findings[1] == word_finding  # word-находка осталась на своём месте
+    assert result.findings[0].kind == "arithmetic" and result.findings[0].strength == "verified"
+
+
+def test_finding_returns_none_past_end() -> None:
+    item = item_with_word()
+    clarification = Clarification(task_index=0, kind="word", finding_index=5)
+    assert _finding(item, clarification) is None

@@ -418,3 +418,78 @@ async def test_text_after_review_points_to_buttons_not_welcome(tmp_path: Path) -
     await store.set(7, ChatState(phase="review", tasks=[wrong], resolved_indices=[0]))
     await bot.handle_update(MaxUpdate.model_validate(TEXT_UPDATE))
     assert fake_max.sent[-1][1:] == (REVIEW_DONE, None)
+
+
+def _word_clarification_state(photo_paths: list[str]) -> Any:
+    """`ChatState` с одним заданием и одним word-вопросом по нему (code review 17.09)."""
+    from hwcheck.bot.fsm import ChatState, CheckedTask, Clarification
+    from hwcheck.pipeline.schemas import VisionTask
+    from hwcheck.subjects.base import Box, Finding, Word
+
+    task = VisionTask(number=3, task_text="", student_solution_steps=[], confidence=1)
+    word = Word(text="машына", box=Box(x0=5, y0=5, x1=40, y1=20), confidence=0.4, photo_index=0)
+    finding = Finding(
+        task_index=0, kind="spelling", strength="candidate", actual="машына", word=word
+    )
+    item = CheckedTask(task=task, ref=None, grade=_validator_only_grade([]), findings=[finding])
+    clarification = Clarification(task_index=0, kind="word", finding_index=0, token="tok1")
+    return ChatState(
+        phase="clarifying",
+        tasks=[item],
+        clarifications=[clarification],
+        photo_paths=photo_paths,
+    )
+
+
+async def test_word_clarification_sends_crop_and_confirms(tmp_path: Path) -> None:
+    """Вопрос «здесь написано …?» уходит с картинкой; ответ подтверждает находку (спец. §8)."""
+    import io
+
+    from PIL import Image
+
+    photos = PhotoStore(tmp_path / "photos", ttl_days=30)
+    buffer = io.BytesIO()
+    Image.new("RGB", (100, 50), "white").save(buffer, format="JPEG")
+    photo_path = photos.save("u1", buffer.getvalue())
+
+    bot, fake_max, events_path = make_bot(tmp_path, photos=photos)
+    state = _word_clarification_state([photo_path])
+    await bot._store.set(7, state)
+    await bot._ask_clarification(7, 42, state)
+
+    assert fake_max.image_tokens[-1] == "tok"
+    assert fake_max.sent[-1][1] == "№3: здесь написано «машына»?"
+    asked = [e for e in read_events(events_path) if e["type"] == "clarification_asked"][-1]
+    assert asked["kind"] == "word" and asked["with_image"] is True
+
+    callback_update = {
+        "update_type": "message_callback",
+        "chat_id": 7,
+        "callback": {"callback_id": "cb1", "payload": "clarify:tok1:yes", "user": {"user_id": 42}},
+    }
+    await bot.handle_update(MaxUpdate.model_validate(callback_update))
+
+    confirmed_state = await bot._store.get(7)
+    assert confirmed_state.tasks[0].findings[0].confirmed is True
+    finding_confirmed = [e for e in read_events(events_path) if e["type"] == "finding_confirmed"][
+        -1
+    ]
+    assert finding_confirmed["answer"] == "yes"
+    assert finding_confirmed["subject"] == "math"
+    assert finding_confirmed["kind"] == "spelling"
+    assert fake_max.sent[-1][1] == "№3 — есть ошибка (слово «машына») ❌"
+
+
+async def test_word_clarification_falls_back_to_text_without_photo(tmp_path: Path) -> None:
+    """Фото недоступно (не сохранилось/удалено) — вопрос уходит текстом, без падения."""
+    photos = PhotoStore(tmp_path / "photos", ttl_days=30)
+    bot, fake_max, events_path = make_bot(tmp_path, photos=photos)
+    state = _word_clarification_state(["missing.jpg"])
+    await bot._store.set(7, state)
+
+    await bot._ask_clarification(7, 42, state)
+
+    assert fake_max.image_tokens[-1] is None
+    assert fake_max.sent[-1][1] == "№3: здесь написано «машына»?"
+    asked = [e for e in read_events(events_path) if e["type"] == "clarification_asked"][-1]
+    assert asked["kind"] == "word" and asked["with_image"] is False

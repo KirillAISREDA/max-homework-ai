@@ -34,6 +34,9 @@ SIGNS: dict[str, tuple[str, str]] = {
 _TYPED_SIGNS = {"+": "plus", "-": "minus", "−": "minus", "*": "mul", "·": "mul", "×": "mul",
                 ":": "div", "÷": "div", "/": "div"}  # fmt: skip
 _TYPED_YES_NO = {"да": "yes", "нет": "no"}
+# kind находок, которые пересчитывает findings_from_grade (regrade их заменяет, не находки других
+# предметов вроде word — код-ревью 17.09: пересчёт не должен терять несвязанные находки)
+MATH_KINDS = {"arithmetic", "uncertain"}
 
 
 def plan_clarifications(tasks: list[CheckedTask]) -> list[Clarification]:
@@ -93,6 +96,11 @@ def question(item: CheckedTask, clarification: Clarification) -> tuple[str, Butt
         return f"{label}: не разобрал ответ. Напиши его числом, как в тетради.", None
     if clarification.kind == "word":
         finding = _finding(item, clarification)
+        if finding is None:
+            # regrade/ответ на другой вопрос успели снять находку — вызывающий код должен был
+            # отфильтровать такой вопрос через _finding раньше, а не звать question()
+            # (handlers._ask_clarification)
+            raise ValueError("word clarification without a live finding")
         word = finding.word.text if finding.word is not None else ""
         return f"{label}: здесь написано «{finding.actual or word}»?", word_buttons(clarification)
     line = _line(item, clarification)
@@ -188,13 +196,33 @@ def regrade(item: CheckedTask, task: VisionTask, task_index: int) -> CheckedTask
         )
     else:
         result = validator_only_grade(task.student_solution_steps, condition=task.task_text)
+    findings = _merge_findings(item.findings, findings_from_grade(task_index, result))
     return CheckedTask(
         task=task,
         ref=item.ref,
         grade=result,
-        findings=findings_from_grade(task_index, result),
+        findings=findings,
         ref_status=item.ref_status,  # эталон не пересчитывается — статус остаётся тем же
     )
+
+
+def _merge_findings(old: list[Finding], new_math: list[Finding]) -> list[Finding]:
+    """Пересчёт даёт только математические находки (`findings_from_grade`, не больше одной):
+    они встают на место прежней математической находки, прочие (например, word из другого
+    предмета) остаются на своих местах; без прежней математической находки — новые добавляются
+    в конец; если пересчёт не дал ни одной — прежняя просто пропадает (найденная ошибка ушла)."""
+    merged: list[Finding] = []
+    inserted = False
+    for finding in old:
+        if finding.kind in MATH_KINDS:
+            if not inserted:
+                merged.extend(new_math)
+                inserted = True
+        else:
+            merged.append(finding)
+    if not inserted:
+        merged.extend(new_math)
+    return merged
 
 
 def _replace_line(item: CheckedTask, clarification: Clarification, line: str) -> CheckedTask:
@@ -221,7 +249,15 @@ def _line_index(clarification: Clarification) -> int:
     return clarification.line_index
 
 
-def _finding(item: CheckedTask, clarification: Clarification) -> Finding:
+def _finding(item: CheckedTask, clarification: Clarification) -> Finding | None:
+    """Находка `word`-вопроса — если она ещё живая (кандидат без ответа, со словом), иначе None:
+    её могли снять пересчётом другого вопроса той же задачи или уже ответить на неё раньше."""
     if clarification.finding_index is None:
-        raise ValueError(f"clarification {clarification.kind!r} without finding_index")
-    return item.findings[clarification.finding_index]
+        return None
+    index = clarification.finding_index
+    if not 0 <= index < len(item.findings):
+        return None
+    finding = item.findings[index]
+    if finding.word is None or finding.strength != "candidate" or finding.confirmed is not None:
+        return None
+    return finding
