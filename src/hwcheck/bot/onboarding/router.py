@@ -198,8 +198,9 @@ class Onboarding:
         if not payload.startswith("ob:"):  # кнопка проверки у того, кто онбординг не прошёл
             await self._show(actor, position)
             return "handled"
-        self._ctx.log("button_pressed", actor, payload=payload)
         name, _, arg = payload.removeprefix("ob:").partition(":")
+        # только действие: id профиля и метка ссылки связали бы в журнале хэш родителя с детьми
+        self._ctx.log("button_pressed", actor, payload=f"ob:{name}")
         action = self._actions.get(name)
         route = await action(actor, position, arg) if action is not None else None
         if route is None:

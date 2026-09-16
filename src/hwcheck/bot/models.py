@@ -106,8 +106,10 @@ class MaxUpdate(_Model):
 
     @property
     def effective_user_id(self) -> int | None:
-        if self.callback is not None and self.callback.user is not None:
-            return self.callback.user.user_id
+        if self.update_type == "message_callback":
+            # нажал callback.user; message.sender — автор сообщения с кнопкой, то есть сам бот
+            user = self.callback.user if self.callback is not None else None
+            return user.user_id if user is not None else None
         if self.message is not None and self.message.sender is not None:
             return self.message.sender.user_id
         return self.user.user_id if self.user else None

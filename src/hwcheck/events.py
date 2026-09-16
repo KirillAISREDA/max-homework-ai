@@ -107,6 +107,7 @@ def summarize_events(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, dict
 
 
 _id_hash_key: bytes | None = None
+_INVITE_DOMAIN = b"invite:"
 
 
 def set_id_hash_key(key: str | None) -> None:
@@ -130,10 +131,14 @@ def anonymize(user_id: int | None) -> str | None:
 
 def keyed_digest(value: str) -> str:
     """Полный HMAC-SHA256 секрета с малым перебором (запасной код приглашения: 32⁸ ≈ 2⁴⁰), чтобы
-    хэш из утёкшей базы или бэкапа не подбирался без ключа; без ключа (локально) — sha256."""
+    хэш из утёкшей базы или бэкапа не подбирался без ключа; без ключа (локально) — sha256.
+
+    Домен `invite:` отделяет эти хэши от `anonymize` на том же ключе: иначе у кода из одних цифр
+    начало хэша совпало бы с обезличенным id."""
+    message = _INVITE_DOMAIN + value.encode()
     if _id_hash_key is None:
-        return hashlib.sha256(value.encode()).hexdigest()
-    return hmac.new(_id_hash_key, value.encode(), hashlib.sha256).hexdigest()
+        return hashlib.sha256(message).hexdigest()
+    return hmac.new(_id_hash_key, message, hashlib.sha256).hexdigest()
 
 
 def legacy_anonymize(user_id: int | None) -> str | None:

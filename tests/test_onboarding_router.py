@@ -108,6 +108,10 @@ async def test_parent_with_two_young_children(tmp_path: Path) -> None:
     assert question == texts.WHOSE_HOMEWORK
     assert await ob.route(press(2, payloads(buttons)[1])) == CheckPhotos(["u2"])
     assert await ob.route(photo(2, "u3")) == CheckPhotos(["u3"])
+    # в журнал — только действие: id профиля и метки ссылок связали бы хэш родителя с детьми (F7)
+    pressed = [e["payload"] for e in kit.events("button_pressed")]
+    assert pressed[-1] == "ob:whose"
+    assert "ob:pgrade" in pressed and all(p.count(":") == 1 for p in pressed)
 
     assert await ob.route(text(2, "что дальше?")) == "handled"
     assert kit.last(2)[0].startswith(texts.PARENT_STATUS_HEADER)
@@ -189,6 +193,22 @@ async def test_group_chat_updates_are_swallowed(tmp_path: Path) -> None:
 
     assert await ob.route(photo(7, "u", chat_type="dialog")) == "handled"
     assert kit.last(7)[0] == texts.HELLO  # в диалоге с ботом — как обычно
+
+
+async def test_callback_without_user_is_swallowed(tmp_path: Path) -> None:
+    """Нажатие без callback.user не приписывается боту — отправителю сообщения (F5)."""
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    update = MaxUpdate.model_validate(
+        {
+            "update_type": "message_callback",
+            "callback": {"callback_id": "cb", "payload": "ob:role:student"},
+            "message": {"sender": {"user_id": 999}, "recipient": {"chat_id": chat(9)}},
+        }
+    )
+    assert await ob.route(update) == "handled"
+    assert kit.max.sent == [] and kit.max.callbacks == ["cb"]
+    assert kit.events() == []
 
 
 async def test_parent_first_then_child_joins_by_link(tmp_path: Path) -> None:

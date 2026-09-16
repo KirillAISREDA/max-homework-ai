@@ -43,3 +43,19 @@ def test_bot_started_payload_is_parsed() -> None:
     assert update.payload == "p_abcdefghijklmnopqrstuv"
     assert (update.effective_chat_id, update.effective_user_id) == (70, 7)
     assert MaxUpdate.model_validate({"update_type": "bot_started"}).payload is None
+
+
+def test_callback_without_user_is_not_attributed_to_message_sender() -> None:
+    """Нажатие без callback.user — не отправитель сообщения с кнопкой, то есть не бот (F5)."""
+    update = MaxUpdate.model_validate(
+        {
+            "update_type": "message_callback",
+            "callback": {"callback_id": "cb", "payload": "ob:role:parent"},
+            "message": {
+                "sender": {"user_id": 999, "name": "Домашка"},
+                "recipient": {"chat_id": 70},
+            },
+        }
+    )
+    assert update.effective_chat_id == 70
+    assert update.effective_user_id is None

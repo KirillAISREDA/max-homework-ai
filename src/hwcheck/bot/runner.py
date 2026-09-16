@@ -187,6 +187,13 @@ def make_onboarding(
     return Onboarding(ctx)
 
 
+def log_onboarding_mode(settings: Settings, onboarding: Onboarding | None) -> None:
+    """Режим онбординга в лог; выключенный флаг в prod — предупреждение, а не молчание."""
+    logger.info("onboarding: %s", "required" if onboarding is not None else "off")
+    if onboarding is None and settings.environment == "prod":
+        logger.warning("ONBOARDING_REQUIRED=false в prod: фото проверяются без согласия родителя")
+
+
 async def run_polling(settings: Settings) -> None:
     if not settings.max_token:
         raise SystemExit("Не задан MAX_TOKEN (токен бота MAX, см. .env.example)")
@@ -231,7 +238,7 @@ async def run_polling(settings: Settings) -> None:
             events=events,
             me=me,
         )
-        logger.info("onboarding: %s", "required" if onboarding is not None else "off")
+        log_onboarding_mode(settings, onboarding)
         bot = Bot(
             max_client,
             llm,

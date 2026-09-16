@@ -402,6 +402,9 @@ class PgProfileRepository:
             if profile["parent_user_id"] is not None:
                 return LinkOutcome("has_parent")
             parent = await _get_or_create(conn, parent_hash, parent_id_enc, "parent")
+            if parent.role != "parent":
+                # аккаунт ученика успел появиться после проверки роли выше — записей ещё не было
+                return LinkOutcome("role_mismatch")
             child = await conn.fetchrow(
                 "SELECT max_user_hash, max_user_id_enc FROM users WHERE id = $1",
                 invite["created_by"],

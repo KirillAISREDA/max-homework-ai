@@ -1,5 +1,6 @@
 """Старт бота с онбордингом (спецификация §11, §13): без базы, ключей, username — не стартует."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,7 @@ import pytest
 from hwcheck.bot.fsm import InMemoryStateStore
 from hwcheck.bot.onboarding.router import Onboarding
 from hwcheck.bot.onboarding.state import RedisOnboardingStateStore
-from hwcheck.bot.runner import check_onboarding_settings, make_onboarding
+from hwcheck.bot.runner import check_onboarding_settings, log_onboarding_mode, make_onboarding
 from hwcheck.config import Settings
 from hwcheck.crypto import new_user_id_key
 from hwcheck.events import EventLog
@@ -66,3 +67,19 @@ def test_onboarding_needs_policy_text(monkeypatch: pytest.MonkeyPatch, tmp_path:
     }
     with pytest.raises(SystemExit, match="политики"):
         make_onboarding(settings(), pool=object(), me={"username": "domashka_bot"}, **common)
+
+
+def test_onboarding_off_in_prod_is_warned(caplog: pytest.LogCaptureFixture) -> None:
+    """Выключенный флаг в prod не молчит: фото проверяются без согласия родителя (F9)."""
+    prod = Settings(_env_file=None, environment="prod")
+    with caplog.at_level(logging.INFO, logger="hwcheck.bot.runner"):
+        log_onboarding_mode(prod, None)
+    assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
+        "ONBOARDING_REQUIRED=false в prod: фото проверяются без согласия родителя"
+    ]
+    caplog.clear()
+    enabled: Any = object()  # вместо Onboarding: важно только, что онбординг собран
+    with caplog.at_level(logging.INFO, logger="hwcheck.bot.runner"):
+        log_onboarding_mode(Settings(_env_file=None), None)
+        log_onboarding_mode(prod, enabled)
+    assert [r.getMessage() for r in caplog.records] == ["onboarding: off", "onboarding: required"]
