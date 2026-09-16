@@ -135,7 +135,9 @@ class ProfileRepository(Protocol):
         ...
 
     async def decline_parent_invite(self, token_hash: str, now: datetime) -> LinkOutcome:
-        """Родитель отказал: ссылка погашена, родитель не сохраняется."""
+        """Родитель отказал: ссылка погашена, родитель не сохраняется. Ребёнка уже подключил
+        другой родитель, пока эта ссылка ждала ответа, — `has_parent`: ссылка тоже погашается
+        (второй раз не открыть), но уведомления нет — ребёнку уже сообщили о согласии."""
         ...
 
     async def accept_child_invite(
@@ -427,9 +429,16 @@ class PgProfileRepository:
             invite, result = await _lock_usable(conn, token_hash, "student_invites_parent", now)
             if invite is None:
                 return LinkOutcome(result)
+            profile = await conn.fetchrow(
+                "SELECT parent_user_id FROM student_profiles WHERE user_id = $1 FOR UPDATE",
+                invite["created_by"],
+            )
             await conn.execute(
                 "UPDATE invites SET used_at = $1 WHERE token_hash = $2", now, token_hash
             )
+            if profile is not None and profile["parent_user_id"] is not None:
+                # другой родитель успел согласиться, пока эта ссылка ждала ответа (§11)
+                return LinkOutcome("has_parent")
             child_enc = await conn.fetchval(
                 "SELECT max_user_id_enc FROM users WHERE id = $1", invite["created_by"]
             )

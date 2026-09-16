@@ -156,6 +156,17 @@ async def test_decline_burns_invite_without_storing_parent(repo: ProfileReposito
     assert await repo.get_account("p1") is None
 
 
+async def test_decline_after_other_parent_accepted(repo: ProfileRepository) -> None:
+    profile = await student(repo)
+    first = await parent_invite(repo, profile)
+    second = await parent_invite(repo, profile)  # ребёнок отправил ссылку двоим
+    assert (await repo.accept_parent_invite(first, "p1", b"p1", "v0", NOW)).result == "ok"
+
+    outcome = await repo.decline_parent_invite(second, NOW)
+    assert (outcome.result, outcome.notify) == ("has_parent", None)
+    assert (await repo.accept_parent_invite(second, "p2", b"p2", "v0", NOW)).result == "used"
+
+
 async def test_child_opens_parent_invite(repo: ProfileRepository) -> None:
     token, code_hash = await child_invite(repo)
     found = await repo.find_invite(code_hash=code_hash)

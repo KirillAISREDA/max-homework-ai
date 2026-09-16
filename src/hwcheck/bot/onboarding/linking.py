@@ -18,6 +18,11 @@ from hwcheck.db.repo import Account, Invite, InviteResult
 
 CODE_ATTEMPTS = 5
 CODE_WINDOW = timedelta(hours=1)
+INVITE_TAG_LEN = 12  # префикс token_hash в payload кнопки: «Согласен» привязан к показанной ссылке
+
+
+def _tag(token_hash: str) -> str:
+    return token_hash[:INVITE_TAG_LEN]
 
 
 class Linking:
@@ -71,7 +76,8 @@ class Linking:
             actor.user_hash, state.model_copy(update={"pending_invite": invite.token_hash})
         )
         intro = texts.CHILD_ASKS_CONSENT.format(grade=invite.grade)
-        buttons = texts.consent_keyboard("ob:accept", "ob:decline")
+        tag = _tag(invite.token_hash)
+        buttons = texts.consent_keyboard(f"ob:accept:{tag}", f"ob:decline:{tag}")
         await ctx.reply(actor, texts.consent_text(intro), buttons)
 
     async def _precheck(
@@ -121,10 +127,10 @@ class Linking:
         joined = texts.CHILD_JOINED.format(grade=profile.grade)
         await ctx.notify(actor, parent, joined, kind="child_linked")
 
-    async def accept(self, actor: Actor) -> None:
+    async def accept(self, actor: Actor, tag: str) -> None:
         ctx = self._ctx
         state = await ctx.states.get(actor.user_hash)
-        if state.pending_invite is None:
+        if state.pending_invite is None or _tag(state.pending_invite) != tag:
             await ctx.reply(actor, texts.LINK_GONE)
             return
         outcome = await ctx.repo.accept_parent_invite(
@@ -145,10 +151,10 @@ class Linking:
         allowed = f"{texts.PARENT_ALLOWED}\n\n{texts.INSTRUCTION_STUDENT}"
         await ctx.notify(actor, child, allowed, kind="consent_given")
 
-    async def decline(self, actor: Actor) -> None:
+    async def decline(self, actor: Actor, tag: str) -> None:
         ctx = self._ctx
         state = await ctx.states.get(actor.user_hash)
-        if state.pending_invite is None:
+        if state.pending_invite is None or _tag(state.pending_invite) != tag:
             await ctx.reply(actor, texts.LINK_GONE)
             return
         outcome = await ctx.repo.decline_parent_invite(state.pending_invite, ctx.now())

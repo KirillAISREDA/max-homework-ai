@@ -228,7 +228,11 @@ class InMemoryProfileRepository:
         invite, result = self._usable(token_hash, "student_invites_parent", now)
         if invite is None:
             return LinkOutcome(result)
+        profile = self._own(invite.created_by)
         invite.used_at = now
+        if profile is not None and profile.parent_user_id is not None:
+            # другой родитель успел согласиться, пока эта ссылка ждала ответа (§11)
+            return LinkOutcome("has_parent")
         return LinkOutcome("ok", notify=self._account_by_id(invite.created_by).user_id_enc)
 
     async def accept_child_invite(
