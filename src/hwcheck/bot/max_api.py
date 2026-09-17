@@ -136,8 +136,7 @@ class MaxClient:
             follow_redirects=False,
         )
         uploaded.raise_for_status()
-        token: str = uploaded.json()["token"]
-        return token
+        return _upload_token(uploaded.json())
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> None:
         body: dict[str, Any] = {}
@@ -157,6 +156,20 @@ class MaxClient:
         response.raise_for_status()
         data: dict[str, Any] = response.json()
         return data
+
+
+def _upload_token(data: Any) -> str:
+    """Токен из ответа хранилища: живьём (17.09) приходит `{"photos": {"<ключ>": {"token": …}}}`,
+    документация обещает `{"token": …}` — принимаем оба."""
+    if isinstance(data, dict):
+        if isinstance(data.get("token"), str):
+            return str(data["token"])
+        photos = data.get("photos")
+        if isinstance(photos, dict):
+            for item in photos.values():
+                if isinstance(item, dict) and isinstance(item.get("token"), str):
+                    return str(item["token"])
+    raise ValueError("MAX upload: в ответе нет token")
 
 
 def callback_button(text: str, payload: str) -> dict[str, str]:
