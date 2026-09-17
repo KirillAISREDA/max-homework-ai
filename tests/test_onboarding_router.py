@@ -54,7 +54,8 @@ async def test_student_journey_until_parent_consents(tmp_path: Path) -> None:
     await ob.route(press(2, accept))
     assert kit.last(2)[0] == texts.CONSENT_THANKS
     assert kit.max.to_users[-1][0] == 1
-    assert await ob.route(photo(1, "https://files/2.jpg")) == "pass"
+    photos = CheckPhotos(["https://files/2.jpg"], subject="math")
+    assert await ob.route(photo(1, "https://files/2.jpg")) == photos
     assert await ob.route(text(1, "4F7K-92QD")) == "pass"  # у ученика с родителем — просто текст
 
     assert journey_types(kit, 1) == [
@@ -165,6 +166,50 @@ async def test_whose_homework_while_adding_third_child(tmp_path: Path) -> None:
     assert await ob.route(press(2, payloads(buttons)[0])) == CheckPhotos(["u1", "u2"])
 
 
+async def _young_children_of(kit: Kit, user_id: int) -> list[int]:
+    account = await kit.repo.get_account(actor(user_id).user_hash)
+    assert account is not None
+    return [child.id for child in await kit.repo.children(account.id)]
+
+
+async def test_photos_carry_subject_of_the_profile(tmp_path: Path) -> None:
+    """Бот сам предмета не знает: его отдаёт онбординг вместе с фото (R7).
+
+    Предмет ставим репозиторием: в каталоге русский ещё «скоро» (кнопка ведёт в лист ожидания
+    до R9), а маршрутизация по предмету нужна уже сейчас.
+    """
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    profile = await ready_student(kit, user_id=1)
+    await kit.repo.set_subject(profile.id, "russian")
+    assert await ob.route(photo(1, "u1")) == CheckPhotos(["u1"], subject="russian")
+
+    for payload in ("ob:role:parent", "ob:pgrade:2", "ob:subject:math", "ob:consent"):
+        await ob.route(press(2, payload))
+    [child] = await _young_children_of(kit, 2)
+    await kit.repo.set_subject(child, "russian")
+    assert await ob.route(photo(2, "u2")) == CheckPhotos(["u2"], subject="russian")
+
+
+async def test_whose_homework_answer_carries_that_child_subject(tmp_path: Path) -> None:
+    """Двое детей: предмет — того ребёнка, которого родитель выбрал кнопкой «Чья домашка?»."""
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    for payload in ("ob:role:parent", "ob:pgrade:2", "ob:subject:math", "ob:consent"):
+        await ob.route(press(2, payload))
+    for payload in ("ob:addchild", "ob:pgrade:4", "ob:subject:math", "ob:consent"):
+        await ob.route(press(2, payload))
+    _first, second = await _young_children_of(kit, 2)
+    await kit.repo.set_subject(second, "russian")
+
+    assert await ob.route(photo(2, "u")) == "handled"
+    _question, buttons = kit.last(2)
+    assert await ob.route(press(2, f"ob:whose:{second}")) == CheckPhotos(["u"], subject="russian")
+    assert payloads(buttons)[1] == f"ob:whose:{second}"
+    # выбор помнится: следующее фото уходит с предметом выбранного ребёнка, без вопроса
+    assert await ob.route(photo(2, "u2")) == CheckPhotos(["u2"], subject="russian")
+
+
 async def test_code_like_answer_in_dialog_goes_to_check(tmp_path: Path) -> None:
     """Ответ тьютору, похожий на запасной код, не съедается онбордингом (финальное ревью, F3)."""
     kit = make_kit(tmp_path)
@@ -225,7 +270,7 @@ async def test_parent_first_then_child_joins_by_link(tmp_path: Path) -> None:
     assert kit.max.to_users == [(2, texts.CHILD_JOINED.format(grade=7), None)]
     await ob.route(press(3, "ob:subject:math"))
     assert kit.last(3)[0] == texts.INSTRUCTION_STUDENT
-    assert await ob.route(photo(3, "u")) == "pass"
+    assert await ob.route(photo(3, "u")) == CheckPhotos(["u"], subject="math")
 
     await ob.route(text(2, "как там ребёнок?"))
     assert "• 7 класс — свой MAX" in kit.last(2)[0]

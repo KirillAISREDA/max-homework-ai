@@ -116,6 +116,15 @@ class ParentSteps:
             await ctx.reply(actor, texts.WHOSE_HOMEWORK, texts.whose_keyboard(young))
         return None
 
+    async def homework_subject(self, actor: Actor, account: Account) -> str:
+        """Предмет ребёнка, чью домашку проверяем: выбранного кнопкой «Чья домашка?» или
+        единственного ребёнка 1–4 класса. Иначе математика — предмет по умолчанию."""
+        young = await self.young_children(account)
+        state = await self._ctx.states.get(actor.user_hash)
+        chosen = next((c for c in young if c.id == state.child_id), None)
+        child = chosen or (young[0] if len(young) == 1 else None)
+        return (child.subject if child is not None else None) or "math"
+
     async def choose_owner(self, actor: Actor, account: Account, child_id: int) -> list[str] | None:
         ctx = self._ctx
         if child_id not in {c.id for c in await self.young_children(account)}:

@@ -40,9 +40,14 @@ _PROFILE_ID = re.compile(r"[0-9]{1,18}")
 
 @dataclass(frozen=True)
 class CheckPhotos:
-    """Фото, которые онбординг отдаёт в проверку (родитель выбрал, чья домашка)."""
+    """Фото, которые онбординг отдаёт в проверку (родитель выбрал, чья домашка).
+
+    Предмет знает только онбординг (профиль ученика или выбранного ребёнка) — бот берёт его
+    отсюда, иначе всё уходило бы в математику.
+    """
 
     urls: list[str]
+    subject: str = "math"
 
 
 Route = Literal["handled", "pass"] | CheckPhotos
@@ -177,11 +182,15 @@ class Onboarding:
 
     async def _on_photo(self, actor: Actor, position: Position, urls: list[str]) -> Route:
         if position.step == "student_ready":
-            return "pass"
+            profile = position.profile
+            subject = (profile.subject if profile is not None else None) or "math"
+            return CheckPhotos(urls, subject=subject)
         account = position.account
         if account is not None and (position.step == "parent_ready" or position.can_check):
             chosen = await self._parents.on_photo(actor, account, urls)
-            return CheckPhotos(chosen) if chosen else "handled"
+            if not chosen:
+                return "handled"
+            return CheckPhotos(chosen, subject=await self._parents.homework_subject(actor, account))
         self._ctx.log("photo_blocked_no_consent", actor, step=position.step)
         if position.step == "waiting_parent":
             await self._students.block_photo(actor)
@@ -298,7 +307,9 @@ class Onboarding:
         if not _PROFILE_ID.fullmatch(arg):
             return None
         urls = await self._parents.choose_owner(actor, account, int(arg))
-        return CheckPhotos(urls) if urls else "handled"
+        if not urls:
+            return "handled"
+        return CheckPhotos(urls, subject=await self._parents.homework_subject(actor, account))
 
 
 def _parent_side(position: Position) -> bool:
