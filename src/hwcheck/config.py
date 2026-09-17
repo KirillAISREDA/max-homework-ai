@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # фото домашек для разбора спорных проверок; 0 — не сохранять
     photos_dir: str = "var/photos"
     photos_ttl_days: int = 30
+    # страницы учебников для базы знаний (языки): данных ребёнка на них нет, поэтому живут дольше
+    kb_photos_dir: str = "var/kb_photos"
+    kb_photos_ttl_days: int = 365
     # лог бота в файле (ротация): логи контейнера пропадают при пересборке; пусто — только stderr
     log_path: str | None = None
 

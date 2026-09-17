@@ -1,4 +1,6 @@
 import json
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -36,9 +38,26 @@ TEXT_UPDATE = {
 UNKNOWN_UPDATE = {"update_type": "chat_title_changed", "something": {"weird": 1}}
 
 
+@dataclass(frozen=True)
+class Sent:
+    """Отправленное сообщение: читается по именам (`.text`, `.image_token`) и распаковывается
+    как прежний кортеж `(chat_id, text, buttons)`."""
+
+    chat_id: int
+    text: str
+    buttons: Buttons | None = None
+    image_token: str | None = None
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter((self.chat_id, self.text, self.buttons))
+
+    def __getitem__(self, index: int | slice) -> Any:
+        return (self.chat_id, self.text, self.buttons)[index]
+
+
 class FakeMax:
     def __init__(self) -> None:
-        self.sent: list[tuple[int, str, Buttons | None]] = []
+        self.sent: list[Sent] = []
         self.callbacks: list[str] = []
         self.image_tokens: list[str | None] = []
 
@@ -50,7 +69,7 @@ class FakeMax:
         buttons: Buttons | None = None,
         image_token: str | None = None,
     ) -> None:
-        self.sent.append((chat_id, text, buttons))
+        self.sent.append(Sent(chat_id, text, buttons, image_token))
         self.image_tokens.append(image_token)
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> None:
