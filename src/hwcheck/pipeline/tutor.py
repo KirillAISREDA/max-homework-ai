@@ -36,6 +36,19 @@ class TutorTurn(BaseModel):
     reply: str = Field(description="Реплика тьютора ребёнку, 1-3 коротких предложения")
 
 
+class WordTutoring(BaseModel):
+    """Разбор орфограммы (русский, спецификация §6): уровни 0 «какая орфограмма?», 1 правило,
+    2 пример, 3 написание."""
+
+    actual: str
+    expected: str
+    sentence: str
+    rule_code: str | None = None
+    rule_title: str | None = None
+    rule_statement: str | None = None
+    rule_example: str | None = None
+
+
 class TutorSession(BaseModel):
     task_text: str
     student_steps: list[str]
@@ -51,6 +64,9 @@ class TutorSession(BaseModel):
     # history никогда не мутируется на месте — только пересборка списком:
     # model_copy(update=...) делает shallow-копию, append сломал бы другие копии сессии
     history: list[ChatMessage] = []
+    # русский: разбор орфограммы вместо арифметики — None означает прежнее (математическое)
+    # поведение; поле последним, чтобы старые состояния в Redis валидировались без миграции
+    word: WordTutoring | None = None
 
 
 async def tutor_reply(
@@ -61,6 +77,8 @@ async def tutor_reply(
     model: str,
     prompt_version: str = "v1",
 ) -> tuple[str, TutorSession]:
+    if session.word is not None:
+        return await _word_reply(client, session, session.word, student_message, model=model)
     # compare_answers: True → решено; False и None (реплика — не ответ, «не знаю» /
     # непарсящийся текст) одинаково тратят уровень — любая реплика без верного
     # ответа считается запросом следующей подсказки
@@ -213,4 +231,79 @@ def _context(session: TutorSession, solved_now: bool) -> str:
                 f"Верный результат шага {session.first_error_line}: {session.expected}. "
                 "Разбирай именно этот шаг."
             )
+    return "\n\n".join(parts)
+
+
+def normalize_word(word: str) -> str:
+    return word.lower().replace("ё", "е").strip("-")
+
+
+def _mentions(message: str, word: str) -> bool:
+    return normalize_word(word) in {normalize_word(t) for t in re.findall(r"[А-Яа-яЁё-]+", message)}
+
+
+WORD_REDIRECT = "Не спеши 🙂 Подумай, какое правило здесь работает, и напиши слово ещё раз."
+
+
+async def _word_reply(
+    client: LLMClient,
+    session: TutorSession,
+    word: WordTutoring,
+    student_message: str,
+    *,
+    model: str,
+) -> tuple[str, TutorSession]:
+    solved_now = _mentions(student_message, word.expected)
+    if solved_now:
+        session = session.model_copy(update={"resolved": True})
+    else:
+        session = session.model_copy(
+            update={"hint_level": min(session.hint_level + 1, MAX_HINT_LEVEL)}
+        )
+    messages = [
+        ChatMessage(role="system", content=load_prompt("ru_tutor", "v1")),
+        ChatMessage(role="user", content=_word_context(session, word, solved_now)),
+        *session.history,
+        ChatMessage(role="user", content=student_message),
+    ]
+    try:
+        turn, _ = await chat_structured(client, messages, TutorTurn, model=model)
+        reply = turn.reply
+    except StructuredOutputError:
+        reply = SAFE_RETRY
+    if not solved_now and session.hint_level < MAX_HINT_LEVEL and _mentions(reply, word.expected):
+        retry = [*messages, ChatMessage(role="assistant", content=reply), ChatMessage(
+            role="user",
+            content="СТОП: в реплике есть правильное написание слова, а уровень подсказки ещё "
+            "не 3. Переформулируй подсказку, не называя это слово и не называя букву.",
+        )]  # fmt: skip
+        try:
+            turn, _ = await chat_structured(client, retry, TutorTurn, model=model)
+            reply = turn.reply if not _mentions(turn.reply, word.expected) else WORD_REDIRECT
+        except StructuredOutputError:
+            reply = WORD_REDIRECT
+    history = [*session.history, ChatMessage(role="user", content=student_message),
+               ChatMessage(role="assistant", content=reply)]  # fmt: skip
+    return reply, session.model_copy(update={"history": history})
+
+
+def _word_context(session: TutorSession, word: WordTutoring, solved_now: bool) -> str:
+    parts = [
+        f"Предложение из тетради: {word.sentence}",
+        f"Слово, как написал ученик: {word.actual}",
+    ]
+    if solved_now:
+        parts.append("СИТУАЦИЯ: ученик написал слово ВЕРНО. Похвали и коротко назови правило.")
+        return "\n\n".join(parts)
+    parts.append(f"Уровень подсказки: {session.hint_level} из 3.")
+    if word.rule_title:
+        parts.append(f"Орфограмма: {word.rule_title}.")
+    if session.hint_level >= 1 and word.rule_statement:
+        parts.append(f"Правило (можно пересказать ребёнку): {word.rule_statement}")
+    if session.hint_level >= 2 and word.rule_example:
+        parts.append(f"Пример на это правило с ДРУГИМ словом: {word.rule_example}")
+    if session.hint_level >= MAX_HINT_LEVEL:
+        parts.append(f"Уровень 3 — назови верное написание «{word.expected}» и объясни его.")
+    else:
+        parts.append(f"НЕ называй верное написание («{word.expected}») и НЕ называй нужную букву.")
     return "\n\n".join(parts)
