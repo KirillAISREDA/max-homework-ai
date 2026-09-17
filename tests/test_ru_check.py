@@ -73,3 +73,76 @@ def test_header_line_is_skipped() -> None:
         w.line = 1
     task = SubjectTask(number="245", lines=["Упражнение 245.", "Наступила осень"], words=words)
     assert check_words(0, task, _derived("Наступила", "осень")) == []
+
+
+def test_unresolved_gap_split_into_missing_and_extra_produces_no_finding() -> None:
+    # шаблон «м_» не похож на «мяч» (буквенное сходство < 0.5) — align разводит пропуск на
+    # «пропущено + лишнее»; без эталона для пропуска не спрашиваем ни о том, ни о другом
+    derived = DerivedText(
+        words=["м_", "лежит", "на", "полу"], gap_indices=[0], trust="unverified",
+        derived_by="dictionary", unresolved=[0],
+    )  # fmt: skip
+    task = SubjectTask(number="1", words=_words("мяч", "лежит", "на", "полу"))
+    assert check_words(0, task, derived) == []
+
+
+def test_only_header_words_with_reference_is_uncertain() -> None:
+    task = SubjectTask(number="245", words=_words("Упражнение", "245."))
+    [finding] = check_words(0, task, _derived("Наступила", "осень"))
+    assert (finding.kind, finding.strength, finding.detail) == (
+        "uncertain",
+        "candidate",
+        "не смог сверить с упражнением",
+    )
+
+
+def test_date_line_before_header_stays_in_body() -> None:
+    words = [
+        *_words("17", "сентября"),
+        *_words("Упражнение", "245."),
+        *_words("Наступила", "осень"),
+    ]
+    for w in words[2:4]:
+        w.line = 1
+    for w in words[4:]:
+        w.line = 2
+    task = SubjectTask(number="245", words=words)
+    findings = check_words(0, task, _derived("Наступила", "осень"))
+    assert [(f.kind, f.actual) for f in findings] == [
+        ("extra_word", "17"),
+        ("extra_word", "сентября"),
+    ]
+
+
+def test_too_many_near_miss_words_is_uncertain() -> None:
+    task = SubjectTask(
+        number="1",
+        words=_words("Настипила", "позняя", "осинь", "приходет", "каждой", "код"),
+    )
+    derived = _derived("Наступила", "поздняя", "осень", "приходит", "каждый", "год")
+    [finding] = check_words(0, task, derived)
+    assert (finding.kind, finding.detail) == ("uncertain", "не смог сверить с упражнением")
+
+
+def test_few_near_miss_words_gives_spelling_findings() -> None:
+    task = SubjectTask(
+        number="1",
+        words=_words("Настипила", "поздняя", "осинь", "приходит", "каждой", "год"),
+    )
+    derived = _derived("Наступила", "поздняя", "осень", "приходит", "каждый", "год")
+    findings = check_words(0, task, derived)
+    assert [f.kind for f in findings] == ["spelling", "spelling", "spelling"]
+    assert {f.actual for f in findings} == {"Настипила", "осинь", "каждой"}
+
+
+def test_missing_word_at_start_has_generic_detail() -> None:
+    task = SubjectTask(number="1", words=_words("были"))
+    [finding] = check_words(0, task, _derived("Жили", "были"))
+    assert finding.detail == "кажется, в начале пропущено слово"
+
+
+def test_two_consecutive_missing_words_reference_last_written_word() -> None:
+    task = SubjectTask(number="1", words=_words("у", "гость"))
+    findings = check_words(0, task, _derived("у", "нас", "опять", "гость"))
+    assert [f.kind for f in findings] == ["missing_word", "missing_word"]
+    assert all(f.detail == "кажется, пропущено слово после «у»" for f in findings)
