@@ -54,7 +54,7 @@ def decode_image(image: bytes) -> np.ndarray[Any, Any]:
 
 
 def words_from_predictions(pred: dict[str, Any]) -> list[dict[str, Any]]:
-    """Формат ответа сервиса (ocr/README.md) из предсказаний PipelinePredictor."""
+    """Формат ответа сервиса (ocrsvc/README.md) из предсказаний PipelinePredictor."""
     return [
         {
             "text": p.get("text") or "",
@@ -78,8 +78,8 @@ class ReadingPipelineEngine:
     name = "readingpipeline"
 
     def __init__(self, weights_dir: str, *, threads: int = 2) -> None:
-        # onnxruntime/ocrpipeline не установлены в окружении бота (тяжёлые зависимости только в
-        # образе ocr/Dockerfile) — mypy.overrides ignore_missing_imports для обоих в pyproject.toml
+        # onnxruntime/ocrpipeline — тяжёлые зависимости только в образе ocrsvc/Dockerfile, не в
+        # окружении бота; ignore_missing_imports для обоих — в pyproject.toml
         import onnxruntime as ort
 
         arena = os.environ.get("OCR_ORT_ARENA", "0") == "1"

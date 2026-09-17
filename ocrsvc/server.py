@@ -9,7 +9,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from ocr.engine import Engine, engine_from_env
+from ocrsvc.engine import Engine, engine_from_env
 
 logger = logging.getLogger("ocr")
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
@@ -86,7 +86,15 @@ def make_handler(
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    engine = engine_from_env()
+    try:
+        engine = engine_from_env()
+    except Exception as exc:
+        # сбой инициализации (нет весов, битый pipeline_config, импорт onnxruntime/ocrpipeline) не
+        # должен уйти в тихий бесконечный restart-loop на общем VPS (~1,4 ГБ весов на каждую
+        # попытку, restart: unless-stopped крутил бы это вечно) — логируем с трейсбеком и падаем
+        # явно ненулевым кодом, чтобы сработал лимит `restart: on-failure:3`
+        logger.exception("engine init failed: %s", exc)
+        raise SystemExit(1) from exc
     server = ThreadingHTTPServer(("0.0.0.0", 8080), make_handler(engine))
     logger.info("ocr started: engine=%s", engine.name)
     server.serve_forever()

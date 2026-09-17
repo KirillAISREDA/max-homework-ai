@@ -4,7 +4,7 @@
 import io
 
 import pytest
-from ocr.engine import MAX_IMAGE_PIXELS, decode_image, words_from_predictions
+from ocrsvc.engine import MAX_IMAGE_PIXELS, decode_image, words_from_predictions
 from PIL import Image
 
 

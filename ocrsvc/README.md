@@ -16,7 +16,7 @@
 
 ## Движок
 
-`ocr/engine.py` определяет `Engine(Protocol)` с полем `name` и методом
+`ocrsvc/engine.py` определяет `Engine(Protocol)` с полем `name` и методом
 `recognize(image: bytes) -> list[dict]`. Выбор движка — переменная окружения `OCR_ENGINE`:
 
 - `fake` (по умолчанию) — `FakeEngine`, отдаёт слова из `OCR_FAKE_WORDS` (JSON-список) или пустой
@@ -24,7 +24,7 @@
 - `readingpipeline` — `ReadingPipelineEngine`: ReadingPipeline (ai-forever, MIT) на ONNX/CPU, без
   языковой модели и без torch (рецепт — `docs/research/2026-09-17-readingpipeline-memory.md`).
   Переменные окружения:
-  - `OCR_WEIGHTS` — каталог с весами (по умолчанию `/app/weights`, наполняется в `ocr/Dockerfile`
+  - `OCR_WEIGHTS` — каталог с весами (по умолчанию `/app/weights`, наполняется в `ocrsvc/Dockerfile`
     из `huggingface_hub`).
   - `OCR_THREADS` — число потоков onnxruntime (по умолчанию `2`; `1` не снижает память, но вдвое
     увеличивает время, см. спайк памяти).
@@ -50,5 +50,5 @@ compose-сети как к `http://ocr:8080` (`OCR_URL`).
 
 ```bash
 OCR_ENGINE=fake OCR_FAKE_WORDS='[{"text": "cat", "box": [1, 2, 3, 4], "confidence": 0.9, "line": 0}]' \
-  python -m ocr.server
+  python -m ocrsvc.server
 ```

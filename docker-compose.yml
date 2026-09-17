@@ -89,10 +89,13 @@ services:
   ocr:
     build:
       context: .
-      dockerfile: ocr/Dockerfile
+      dockerfile: ocrsvc/Dockerfile
     image: max-homework-ai-ocr
     container_name: homework-ocr
-    restart: unless-stopped
+    # сбой загрузки весов/движка (нет файлов, битый конфиг, OOM) не должен крутить контейнер
+    # вечно на общем VPS — ~1,4 ГБ весов заново на каждую попытку; server.py падает ненулевым
+    # кодом при неудачной инициализации движка (см. main())
+    restart: on-failure:3
     profiles: ["ocr"]            # стартует только явно: docker compose --profile ocr up -d ocr
     environment:
       OCR_ENGINE: ${OCR_ENGINE:-readingpipeline}
@@ -106,7 +109,7 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
       interval: 30s
       timeout: 5s
-      start_period: 60s
+      start_period: 120s
     # без портов наружу: бот ходит по compose-сети как к http://ocr:8080
 
   # ежедневный pg_dump в var/backups, хранение 7 дней (спецификация онбординга §7)
