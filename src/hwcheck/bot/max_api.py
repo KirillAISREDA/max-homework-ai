@@ -139,11 +139,18 @@ class MaxClient:
         return _upload_token(uploaded.json())
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> None:
-        body: dict[str, Any] = {}
-        if notification:
-            body["notification"] = notification
+        """Подтверждает нажатие кнопки, иначе она «крутится» у пользователя.
+
+        MAX требует в теле `message` или `notification` — пустое `{}` даёт 400 (живьём,
+        17.09); пустая строка снимает индикатор без всплывающего текста. Ошибка ответа не
+        критична для сценария — пишем в лог с телом ответа и идём дальше; callback_id в лог
+        не попадает.
+        """
+        body: dict[str, Any] = {"notification": notification or ""}
         response = await self._http.post("/answers", params={"callback_id": callback_id}, json=body)
-        response.raise_for_status()
+        if response.is_error:
+            detail = response.text[:300].replace(callback_id, "<callback_id>")
+            logger.warning("answer_callback: HTTP %s %s", response.status_code, detail)
 
     async def download(self, url: str) -> bytes:
         """Скачивает вложение (фото) по URL из апдейта — без токена бота."""
