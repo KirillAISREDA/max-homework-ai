@@ -28,6 +28,7 @@ from hwcheck.subjects.base import (
     Word,
 )
 from hwcheck.subjects.kb_models import KbAnswer, KbPage, KbTask
+from hwcheck.subjects.russian.align import align
 from hwcheck.subjects.russian.check import check_words
 from hwcheck.subjects.russian.gaps import DerivedText, Dictionary, derive_text
 from hwcheck.subjects.russian.recognize import (
@@ -42,6 +43,10 @@ logger = logging.getLogger(__name__)
 
 NO_REFERENCE_DETAIL = "нет текста упражнения — пришли фото учебника"
 OCR_FAILED_DETAIL = "не смог прочитать тетрадь — попробуй переснять"
+NO_PAIR_DETAIL = "не понял, какое это упражнение — подпиши номер над работой"
+# доля слов эталона, сошедшихся с тетрадью, с которой пара «тетрадь ↔ упражнение» считается той
+# самой: ниже — это другое упражнение с той же страницы, и лучше попросить подписать номер
+MIN_PAIR_SHARE = 0.4
 
 
 @dataclass(frozen=True)
@@ -170,13 +175,16 @@ class RussianModule:
         by_number = {r.task_number: r for r in references}
         results = []
         for index, task in enumerate(tasks):
-            reference = by_number.get(task.number)
+            # по номеру — только если ребёнок подписал его над работой: присвоенные номера
+            # («1», «2» по порядку упражнений) совпадают случайно и парой не являются
+            reference = by_number.get(task.number) if task.number_on_page else None
             if reference is None and len(references) == 1 and len(tasks) == 1:
                 reference = references[0]  # одна страница учебника и одна тетради — это пара
             if reference is None:
-                detail = OCR_FAILED_DETAIL if not task.words else NO_REFERENCE_DETAIL
+                reference = _pair_by_words(task, references)
+            if reference is None:
                 findings = [Finding(task_index=index, kind="uncertain", strength="candidate",
-                                    detail=detail)]  # fmt: skip
+                                    detail=_no_pair_detail(task, references))]  # fmt: skip
                 results.append(TaskResult(task_index=index, findings=findings))
                 continue
             derived = DerivedText.model_validate(reference.payload)
@@ -223,6 +231,43 @@ class RussianModule:
             expected=finding.expected,
             word=word,
         )
+
+
+def _pair_by_words(task: SubjectTask, references: list[Reference]) -> Reference | None:
+    """Пара для тетради без подписанного номера: упражнение, с которым сошлось больше всего слов.
+
+    Номера нет (или он ни с чем не совпал), а на фото учебника упражнений несколько — раньше это
+    означало «нет текста упражнения — пришли фото учебника» на уже присланном учебнике
+    (ревью 17.09, I2). Порог `MIN_PAIR_SHARE` не даёт выдать за пару чужое упражнение.
+    """
+    actual = [word.text for word in task.words]
+    if not actual:
+        return None
+    best: Reference | None = None
+    best_share = 0.0
+    for reference in references:
+        words = _reference_words(reference)
+        if not words:
+            continue
+        share = sum(1 for p in align(words, actual) if p.kind == "match") / len(words)
+        if share > best_share:
+            best, best_share = reference, share
+    return best if best_share >= MIN_PAIR_SHARE else None
+
+
+def _reference_words(reference: Reference) -> list[str]:
+    try:
+        return DerivedText.model_validate(reference.payload).words
+    except Exception:
+        # чужой/битый payload не должен ронять проверку: такой эталон просто не станет парой
+        logger.warning("эталон без разобранного текста: %s", reference.task_number)
+        return []
+
+
+def _no_pair_detail(task: SubjectTask, references: list[Reference]) -> str:
+    if not task.words:
+        return OCR_FAILED_DETAIL
+    return NO_REFERENCE_DETAIL if not references else NO_PAIR_DETAIL
 
 
 def _sentence(task: SubjectTask, finding: Finding) -> str:

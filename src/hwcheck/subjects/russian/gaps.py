@@ -151,7 +151,11 @@ async def derive_text(
         )
     filled = [chosen.get(i, w) for i, w in enumerate(words)]
     unresolved = [g.index for g in gaps if g.index not in chosen]
-    trust: Trust = "verified" if not ambiguous else "unverified"
+    # `verified` — только когда словарь и правда что-то проверил: каждый пропуск закрыт
+    # единственным словарным словом. Текста без пропусков словарь не касался («спиши текст») —
+    # такой эталон не «проверен словарём», иначе он уходит в базу знаний со статусом
+    # `verified` без единой проверки (ревью 17.09, I4)
+    trust: Trust = "verified" if gaps and not ambiguous else "unverified"
     return DerivedText(
         words=filled,
         gap_indices=[g.index for g in gaps],

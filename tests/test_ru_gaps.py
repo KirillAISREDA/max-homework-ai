@@ -66,6 +66,15 @@ async def test_derive_text_verified_when_all_gaps_single() -> None:
     )
 
 
+async def test_derive_text_without_gaps_is_unverified() -> None:
+    """Пропусков нет — словарь ничего не проверял: «списать текст» не эталон `verified`, иначе
+    ответ уходит в базу знаний со статусом «проверено словарём» без единой проверки (ревью, I4)."""
+    derived = await derive_text("Наступила поздняя осень.", WORDS, None, model="m")
+    assert derived.words == ["Наступила", "поздняя", "осень"]
+    assert derived.gap_indices == []
+    assert (derived.trust, derived.derived_by) == ("unverified", "dictionary")
+
+
 async def test_derive_text_asks_llm_for_ambiguous_and_is_unverified() -> None:
     llm = FakeLLMClient([json.dumps({"choices": [{"index": 3, "word": "леса"}]})])
     derived = await derive_text("За дальние л_са несёт м_шина.", WORDS, llm, model="m")

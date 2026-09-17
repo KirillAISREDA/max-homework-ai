@@ -11,13 +11,14 @@ from hwcheck.subjects.base import (
     Box,
     Finding,
     NoTutorableFinding,
+    Reference,
     SubjectTask,
     TaskResult,
     Word,
 )
 from hwcheck.subjects.kb_models import KbRule
 from hwcheck.subjects.registry import SubjectDeps, module_for
-from hwcheck.subjects.russian.module import RussianModule
+from hwcheck.subjects.russian.module import NO_PAIR_DETAIL, RussianModule
 from test_ru_gaps import WORDS
 from test_ru_recognize import NOTEBOOK, TEXTBOOK, FakeVision, _jpeg
 
@@ -79,6 +80,24 @@ async def test_resolve_reference_saves_page_and_dictionary_answer() -> None:
     # второй раз — из базы, без пересчёта
     [again] = await module.resolve_reference([task], kb)
     assert again.origin == "kb" and again.trust == "verified"
+
+
+async def test_resolve_reference_text_without_gaps_is_not_checked_by_dictionary() -> None:
+    """«Спиши текст» без пропусков: словарь ничего не проверял — ответ в базе не `verified` и
+    ждёт ревьюера, а не выдаёт себя за проверенный словарём (ревью 17.09, I4)."""
+    kb = InMemoryKnowledgeBase()
+    module = RussianModule(FakeVision([]), MODELS, ocr=None, dictionary=WORDS)
+    task = SubjectTask(number="245", condition="Наступила поздняя осень.")
+    [reference] = await module.resolve_reference([task], kb)
+    assert reference.trust == "unverified"
+    page = await kb.find_page("russian", "Наступила поздняя осень.")
+    assert page is not None
+    [answer] = await kb.answers_for(page.tasks[0].id or 0)
+    assert (answer.derived_by, answer.checked_by, answer.status) == (
+        "dictionary",
+        None,
+        "unverified",
+    )
 
 
 async def test_resolve_reference_ambiguous_goes_to_llm_and_review_queue() -> None:
@@ -145,6 +164,64 @@ async def test_check_produces_candidate_findings_and_sentence_payload() -> None:
     [finding] = result.findings
     assert (finding.kind, finding.strength, finding.actual) == ("spelling", "candidate", "позняя")
     assert result.payload["sentence"]["позняя"] == "Наступила позняя осень"
+
+
+async def _three_references(module: RussianModule) -> list[Reference]:
+    return await module.resolve_reference(
+        [
+            SubjectTask(number="245", condition="Наступила поздняя осень."),
+            SubjectTask(number="246", condition="Щука плывёт в реке."),
+            SubjectTask(number="247", condition="Машина едет по дороге."),
+        ],
+        kb=None,
+    )
+
+
+async def test_check_pairs_unnumbered_notebook_by_word_overlap() -> None:
+    """Номер над работой ребёнок не подписал, а на фото учебника — три упражнения: пару даёт
+    совпадение слов, а не «нет текста упражнения — пришли фото учебника» (ревью 17.09, I2)."""
+    module = RussianModule(FakeVision([]), MODELS, ocr=None, dictionary=WORDS)
+    references = await _three_references(module)
+    task = SubjectTask(
+        number="1", number_on_page=False,
+        words=[_w("Щука", 0), _w("плывёт", 1), _w("в", 2), _w("реки", 3)],
+    )  # fmt: skip
+    [result] = await module.check([task], references)
+    assert result.reference is not None and result.reference.task_number == "246"
+    [finding] = result.findings
+    assert (finding.kind, finding.actual, finding.expected) == ("spelling", "реки", "реке")
+
+
+async def test_check_unnumbered_notebook_without_a_pair_asks_for_the_number() -> None:
+    module = RussianModule(FakeVision([]), MODELS, ocr=None, dictionary=WORDS)
+    references = await _three_references(module)
+    task = SubjectTask(
+        number="1", number_on_page=False,
+        words=[_w("совсем", 0), _w("другой", 1), _w("текст", 2)],
+    )  # fmt: skip
+    [result] = await module.check([task], references)
+    [finding] = result.findings
+    assert (finding.kind, finding.detail) == ("uncertain", NO_PAIR_DETAIL)
+    assert result.reference is None
+
+
+async def test_check_does_not_pair_two_auto_numbers_by_number_alone() -> None:
+    """Обе стороны с присвоенным номером «1» — совпадение номеров ничего не значит: пару
+    ищем по словам, и если её нет, просим подписать номер."""
+    module = RussianModule(FakeVision([]), MODELS, ocr=None, dictionary=WORDS)
+    references = await module.resolve_reference(
+        [
+            SubjectTask(number="1", number_on_page=False, condition="Наступила поздняя осень."),
+            SubjectTask(number="2", number_on_page=False, condition="Щука плывёт в реке."),
+        ],
+        kb=None,
+    )
+    task = SubjectTask(
+        number="1", number_on_page=False,
+        words=[_w("Машина", 0), _w("едет", 1), _w("по", 2), _w("дороге", 3)],
+    )  # fmt: skip
+    [result] = await module.check([task], references)
+    assert [f.detail for f in result.findings] == [NO_PAIR_DETAIL]
 
 
 async def test_check_without_reference_is_uncertain() -> None:
