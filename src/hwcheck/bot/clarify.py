@@ -56,9 +56,16 @@ def plan_clarifications(tasks: list[CheckedTask]) -> list[Clarification]:
     return plan
 
 
+# о чём НЕ спрашиваем «здесь написано «X»?»: у лишнего слова «да» подтверждает не-ошибку (и
+# кнопка «Разобрать» упирается в «нечего разбирать»), у пропущенного слова спрашивать нечего —
+# ребёнок его не писал. Обе находки остаются в сводке как «стоит перепроверить» (ревью 17.09)
+NOT_ASKED_KINDS = {"extra_word", "missing_word"}
+
+
 def _is_word_candidate(finding: Finding) -> bool:
     return (
         finding.strength == "candidate"
+        and finding.kind not in NOT_ASKED_KINDS
         and finding.word is not None
         and finding.word.box is not None
         and finding.confirmed is None

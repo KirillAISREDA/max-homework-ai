@@ -29,6 +29,18 @@ def test_crop_word_adds_margin_and_clamps() -> None:
     assert crop.size == (52, 32)  # поля 12 px, обрезано по краю изображения слева/сверху
 
 
+def test_crop_word_applies_exif_rotation_like_ocr() -> None:
+    """OCR (`ocrsvc/engine.py`) отдаёт координаты уже развёрнутого по EXIF кадра — кроп обязан
+    развернуть фото так же, иначе у снятого «лёжа» фото ребёнок видит не то слово (ревью, I3)."""
+    buffer = io.BytesIO()
+    exif = Image.Exif()
+    exif[0x0112] = 6  # ориентация 6 = поворот на 90°: пиксели хранятся повернутыми
+    Image.new("RGB", (100, 50), "white").save(buffer, format="JPEG", exif=exif.tobytes())
+    # после разворота кадр вертикальный (50×100) — бокс у правого края развёрнутого кадра
+    crop = Image.open(io.BytesIO(crop_word(buffer.getvalue(), Box(x0=20, y0=80, x1=45, y1=95))))
+    assert crop.size == (42, 32)  # 20−12…45+12 по ширине 50, 80−12…95+12 по высоте 100
+
+
 def item_with_word() -> CheckedTask:
     task = VisionTask(number=3, task_text="", student_solution_steps=[], confidence=1)
     word = Word(text="машына", box=Box(x0=1, y0=1, x1=9, y1=9), confidence=0.4)
@@ -53,6 +65,21 @@ def test_word_question_and_answers() -> None:
     denied = apply_word(item, clarification, "no")
     assert denied is not None and denied.findings[0].confirmed is False
     assert apply_word(item, clarification, "maybe") is None
+
+
+def test_extra_and_missing_word_findings_are_not_asked_about() -> None:
+    """«Здесь написано «17»?» про лишнее слово: честное «да» подтверждает не-ошибку, а кнопка
+    «Разобрать» упирается в «нечего разбирать». Такие находки остаются в сводке как «стоит
+    перепроверить», вопроса по ним нет (финальное ревью 17.09, I1)."""
+    task = SubjectTask(number="1", words=[])
+    word = Word(text="17", box=Box(x0=0, y0=0, x1=9, y1=9))
+    extra = Finding(task_index=0, kind="extra_word", strength="candidate", actual="17", word=word)
+    missing = Finding(
+        task_index=0, kind="missing_word", strength="candidate", expected="нас", word=word
+    )
+    item = CheckedTask(task=to_vision_task(task), ref=None, subject_task=task,
+                       findings=[extra, missing])  # fmt: skip
+    assert plan_clarifications([item]) == []
 
 
 def test_plan_clarifications_skips_grade_when_missing() -> None:
