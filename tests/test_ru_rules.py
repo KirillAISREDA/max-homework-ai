@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from conftest import FakeLLMClient
 from hwcheck.subjects.kb_models import KbRule
 from hwcheck.subjects.russian.rules import RULE_CODES, classify_orthogram, load_rules
@@ -22,9 +20,6 @@ async def test_classify_orthogram_unknown_or_unsure_is_none() -> None:
     assert await classify_orthogram(llm, "а", "б", "", model="s") is None
 
 
-@pytest.mark.skipif(
-    not Path("assets/kb/rules_russian.json").exists(), reason="карточки правил — задача 6"
-)
 def test_rules_file_matches_codes(tmp_path: Path) -> None:
     rules = load_rules(Path("assets/kb/rules_russian.json"))
     assert {r.code for r in rules} == set(RULE_CODES)

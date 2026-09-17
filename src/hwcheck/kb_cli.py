@@ -15,6 +15,7 @@ from hwcheck.db.kb import PgKnowledgeBase
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
 from hwcheck.events import EventLog
 from hwcheck.subjects.kb_models import KbAnswer
+from hwcheck.subjects.russian.rules import load_rules
 
 KnowledgeBaseImpl = PgKnowledgeBase | InMemoryKnowledgeBase
 
@@ -91,3 +92,12 @@ def _words_from_json(raw: str) -> dict[str, dict[str, Any] | None]:
         if value is not None and not isinstance(value, dict):
             raise error
     return data
+
+
+async def load_rules_into(kb: KnowledgeBaseImpl, path: Path) -> int:
+    """Загрузить карточки орфограмм в БЗ (идемпотентно: PgKnowledgeBase — ON CONFLICT (code)
+    DO UPDATE, InMemoryKnowledgeBase — перезапись по коду)."""
+    rules = load_rules(path)
+    for rule in rules:
+        await kb.add_rule(rule)
+    return len(rules)

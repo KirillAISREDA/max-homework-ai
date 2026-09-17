@@ -195,6 +195,9 @@ docker compose exec bot python -m hwcheck kb review --subject english --limit 10
 
 # Загрузить словарь из файла
 docker compose exec bot python -m hwcheck kb load-words --subject russian --source grade_list:2 /path/to/words.txt
+
+# Загрузить карточки орфограмм (после миграции; идемпотентно — ON CONFLICT (code) DO UPDATE)
+docker compose run --rm bot python -m hwcheck kb load-rules assets/kb/rules_russian.json
 ```
 
 `DATABASE_URL` команды не требуют: она берётся из окружения контейнера бота (задана в

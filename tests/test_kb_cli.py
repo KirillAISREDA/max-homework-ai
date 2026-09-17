@@ -8,7 +8,7 @@ import pytest
 from hwcheck.db.kb import fingerprint
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
 from hwcheck.events import EventLog
-from hwcheck.kb_cli import load_words, review
+from hwcheck.kb_cli import load_rules_into, load_words, review
 from hwcheck.subjects.kb_models import KbAnswer, KbPage, KbTask
 
 
@@ -124,3 +124,31 @@ async def test_review_strips_control_characters() -> None:
 
     assert "\x1b" not in shown[0] and "\x07" not in shown[0]
     assert "п_ляне" in shown[0] and "поляне" in shown[0]
+
+
+async def test_load_rules_into_memory_kb(tmp_path: Path) -> None:
+    path = tmp_path / "rules.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "code": "ru.orth.zhi_shi", "subject": "russian", "grade_from": 1,
+                    "title": "Жи–ши", "statement": "Жи и ши пиши с буквой и.",
+                    "example": "жизнь, шина", "finding_kinds": ["spelling"],
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )  # fmt: skip
+    kb = InMemoryKnowledgeBase()
+    assert await load_rules_into(kb, path) == 1
+    rule = await kb.rule("ru.orth.zhi_shi")
+    assert rule is not None and rule.title == "Жи–ши"
+
+
+async def test_load_rules_rejects_wrong_shape(tmp_path: Path) -> None:
+    path = tmp_path / "rules.json"
+    path.write_text('{"code": "x"}', encoding="utf-8")
+    with pytest.raises(SystemExit, match="JSON-список"):
+        await load_rules_into(InMemoryKnowledgeBase(), path)
