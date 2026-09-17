@@ -365,7 +365,14 @@ class Bot:
         """
         subject = module.code
         state = await self._store.get(chat_id)
-        known = list(state.conditions) if textbook_is_fresh(state.textbook_saved_at) else []
+        # предмет состояния описывает то, что в нём лежит: у родителя двух детей прошлая
+        # домашка может быть по другому предмету — её упражнения этому модулю не подходят
+        same_subject = state.subject == subject
+        known = (
+            list(state.conditions)
+            if same_subject and textbook_is_fresh(state.textbook_saved_at)
+            else []
+        )
         pages, photo_paths, kb_paths = await self._recognize_language_album(module, user_id, urls)
         conditions = {t.number: t for t in known}
         notebook: list[SubjectTask] = []
@@ -389,7 +396,10 @@ class Bot:
         if not notebook:
             await self._answer_without_notebook(chat_id, remembered, ocr_failed, saw_textbook)
             if remembered:
-                await self._store.set(chat_id, state.model_copy(update={
+                # сводка другого предмета вместе с её кнопками «Разобрать» снимается: разбор
+                # по ней ушёл бы в чужой модуль
+                kept = state if same_subject else ChatState()
+                await self._store.set(chat_id, kept.model_copy(update={
                     "conditions": remembered, "textbook_saved_at": time.time(), "subject": subject,
                 }))  # fmt: skip
             return

@@ -6,13 +6,15 @@ from pathlib import Path
 
 from PIL import Image
 
-from hwcheck.bot.fsm import InMemoryStateStore
+from hwcheck.bot.check import validator_only_grade
+from hwcheck.bot.fsm import ChatState, CheckedTask, InMemoryStateStore
 from hwcheck.bot.handlers import NOTHING_TO_TUTOR, SUBJECT_UNAVAILABLE, Bot
 from hwcheck.bot.onboarding.router import CheckPhotos
 from hwcheck.config import Settings
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
 from hwcheck.events import EventLog, read_events
 from hwcheck.photos import PhotoStore
+from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.subjects.registry import SubjectDeps
 from test_bot import FakeMax
 from test_ru_gaps import WORDS
@@ -151,6 +153,24 @@ async def test_textbook_only_is_remembered_for_next_message(tmp_path: Path) -> N
 
     await bot._on_photo(chat_id=1, user_id=7, urls=["u2"], subject="russian")
     assert max_client.sent[-1].text == "Проверил! 1 из 1 верно.\n№245 — верно ✅"
+
+
+async def test_textbook_of_another_subject_drops_the_old_review(tmp_path: Path) -> None:
+    """Родитель переключил ребёнка: кнопки «Разобрать» прошлой сводки вели бы в чужой модуль."""
+    bot, _max_client, _ = _bot(tmp_path, FakeVision([TEXTBOOK]), FakeOcr([]))
+    steps = ["2 + 2 = 5"]
+    math_item = CheckedTask(
+        task=VisionTask(number=19, task_text="", student_solution_steps=steps, confidence=1),
+        ref=None,
+        grade=validator_only_grade(steps),
+    )
+    await bot._store.set(1, ChatState(phase="review", subject="math", tasks=[math_item]))
+
+    await bot._on_photo(chat_id=1, user_id=7, urls=["u1"], subject="russian")
+
+    state = await bot._store.get(1)
+    assert state.subject == "russian" and state.tasks == [] and state.phase == "idle"
+    assert [t.number for t in state.conditions] == ["245"]
 
 
 async def test_textbook_photo_saved_for_knowledge_base(tmp_path: Path) -> None:
