@@ -9,7 +9,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from hwcheck.bench.cli import add_bench_parser, report_command, run_command
+from hwcheck.bench.cli import add_bench_parser, report_command, ru_command, run_command
 from hwcheck.bot.runner import run_polling
 from hwcheck.config import Settings, load_settings
 from hwcheck.crypto import new_user_id_key
@@ -176,7 +176,10 @@ async def _run(args: argparse.Namespace) -> None:
         raise SystemExit("Не задан GIGACHAT_CREDENTIALS (см. .env.example)")
 
     if args.command == "bench":
-        await run_command(args, settings)
+        if args.bench_command == "ru":
+            await ru_command(args, settings)
+        else:
+            await run_command(args, settings)
         return
 
     if args.command == "bot":
