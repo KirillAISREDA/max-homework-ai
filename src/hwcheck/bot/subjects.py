@@ -25,6 +25,8 @@ class Subject:
 
 SUBJECTS: tuple[Subject, ...] = (
     Subject("math", "Математика", range(1, 10), available=True),
+    # включается после стенда `hwcheck bench ru` (≥ 10 фото, точность кандидатов ≥ 50 %) —
+    # план 2026-09-17-russian-stage3 R8/R9
     Subject("russian", "Русский язык", range(1, 10), available=False),
     Subject("literary_reading", "Литературное чтение", range(1, 5), available=False),
     Subject("literature", "Литература", range(5, 10), available=False),
