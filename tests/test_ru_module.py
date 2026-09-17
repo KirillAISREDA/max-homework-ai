@@ -7,7 +7,14 @@ import pytest
 from hwcheck.bot.check import CheckModels
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
 from hwcheck.ocr_client import OcrError
-from hwcheck.subjects.base import Box, Finding, SubjectTask, TaskResult, Word
+from hwcheck.subjects.base import (
+    Box,
+    Finding,
+    NoTutorableFinding,
+    SubjectTask,
+    TaskResult,
+    Word,
+)
 from hwcheck.subjects.kb_models import KbRule
 from hwcheck.subjects.registry import SubjectDeps, module_for
 from hwcheck.subjects.russian.module import RussianModule
@@ -203,7 +210,8 @@ async def test_start_tutoring_without_error_raises() -> None:
     module = RussianModule(FakeVision([]), MODELS, ocr=None, dictionary=WORDS)
     task = SubjectTask(number="1", words=[_w("осень", 0)])
     [result] = await module.check([task], [])
-    with pytest.raises(ValueError, match="нет подтверждённой ошибки"):
+    # свой тип исключения: бот отличает «нечего разбирать» от сбоя модуля (ревью R7)
+    with pytest.raises(NoTutorableFinding, match="нет подтверждённой ошибки"):
         await module.start_tutoring(result, task, kb=None)
 
 

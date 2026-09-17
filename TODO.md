@@ -125,6 +125,8 @@
 - [ ] R7: бот на `SubjectPage` (`recognize`/`resolve_reference` модуля), `CheckedTask.grade: GradeResult | None`,
   `clarify.py` без математики, подключить `KnowledgeBase` и `OcrClient` к боту, `photo_index` по позиции в альбоме,
   сообщение ребёнку при пропуске word-вопроса, `findings.confirmed`/`homework_id` в БД
+- [ ] Вынести оба пути обработки фото из `bot/handlers.py` (952 строки) в `bot/checkflow.py`; общий итератор
+  скачивания фото для `_recognize_all`/`_recognize_language_album` (и рассинхрон results/paths в math-пути)
 - [ ] База знаний: протокол без admin-методов (разделить), `words()` — точечный lookup вместо всего словаря, батчи в
   `load_words`, `kb review` — фото страницы и необязательный `--subject`
 - [ ] OCR: контекст сборки `ocr/`, лимит swap контейнера, EXIF-поворот кропа, `MAX_IMAGE_PIXELS`

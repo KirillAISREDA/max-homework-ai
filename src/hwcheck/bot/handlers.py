@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from hwcheck.bot.check import (
@@ -54,12 +55,14 @@ from hwcheck.pipeline.solver import FileCache, RefSolution
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
 from hwcheck.subjects.base import (
     Finding,
+    NoTutorableFinding,
     Reference,
     SubjectModule,
     SubjectPage,
     SubjectTask,
     TaskResult,
     Trust,
+    strength_of_task,
 )
 from hwcheck.subjects.math.module import _pseudo_ref as _pseudo_ref  # ре-экспорт для тестов
 from hwcheck.subjects.math.module import findings_from_grade, to_subject_task, to_vision_task
@@ -85,6 +88,8 @@ OCR_FAILED = (
     "Не смог прочитать тетрадь 😕 Попробуй переснять: страница целиком, без наклона, "
     "при хорошем свете."
 )
+# часть альбома прочиталась: сводка по ней верна, но про пропущенную страницу надо сказать
+OCR_FAILED_PARTIAL = "Одну из страниц тетради не смог прочитать 😕 — переснять её можно отдельно."
 # предмет есть в профиле, но модуль в этом окружении не собран (нет словаря/OCR)
 SUBJECT_UNAVAILABLE = "Проверка по этому предмету пока недоступна 🙏"
 NOTHING_TO_TUTOR = "Здесь нечего разбирать — ошибка не подтверждена 🙂"
@@ -100,6 +105,45 @@ def models_for(settings: Settings) -> CheckModels:
         structure=settings.tutor_model,
         solver=settings.solver_model,
     )
+
+
+@dataclass(frozen=True)
+class _LanguageAlbum:
+    """Разобранный альбом языков: что проверять, какие упражнения помним, что не прочли."""
+
+    notebook: list[SubjectTask]  # задания тетради, слова уже со ссылкой на своё фото
+    conditions: dict[str, SubjectTask]  # упражнения учебника по номеру (с запомненными раньше)
+    ocr_failed: bool  # хотя бы одну страницу тетради OCR не прочитал
+    saw_textbook: bool
+
+    @property
+    def remembered(self) -> list[SubjectTask]:
+        return list(self.conditions.values())
+
+
+def _split_language_album(
+    pages: list[SubjectPage | None], kb_paths: list[str | None], known: list[SubjectTask]
+) -> _LanguageAlbum:
+    """Страницы альбома → задания тетради и упражнения учебника (запомненные раньше — в основе)."""
+    conditions = {t.number: t for t in known}
+    notebook: list[SubjectTask] = []
+    ocr_failed = False
+    saw_textbook = False
+    for index, page in enumerate(pages):
+        if page is None:
+            continue
+        ocr_failed = ocr_failed or page.failure == "ocr_failed"
+        if page.role == "textbook":
+            saw_textbook = True
+            kb_photo = kb_paths[index]
+            for task in page.tasks:
+                conditions[task.number] = task.model_copy(update={"photo_path": kb_photo})
+        elif page.role == "notebook":
+            for task in page.tasks:
+                # координаты слов относятся к своему фото альбома: по ним бот кропает слово
+                words = [w.model_copy(update={"photo_index": index}) for w in task.words]
+                notebook.append(task.model_copy(update={"words": words}))
+    return _LanguageAlbum(notebook, conditions, ocr_failed, saw_textbook)
 
 
 class Bot:
@@ -374,51 +418,17 @@ class Bot:
             else []
         )
         pages, photo_paths, kb_paths = await self._recognize_language_album(module, user_id, urls)
-        conditions = {t.number: t for t in known}
-        notebook: list[SubjectTask] = []
-        ocr_failed = False
-        saw_textbook = False
-        for index, page in enumerate(pages):
-            if page is None:
-                continue
-            ocr_failed = ocr_failed or page.failure == "ocr_failed"
-            if page.role == "textbook":
-                saw_textbook = True
-                kb_photo = kb_paths[index]
-                for task in page.tasks:
-                    conditions[task.number] = task.model_copy(update={"photo_path": kb_photo})
-            elif page.role == "notebook":
-                for task in page.tasks:
-                    # координаты слов относятся к своему фото альбома: по ним бот кропает слово
-                    words = [w.model_copy(update={"photo_index": index}) for w in task.words]
-                    notebook.append(task.model_copy(update={"words": words}))
-        remembered = list(conditions.values())
-        if not notebook:
-            await self._answer_without_notebook(chat_id, remembered, ocr_failed, saw_textbook)
-            if remembered:
-                # сводка другого предмета вместе с её кнопками «Разобрать» снимается: разбор
-                # по ней ушёл бы в чужой модуль
-                kept = state if same_subject else ChatState()
-                await self._store.set(chat_id, kept.model_copy(update={
-                    "conditions": remembered, "textbook_saved_at": time.time(), "subject": subject,
-                }))  # fmt: skip
+        album = _split_language_album(pages, kb_paths, known)
+        if not album.notebook:
+            await self._album_without_notebook(chat_id, state, album, subject)
             return
+        remembered = album.remembered
         references = await module.resolve_reference(remembered, self._kb)
         for reference in references:
             self._events.log("reference_resolved", user_id=user_id, subject=subject,
                              origin=reference.origin, trust=reference.trust)  # fmt: skip
-        results = await module.check(notebook, references)
-        checked = []
-        for task, result in zip(notebook, results, strict=True):
-            numbered = _numbered_by_condition(task, result.reference, conditions)
-            findings = [
-                f.model_copy(update={"task_index": result.task_index}) for f in result.findings
-            ]
-            await self._record_findings(user_id, numbered, findings, subject=subject)
-            checked.append(CheckedTask(
-                task=to_vision_task(numbered), ref=None, subject_task=numbered, findings=findings,
-                reference=result.reference, payload=result.payload,
-            ))  # fmt: skip
+        results = await module.check(album.notebook, references)
+        checked = await self._to_checked_tasks(user_id, album, results, subject)
         plan = plan_clarifications(checked)
         new_state = ChatState(
             phase="clarifying" if plan else "review", tasks=checked, subject=subject,
@@ -427,20 +437,59 @@ class Bot:
         )  # fmt: skip
         await self._store.set(chat_id, new_state)
         await self._send_review(chat_id, new_state)
+        if album.ocr_failed:
+            # часть тетради осталась непрочитанной: сводка по остальным страницам верна,
+            # но молчать о пропущенной странице нельзя (ревью R7)
+            await self._max.send_message(chat_id, OCR_FAILED_PARTIAL)
         if plan:
             await self._ask_clarification(chat_id, user_id, new_state)
 
-    async def _answer_without_notebook(
-        self, chat_id: int, remembered: list[SubjectTask], ocr_failed: bool, saw_textbook: bool
+    async def _to_checked_tasks(
+        self,
+        user_id: int | None,
+        album: _LanguageAlbum,
+        results: list[TaskResult],
+        subject: str,
+    ) -> list[CheckedTask]:
+        """Результаты модуля → задания сводки: номер из учебника, находки с местом в альбоме."""
+        checked = []
+        for task, result in zip(album.notebook, results, strict=True):
+            numbered = _numbered_by_condition(task, result.reference, album.conditions)
+            findings = [
+                f.model_copy(update={"task_index": result.task_index}) for f in result.findings
+            ]
+            await self._record_findings(user_id, numbered, findings, subject=subject)
+            # знаменатель отчёта по предмету: у языков вердикта нет, считаем силу находок
+            self._events.log("task_checked", user_id=user_id, component="validator",
+                             subject=subject, verdict=strength_of_task(findings),
+                             n_words=len(task.words),
+                             has_reference=result.reference is not None)  # fmt: skip
+            checked.append(CheckedTask(
+                task=to_vision_task(numbered), ref=None, subject_task=numbered, findings=findings,
+                reference=result.reference, payload=result.payload,
+            ))  # fmt: skip
+        return checked
+
+    async def _album_without_notebook(
+        self, chat_id: int, state: ChatState, album: _LanguageAlbum, subject: str
     ) -> None:
-        """Тетради в альбоме нет: либо её не прочитали, либо пришёл только учебник."""
-        if ocr_failed:
+        """Тетради в альбоме нет: её не прочитали или пришёл только учебник — упражнения ждут."""
+        remembered = album.remembered
+        if album.ocr_failed:
             await self._max.send_message(chat_id, OCR_FAILED)
-        elif saw_textbook and remembered:
+        elif album.saw_textbook and remembered:
             numbers = describe_tasks([to_vision_task(t) for t in remembered])
             await self._max.send_message(chat_id, TEXTBOOK_ONLY.format(numbers=numbers))
         else:
             await self._max.send_message(chat_id, UNREADABLE)
+        if not remembered:
+            return
+        # сводка другого предмета вместе с её кнопками «Разобрать» снимается: разбор по ней
+        # ушёл бы в чужой модуль
+        kept = state if state.subject == subject else ChatState()
+        await self._store.set(chat_id, kept.model_copy(update={
+            "conditions": remembered, "textbook_saved_at": time.time(), "subject": subject,
+        }))  # fmt: skip
 
     async def _recognize_language_album(
         self, module: SubjectModule, user_id: int | None, urls: list[str]
@@ -711,8 +760,8 @@ class Bot:
                     answer="yes" if confirmed_finding.confirmed else "no",
                 )
             # отдельное событие: задание уже учтено в task_checked, в отчёте не дублируем.
-            # Предмет без пересчёта (языки) сюда не попадает: пересчитывать нечего, а ответ
-            # ребёнка уже записан в finding_confirmed
+            # У предмета без пересчёта (языки) вердикт от ответа не меняется — пересчитывать
+            # нечего, а сам ответ ребёнка уже записан в finding_confirmed
             if updated.grade is not None:
                 self._events.log(
                     "task_clarified",
@@ -770,10 +819,10 @@ class Bot:
         )
         try:
             session = await self._start_tutoring(user_id, index, item, state.subject)
-        except ValueError as exc:
+        except NoTutorableFinding as exc:
             # у языков разбирают подтверждённую ошибку: кнопка из старой сводки (находку сняли
-            # ответом «нет») — это не сбой бота, так ребёнку и скажем. Текст в логе: сюда же
-            # попал бы неожиданный ValueError модуля (в том числе ValidationError pydantic)
+            # ответом «нет») — это не сбой бота, так ребёнку и скажем. Свой тип исключения:
+            # обычный ValueError модуля (в том числе ValidationError pydantic) — это сбой
             logger.info("nothing to tutor: %s", exc)
             await self._max.send_message(chat_id, NOTHING_TO_TUTOR)
             return

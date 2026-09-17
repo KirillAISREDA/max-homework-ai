@@ -8,13 +8,20 @@ from PIL import Image
 
 from hwcheck.bot.check import validator_only_grade
 from hwcheck.bot.fsm import ChatState, CheckedTask, InMemoryStateStore
-from hwcheck.bot.handlers import NOTHING_TO_TUTOR, SUBJECT_UNAVAILABLE, Bot
+from hwcheck.bot.handlers import (
+    NOTHING_TO_TUTOR,
+    OCR_FAILED_PARTIAL,
+    SUBJECT_UNAVAILABLE,
+    Bot,
+)
 from hwcheck.bot.onboarding.router import CheckPhotos
 from hwcheck.config import Settings
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
 from hwcheck.events import EventLog, read_events
+from hwcheck.ocr_client import OcrError
 from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.schemas import VisionTask
+from hwcheck.subjects.base import Word
 from hwcheck.subjects.registry import SubjectDeps
 from test_bot import FakeMax
 from test_ru_gaps import WORDS
@@ -46,8 +53,26 @@ class RuFakeMax(FakeMax):
         return _jpeg()
 
 
+class FlakyOcr:
+    """Смешанный альбом: первую страницу OCR не прочитал, вторую прочитал."""
+
+    def __init__(self, words: list[Word]) -> None:
+        self._words = words
+        self.calls = 0
+
+    async def recognize(self, image: bytes) -> list[Word]:
+        self.calls += 1
+        if self.calls == 1:
+            raise OcrError("ocr: ConnectError")
+        return self._words
+
+
 def _bot(
-    tmp_path: Path, vision: FakeVision, ocr: FakeOcr, *, dictionary: object = DICTIONARY
+    tmp_path: Path,
+    vision: FakeVision,
+    ocr: FakeOcr | FlakyOcr,
+    *,
+    dictionary: object = DICTIONARY,
 ) -> tuple[Bot, RuFakeMax, Path]:
     events_path = tmp_path / "events.jsonl"
     max_client = RuFakeMax()
@@ -91,8 +116,13 @@ async def test_album_textbook_and_notebook_asks_about_word(tmp_path: Path) -> No
     assert state.tasks[0].grade is None and state.tasks[0].findings[0].word is not None
     assert state.tasks[0].findings[0].word.photo_index == 1
     assert [t.number for t in state.conditions] == ["245"]
-    kinds = [e["type"] for e in read_events(events_path)]
+    events = list(read_events(events_path))
+    kinds = [e["type"] for e in events]
     assert "reference_resolved" in kinds and "finding_created" in kinds
+    # знаменатель отчёта по предмету: у языков вердикта нет — пишем силу находок
+    checked = next(e for e in events if e["type"] == "task_checked")
+    assert (checked["subject"], checked["verdict"]) == ("russian", "candidate")
+    assert checked["has_reference"] is True and checked["n_words"] == 3
 
 
 async def test_yes_confirms_error_and_tutor_starts(tmp_path: Path) -> None:
@@ -141,6 +171,21 @@ async def test_ocr_failure_reports_uncertain_and_event(tmp_path: Path) -> None:
 
     assert "Не смог прочитать тетрадь" in max_client.sent[-1].text
     assert "ocr_failed" in [e["type"] for e in read_events(events_path)]
+
+
+async def test_unread_page_of_mixed_album_is_reported_with_the_review(tmp_path: Path) -> None:
+    """Одну страницу тетради OCR не прочитал: сводка по прочитанным уходит, но молчать нельзя."""
+    vision = FakeVision([NOTEBOOK, NOTEBOOK])
+    ocr = FlakyOcr([_w("Наступила", 0), _w("осень", 1)])
+    bot, max_client, events_path = _bot(tmp_path, vision, ocr)
+
+    await bot._on_photo(chat_id=1, user_id=7, urls=["u1", "u2"], subject="russian")
+
+    texts = [m.text for m in max_client.sent]
+    assert any(t.startswith("Проверил!") for t in texts)
+    assert texts[-1] == OCR_FAILED_PARTIAL
+    assert "ocr_failed" in [e["type"] for e in read_events(events_path)]
+    assert len((await bot._store.get(1)).tasks) == 1  # прочитанная страница проверена
 
 
 async def test_textbook_only_is_remembered_for_next_message(tmp_path: Path) -> None:

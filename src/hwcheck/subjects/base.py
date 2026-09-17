@@ -19,6 +19,7 @@ __all__ = [
     "Box",
     "Finding",
     "KnowledgeBase",
+    "NoTutorableFinding",
     "Origin",
     "PageRole",
     "Reference",
@@ -33,6 +34,15 @@ __all__ = [
     "Word",
     "strength_of_task",
 ]
+
+
+class NoTutorableFinding(ValueError):
+    """Разбирать нечего: подтверждённой ошибки, по которой строится диалог, у задания нет.
+
+    Отдельный тип, чтобы бот отличал «нечего разбирать» от настоящего сбоя модуля (в том числе
+    от `ValidationError` pydantic, который тоже `ValueError`).
+    """
+
 
 Strength = Literal["verified", "candidate", "feedback"]
 Trust = Literal["verified", "unverified"]

@@ -20,6 +20,7 @@ from hwcheck.pipeline.vision import VisionAndChatClient
 from hwcheck.subjects.base import (
     Finding,
     KnowledgeBase,
+    NoTutorableFinding,
     Reference,
     SubjectPage,
     SubjectTask,
@@ -199,7 +200,7 @@ class RussianModule:
         # тьютору не построить без того, что ребёнок написал — только spelling/extra_word
         finding = next((f for f in result.findings if f.is_error and f.actual and f.expected), None)
         if finding is None or finding.actual is None or finding.expected is None:
-            raise ValueError("нет подтверждённой ошибки для разбора")
+            raise NoTutorableFinding("нет подтверждённой ошибки для разбора")
         sentence = result.payload.get("sentence", {}).get(finding.actual, " ".join(task.lines))
         rule_code = await classify_orthogram(
             self._llm, finding.actual, finding.expected, sentence, model=self._models.structure
