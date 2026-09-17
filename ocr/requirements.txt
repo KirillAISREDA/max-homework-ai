@@ -1,3 +1,15 @@
-# Движок — FakeEngine (стандартная библиотека, зависимостей не требует).
-# Зависимости ReadingPipeline (torch, onnxruntime, opencv и т.д.) — этап 3 по итогам спайка
-# docs/research/2026-09-17-readingpipeline-vps.md.
+# ReadingPipeline (ai-forever) на ONNX/CPU без torch — версии из spikes/ocr_memory/Dockerfile.notorch
+numpy==1.23.1
+opencv-python-headless==4.6.0.66
+tqdm==4.62.3
+matplotlib==3.5.0
+Pillow==8.4.0
+pyclipper==1.3.0
+shapely==1.8.0
+onnxruntime==1.17.3
+openvino==2024.6.0
+pandas==1.3.4
+scikit-learn==1.3.2
+scipy==1.10.1
+albumentations==1.1.0
+huggingface_hub

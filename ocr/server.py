@@ -20,8 +20,8 @@ BUSY_TIMEOUT_S = 5.0  # столько ждём освобождения дви�
 def make_handler(
     engine: Engine, *, busy_timeout_s: float = BUSY_TIMEOUT_S
 ) -> type[BaseHTTPRequestHandler]:
-    # один прогон движка за раз: пик ReadingPipeline ~3 ГБ (спайк 17.09), два параллельных
-    # прогона — OOM контейнера с лимитом 3g, то есть потеря и второй проверки, и первой
+    # один прогон движка за раз: пик 1,46 ГБ при лимите 2 ГБ (спайк памяти 17.09) — два
+    # параллельных прогона не помещаются, то есть потеря и второй проверки, и первой
     slot = threading.Semaphore(1)
 
     class Handler(BaseHTTPRequestHandler):

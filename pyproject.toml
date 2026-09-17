@@ -25,6 +25,7 @@ dev = [
     "mypy>=1.11",
     "fakeredis>=2.38.0",
     "asyncpg-stubs>=0.31.3",
+    "numpy>=1.26",
 ]
 
 [build-system]
@@ -50,6 +51,10 @@ packages = ["hwcheck", "ocr"]
 
 [[tool.mypy.overrides]]
 module = ["gigachat.*", "sympy.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["onnxruntime.*", "ocrpipeline.*", "cv2.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
