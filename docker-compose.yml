@@ -16,6 +16,10 @@ services:
       LOG_PATH: var/bot.log
       # профили, согласия, приглашения; пароль — из .env (python -m hwcheck keys)
       DATABASE_URL: postgresql://homework:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан в .env}@postgres:5432/homework
+      # OCR для языков (контейнер homework-ocr, профиль ocr). Пусто, пока контейнер не запущен:
+      # клиент создаётся только при заданном OCR_URL, модуль math OCR не использует. Включение —
+      # OCR_URL=http://ocr:8080 в .env вместе с запуском сервиса ocr (этап «русский»)
+      OCR_URL: ${OCR_URL:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -79,6 +83,34 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+
+  # OCR-сервис для языков (посимвольное распознавание рукописи, спецификация каркаса §8):
+  # не стартует по умолчанию, только явно (docker compose --profile ocr up -d ocr); в этой стадии
+  # не запускается на VPS, только собирается
+  ocr:
+    build:
+      context: .
+      dockerfile: ocr/Dockerfile
+    image: max-homework-ai-ocr
+    container_name: homework-ocr
+    # пока только сборка (docker compose --profile ocr build ocr); unless-stopped — при включении
+    # в этапе «русский», см. docs/deploy.md «OCR-сервис»
+    restart: "no"
+    profiles: ["ocr"]            # стартует только явно: docker compose --profile ocr up -d ocr
+    environment:
+      OCR_ENGINE: ${OCR_ENGINE:-fake}
+    deploy:
+      resources:
+        limits:
+          # спайк docs/research/2026-09-17-readingpipeline-vps.md: пик ReadingPipeline ~3 ГБ на
+          # реальных фото — 1.5g из первоначального черновика недостижим
+          memory: 3g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+    # без портов наружу: бот ходит по compose-сети как к http://ocr:8080
 
   # ежедневный pg_dump в var/backups, хранение 7 дней (спецификация онбординга §7)
   pgbackup:

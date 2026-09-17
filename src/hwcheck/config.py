@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     user_id_key: str = ""
     # PostgreSQL: профили, согласия, приглашения; пусто — бот без базы (как до онбординга)
     database_url: str | None = None
+    # OCR-сервис для языков (контейнер homework-ocr); пусто — предметы с OCR недоступны
+    ocr_url: str | None = None
+    ocr_timeout_s: float = (
+        60.0  # p95 спайка × 2; уточнить по docs/research/2026-09-17-readingpipeline-vps.md
+    )
     # онбординг и согласие родителя до проверки (спецификация 2026-09-14); false — аварийный
     # выключатель: бот проверяет фото без онбординга, как до этапа 2
     onboarding_required: bool = False

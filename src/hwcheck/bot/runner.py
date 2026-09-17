@@ -35,6 +35,7 @@ from hwcheck.bot.onboarding.state import (
 )
 from hwcheck.config import Settings
 from hwcheck.crypto import UserIdCipher, UserIdCipherError
+from hwcheck.db.findings import PgFindingsRepository
 from hwcheck.db.pool import create_pool
 from hwcheck.db.repo import PgProfileRepository
 from hwcheck.events import EventLog, set_id_hash_key
@@ -247,6 +248,7 @@ async def run_polling(settings: Settings) -> None:
             settings,
             photos=_make_photo_store(settings),
             onboarding=onboarding,
+            findings=PgFindingsRepository(pool) if pool is not None else None,
         )
         await _poll_loop(max_client, bot, marker_path, stop)
     logger.info("bot stopped")

@@ -137,7 +137,19 @@ Python-воркеры (например `arq`/`Celery` поверх Managed Redi
 ### 3.5. Report Scheduler
 CronJob в Kubernetes (воскресенье 18:00) → для каждого активного ученика собирает статистику → Parent Report → пуш родителю через MAX Gateway.
 
-### 3.6. Admin / Review UI
+### 3.6. Предметные модули (`src/hwcheck/subjects/`)
+Каркас предметов (спецификация `docs/superpowers/specs/2026-09-16-subjects-framework-design.md`): предмет — это модуль с четырьмя шагами `recognize → resolve_reference → check → start_tutoring` и общими типами `SubjectPage`, `Reference`, `Finding`, `TaskResult`. Бот не знает, какой предмет проверяет: он берёт модуль по коду из реестра (`subjects/registry.py`) и работает с находками, а не с математическим `GradeResult`. Математика — первый модуль (`subjects/math/module.py`), обёртка над существующим пайплайном без изменения поведения.
+
+### 3.7. База знаний (`kb_*`, `src/hwcheck/db/kb.py`)
+Страницы учебников из фото учеников (только печатный текст), задания, наши ответы со статусом `unverified | verified | rejected`, карточки правил и словари. Поиск страницы — по отпечатку нормализованного текста (регистр, «ё», пунктуация и переносы не важны). Учебники целиком и ГДЗ не парсим, фото тетрадей в базе не храним. Ручная проверка ответов и загрузка словарей — консоль `python -m hwcheck kb` (`src/hwcheck/kb_cli.py`, порядок — `docs/deploy.md`).
+
+### 3.8. Находки проверки (`findings`)
+Каждая находка предметного модуля пишется в таблицу `findings` с обезличенным хэшем ученика, силой вердикта (`verified | candidate | feedback`), кодом правила и ответом ученика на уточняющий вопрос. Это основа аналитики качества (доля ложных `verified`, доля «нет» на вопрос «здесь написано …?») и будущей модели ученика. Сбой записи не ломает проверку — ребёнок ждёт сводку.
+
+### 3.9. Контейнер `homework-ocr` (`ocr/`)
+Посимвольное распознавание рукописи без языковой модели — для языков («как написано»). Отдельный образ со своими тяжёлыми зависимостями, в compose-сети без портов наружу, лимит памяти 3 ГБ (спайк ReadingPipeline). Контракт — `GET /health`, `POST /recognize` (байты изображения → слова с координатами); один прогон движка за раз, занято → 503. Недоступен — предметный модуль отдаёт `candidate`/«не уверен» и событие `ocr_failed`, проверка не падает. На этой стадии контейнер только собирается (`docs/deploy.md`).
+
+### 3.10. Admin / Review UI
 Простая внутренняя панель: очередь спорных проверок (расхождение Solver/Validator, низкая confidence), просмотр фото + распознанного JSON, ручная разметка → датасет для оценки качества. На MVP — Streamlit/React за basic-auth, доступ только команде.
 
 ---
@@ -204,6 +216,17 @@ parent_reports(id, student_id, period_start, period_end, summary, recommendation
 events(id, user_id, type, payload_jsonb, ts)            -- продуктовая аналитика
 review_queue(id, exercise_id, reason, resolved_by, resolution, created_at)
 prompt_cache(hash, step, result_jsonb, created_at)      -- можно вынести в Redis
+
+-- база знаний по предметам (миграция 003; только печатный текст учебника, без данных детей)
+kb_pages(id, subject, grade, fingerprint, text, photo_path, created_at)   -- UNIQUE (subject, fingerprint)
+kb_tasks(id, page_id, number, condition, task_kind)
+kb_answers(id, task_id, answer_jsonb, derived_by, checked_by, status, reviewed_at, created_at)
+kb_rules(code, subject, grade_from, title, statement, example, finding_kinds)
+kb_words(subject, word, source, attrs_jsonb)            -- PK (subject, word, source)
+
+-- находки проверки: аналитика качества и будущая модель ученика; homework_id — этап 4
+findings(id, user_hash, subject, trace_id, task_number, kind, strength, rule_code,
+         confirmed, resolved, created_at)
 ```
 
 ### 6.2. Redis

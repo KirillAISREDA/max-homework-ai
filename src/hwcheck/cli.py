@@ -13,8 +13,11 @@ from hwcheck.bench.cli import add_bench_parser, report_command, run_command
 from hwcheck.bot.runner import run_polling
 from hwcheck.config import Settings, load_settings
 from hwcheck.crypto import new_user_id_key
+from hwcheck.db.kb import PgKnowledgeBase
+from hwcheck.db.pool import create_pool
 from hwcheck.eval.offline import run_offline_eval
-from hwcheck.events import read_events, summarize_events
+from hwcheck.events import EventLog, read_events, summarize_events
+from hwcheck.kb_cli import load_words, review
 from hwcheck.llm import ChatMessage, GigaChatClient
 from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.generator import generate_similar
@@ -78,6 +81,18 @@ def main(argv: list[str] | None = None) -> None:
 
     add_bench_parser(sub)
 
+    kb = sub.add_parser("kb", help="Консоль базы знаний: проверка ответов и загрузка словарей")
+    kb_commands = kb.add_subparsers(dest="kb_command", required=True)
+
+    review_cmd = kb_commands.add_parser("review", help="Проверить непроверенные ответы")
+    review_cmd.add_argument("--subject", required=True, help="Предмет (russian, english, math)")
+    review_cmd.add_argument("--limit", type=int, default=20, help="Максимум ответов за сеанс")
+
+    load_cmd = kb_commands.add_parser("load-words", help="Загрузить словарь")
+    load_cmd.add_argument("--subject", required=True, help="Предмет")
+    load_cmd.add_argument("--source", required=True, help="Источник словаря")
+    load_cmd.add_argument("path", type=Path, help="Файл со словами (.txt или .json)")
+
     args = parser.parse_args(argv)
     # консоль Windows в cp1251: «→», «·» в отчётах роняли печать — не валим команду из-за вывода
     reconfigure = getattr(sys.stdout, "reconfigure", None)
@@ -135,6 +150,23 @@ def configure_bot_logging(settings: Settings) -> None:
 
 async def _run(args: argparse.Namespace) -> None:
     settings = load_settings()
+
+    if args.command == "kb":
+        if not settings.database_url:
+            raise SystemExit("Не задан DATABASE_URL (см. .env.example)")
+        pool = await create_pool(settings.database_url)
+        try:
+            kb = PgKnowledgeBase(pool)
+            if args.kb_command == "review":
+                events = EventLog(Path(settings.events_path), settings.environment)
+                await review(kb, args.subject, limit=args.limit, events=events)
+            elif args.kb_command == "load-words":
+                count = await load_words(kb, args.subject, args.source, args.path)
+                print(f"Загружено {count} слов")
+        finally:
+            await pool.close()
+        return
+
     if not settings.gigachat_credentials:
         raise SystemExit("Не задан GIGACHAT_CREDENTIALS (см. .env.example)")
 

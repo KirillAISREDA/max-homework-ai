@@ -35,6 +35,11 @@ def trace() -> Iterator[str]:
         _trace_id.reset(token)
 
 
+def current_trace_id() -> str | None:
+    """trace_id текущего апдейта вне EventLog.log — например, для записи находок в базу."""
+    return _trace_id.get()
+
+
 class EventLog:
     def __init__(self, path: Path, environment: str, *, test_users: Iterable[str] = ()) -> None:
         self._path = path

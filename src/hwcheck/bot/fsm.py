@@ -13,11 +13,13 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, Field, ValidationError
 from redis.asyncio import Redis
 
+from hwcheck.bot.check import RefStatus
 from hwcheck.events import anonymize
 from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.tutor import TutorSession
+from hwcheck.subjects.base import Finding
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +32,19 @@ class CheckedTask(BaseModel):
     task: VisionTask
     ref: RefSolution | None  # None — условия нет, проверка только пересчётом
     grade: GradeResult
+    # находки предметного модуля (спецификация каркаса §4); пусто — вывести из grade (математика)
+    findings: list[Finding] = Field(default_factory=list)
+    # статус эталона (bot/check.py): по умолчанию — старые записи Redis без этого поля
+    ref_status: RefStatus = "no_condition"
 
 
 class Clarification(BaseModel):
     """Вопрос ученику по спорному заданию (bot/clarify.py)."""
 
     task_index: int
-    kind: Literal["answer", "sign", "line"]
+    kind: Literal["answer", "sign", "line", "word"]
     line_index: int | None = None  # строка решения для sign/line
+    finding_id: str | None = None  # `Finding.id` находки item.findings для word
     attempts: int = 0  # неразобранных ответов
     # метка вопроса в payload кнопок: старая кнопка не должна ответить на следующий вопрос
     token: str = Field(default_factory=lambda: token_hex(4))
@@ -54,6 +61,8 @@ class ChatState(BaseModel):
     textbook_tasks: list[VisionTask] = Field(default_factory=list)
     textbook_saved_at: float | None = None  # время сохранения условий (TTL в pages.py)
     clarifications: list[Clarification] = Field(default_factory=list)  # очередь вопросов
+    # относительные пути PhotoStore фото альбома по порядку (Word.photo_index — индекс сюда)
+    photo_paths: list[str] = Field(default_factory=list)
 
 
 class StateStore(Protocol):

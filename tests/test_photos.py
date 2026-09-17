@@ -104,3 +104,29 @@ def test_save_writes_photo_even_if_purge_fails(
     monkeypatch.setattr(store, "purge_expired", broken_purge)
     key = store.save("u1", JPEG)
     assert (tmp_path / key).read_bytes() == JPEG
+
+
+def test_load_reads_back_saved_photo(tmp_path: Path) -> None:
+    store = PhotoStore(tmp_path / "photos", ttl_days=30)
+    key = store.save("u1", JPEG)
+    assert store.load(key) == JPEG
+
+
+def test_load_rejects_path_traversal_outside_root(tmp_path: Path) -> None:
+    """`rel_path` может прийти из недоверенного состояния — выход за `root` не должен читать
+    произвольный файл на диске (fix round 1, code review 17.09)."""
+    store = PhotoStore(tmp_path / "photos", ttl_days=30)
+    outside = tmp_path / "secret.txt"
+    outside.write_bytes(b"secret")
+
+    with pytest.raises(FileNotFoundError):
+        store.load("../secret.txt")
+
+
+def test_load_rejects_empty_path(tmp_path: Path) -> None:
+    """Пустой ключ (фото альбома не сохранилось) — «файла нет», а не чтение самого каталога."""
+    store = PhotoStore(tmp_path / "photos", ttl_days=30)
+    store.save("u1", JPEG)  # каталог существует — путь «» указывал бы на него
+
+    with pytest.raises(FileNotFoundError):
+        store.load("")

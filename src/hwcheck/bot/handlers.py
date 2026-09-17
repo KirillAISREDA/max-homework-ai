@@ -4,6 +4,7 @@
 Каждый вызов компонента логируется в EventLog (конкурсная метрика + антифрод).
 """
 
+import asyncio
 import contextlib
 import logging
 import time
@@ -12,22 +13,24 @@ from pathlib import Path
 from hwcheck.bot.check import (
     CheckModels,
     RecognizedPhoto,
-    check_task,
     recognize_photo,
     split_pages,
     validator_only_grade,
 )
 from hwcheck.bot.clarify import (
     MAX_ATTEMPTS,
+    _finding,
     apply_sign,
     apply_text,
+    apply_word,
     parse_sign_payload,
     plan_clarifications,
     question,
     retry_prompt,
 )
-from hwcheck.bot.fsm import ChatState, CheckedTask, StateStore
-from hwcheck.bot.max_api import MaxClient, callback_button
+from hwcheck.bot.crops import crop_word
+from hwcheck.bot.fsm import ChatState, CheckedTask, Clarification, StateStore
+from hwcheck.bot.max_api import MaxClient
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
 from hwcheck.bot.pages import (
@@ -37,15 +40,22 @@ from hwcheck.bot.pages import (
     task_label,
     textbook_is_fresh,
 )
+from hwcheck.bot.summary import clarified_line, review_header, task_line
+from hwcheck.bot.summary import lower as _lower
+from hwcheck.bot.summary import remaining_buttons as _remaining_buttons
 from hwcheck.config import Settings
-from hwcheck.events import EventLog, anonymize, trace
+from hwcheck.db.findings import FindingRecord, FindingsRepository
+from hwcheck.events import EventLog, anonymize, current_trace_id, trace
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
-from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.schemas import VisionTask
-from hwcheck.pipeline.solver import FileCache, RefSolution, StructuredOutputError
+from hwcheck.pipeline.solver import FileCache, RefSolution
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
+from hwcheck.subjects.base import Finding, Reference, SubjectTask, TaskResult, Trust
+from hwcheck.subjects.math.module import _pseudo_ref as _pseudo_ref  # ре-экспорт для тестов
+from hwcheck.subjects.math.module import findings_from_grade, to_subject_task
+from hwcheck.subjects.registry import SubjectDeps, module_for
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +88,8 @@ class Bot:
         *,
         photos: PhotoStore | None = None,
         onboarding: Onboarding | None = None,
+        subjects: SubjectDeps | None = None,
+        findings: FindingsRepository | None = None,
     ) -> None:
         self._max = max_client
         self._llm = llm
@@ -87,7 +99,10 @@ class Bot:
         self._photos = photos
         # None — ONBOARDING_REQUIRED=false: проверка без онбординга, как до этапа 2
         self._onboarding = onboarding
+        self._findings = findings
         self._cache = FileCache(Path(".cache/solver"))
+        # математика — единственный реализованный предмет; профиль ученика определит код позже
+        self._module = module_for("math", subjects or SubjectDeps(llm, self._models, self._cache))
 
     @property
     def _models(self) -> CheckModels:
@@ -210,9 +225,17 @@ class Bot:
         )
         return recognized
 
-    async def _recognize_all(self, user_id: int | None, urls: list[str]) -> list[RecognizedPhoto]:
-        """Сбой одного фото (сеть, vision) не теряет остальные; упали все — наверх."""
+    async def _recognize_all(
+        self, user_id: int | None, urls: list[str]
+    ) -> tuple[list[RecognizedPhoto], list[str]]:
+        """Сбой одного фото (сеть, vision) не теряет остальные; упали все — наверх.
+
+        Пути идут в порядке альбома, по одному на каждое фото сообщения: упавшее занимает своё
+        место пустой строкой. Это и есть индекс, на который ссылается `Word.photo_index`
+        для кропа в уточняющем вопросе.
+        """
         results: list[RecognizedPhoto] = []
+        paths: list[str] = []
         failed = 0
         for url in urls:
             photo: str | None = None
@@ -221,15 +244,17 @@ class Bot:
                 # до vision: фото, на которых распознавание упало, — самые ценные для разбора
                 photo = self._save_photo(user_id, image)
                 results.append(await self._recognize(user_id, image, photo))
+                paths.append(photo or "")
             except Exception as exc:
                 failed += 1
+                paths.append("")  # место в альбоме сохраняется: индексы не должны съезжать
                 logger.exception("photo failed: %s", url.split("?")[0])
                 self._events.log(
                     "photo_failed", user_id=user_id, error=type(exc).__name__, photo=photo
                 )
         if urls and failed == len(urls):
             raise RuntimeError("all photos failed")
-        return results
+        return results, paths
 
     async def _process_photos(self, chat_id: int, user_id: int | None, urls: list[str]) -> None:
         """Все фото сообщения: учебник даёт условия, тетрадь — решения.
@@ -239,7 +264,8 @@ class Bot:
         """
         state = await self._store.get(chat_id)
         known = list(state.textbook_tasks) if textbook_is_fresh(state.textbook_saved_at) else []
-        album = split_pages(await self._recognize_all(user_id, urls), known)
+        recognized, photo_paths = await self._recognize_all(user_id, urls)
+        album = split_pages(recognized, known)
         notebook, textbook = album.notebook, album.textbook
         new_textbook, comment = album.new_textbook, album.comment
         if not notebook:
@@ -256,7 +282,8 @@ class Bot:
                 )
             return
         checked = [
-            await self._check_task(user_id, task) for task in attach_conditions(notebook, textbook)
+            await self._check_task(user_id, task, index)
+            for index, task in enumerate(attach_conditions(notebook, textbook))
         ]
         plan = plan_clarifications(checked)
         new_state = ChatState(
@@ -265,38 +292,96 @@ class Bot:
             textbook_tasks=textbook,
             textbook_saved_at=time.time() if textbook else None,
             clarifications=plan,
+            photo_paths=photo_paths,
         )
         await self._store.set(chat_id, new_state)
         await self._send_review(chat_id, new_state)
         if plan:
             await self._ask_clarification(chat_id, user_id, new_state)
 
-    async def _check_task(self, user_id: int | None, task: VisionTask) -> CheckedTask:
-        checked = await check_task(self._llm, task, self._models, self._cache)
-        if checked.solved is not None:
-            result_tokens = checked.solver_result
+    async def _check_task(self, user_id: int | None, task: VisionTask, index: int) -> CheckedTask:
+        """`index` — номер задания в альбоме: модуль проверяет задания по одному и о своём
+        месте в альбоме не знает, поэтому `Finding.task_index` проставляет бот."""
+        subject_task = to_subject_task(task)
+        [result] = await self._module.check([subject_task], [])
+        findings = [f.model_copy(update={"task_index": index}) for f in result.findings]
+        payload = result.payload
+        if payload.get("solver_from_cache") is not None:
             self._events.log(
                 "solver_call",
                 user_id=user_id,
                 component="solver",
-                from_cache=checked.solved.from_cache,
-                tokens=(result_tokens.tokens_in + result_tokens.tokens_out) if result_tokens else 0,
+                from_cache=payload["solver_from_cache"],
+                tokens=payload["solver_tokens"],
             )
-        result = checked.grade
+        grade = GradeResult.model_validate(payload["grade"])
+        ref = (
+            RefSolution.model_validate(result.reference.payload["ref"])
+            if result.reference is not None and "ref" in result.reference.payload
+            else None
+        )
+        if result.reference is not None:
+            self._events.log(
+                "reference_resolved",
+                user_id=user_id,
+                subject=self._module.code,
+                origin=result.reference.origin,
+                trust=result.reference.trust,
+            )
         # что стало с эталоном — вторая половина ответа на вопрос «почему не уверен»
-        ref_status = checked.ref_status
         self._events.log(
             "task_checked",
             user_id=user_id,
             component="validator",
-            verdict=result.verdict,
-            reason=result.uncertain_reason,
-            ref_status=ref_status,
+            verdict=grade.verdict,
+            reason=grade.uncertain_reason,
+            ref_status=payload["ref_status"],
             n_steps=len(task.student_solution_steps),
-            n_parsed=sum(1 for c in result.line_checks if c.status in ("ok", "mismatch")),
+            n_parsed=sum(1 for c in grade.line_checks if c.status in ("ok", "mismatch")),
             has_answer=bool((task.student_answer or "").strip()),
         )
-        return CheckedTask(task=task, ref=checked.ref, grade=result)
+        await self._record_findings(user_id, subject_task, findings)
+        return CheckedTask(
+            task=task,
+            ref=ref,
+            grade=grade,
+            findings=findings,
+            ref_status=payload["ref_status"],
+        )
+
+    async def _record_findings(
+        self, user_id: int | None, task: SubjectTask, findings: list[Finding]
+    ) -> None:
+        for finding in findings:
+            self._events.log(
+                "finding_created",
+                user_id=user_id,
+                subject=self._module.code,
+                kind=finding.kind,
+                strength=finding.strength,
+                rule_code=finding.rule_code,
+            )
+        user_hash = anonymize(user_id)
+        if self._findings is None or user_hash is None or not findings:
+            return
+        records = [
+            FindingRecord(
+                user_hash=user_hash,
+                subject=self._module.code,
+                trace_id=current_trace_id(),
+                task_number=task.number,
+                kind=f.kind,
+                strength=f.strength,
+                rule_code=f.rule_code,
+                confirmed=f.confirmed,
+            )
+            for f in findings
+        ]
+        try:
+            await self._findings.save(records)
+        except Exception:
+            # аналитика не должна ломать проверку: ребёнок ждёт сводку
+            logger.exception("findings save failed")
 
     async def _send_review(self, chat_id: int, state: ChatState) -> None:
         asked = {c.task_index for c in state.clarifications}
@@ -306,12 +391,11 @@ class Bot:
             if i in asked:
                 lines.append(f"{task_label(item.task)} — уточню у тебя одну деталь ✍️")
                 continue
-            line, button = _task_line(i, item)
+            line, button = task_line(i, item)
             lines.append(line)
             if button:
                 buttons.append(button)
-        correct = sum(1 for t in state.tasks if t.grade.verdict == "correct")
-        header = f"Проверил! {correct} из {len(state.tasks)} верно.\n"
+        header = review_header(state)
         await self._max.send_message(chat_id, header + "\n".join(lines), buttons=buttons or None)
 
     # --- уточняющие вопросы (bot/clarify.py): код ведёт очередь, ответ пересчитывается ---
@@ -319,7 +403,23 @@ class Bot:
     async def _ask_clarification(self, chat_id: int, user_id: int | None, state: ChatState) -> None:
         clarification = state.clarifications[0]
         item = state.tasks[clarification.task_index]
+        if clarification.kind == "word" and _finding(item, clarification) is None:
+            # находка пропала/устарела между постановкой в очередь и вопросом (пересчёт другого
+            # вопроса той же задачи — code review 17.09): молча снимаем вопрос, а не падаем
+            # и не спрашиваем про случайную находку по тому же индексу
+            await self._skip_clarification(chat_id, user_id, state, clarification)
+            return
         text, buttons = question(item, clarification)
+        if clarification.kind == "word":
+            image_token = await self._word_image_token(state, item, clarification)
+            self._events.log(
+                "clarification_asked",
+                user_id=user_id,
+                kind=clarification.kind,
+                with_image=image_token is not None,
+            )
+            await self._max.send_message(chat_id, text, buttons=buttons, image_token=image_token)
+            return
         self._events.log(
             "clarification_asked",
             user_id=user_id,
@@ -327,6 +427,43 @@ class Bot:
             reason=item.grade.uncertain_reason,
         )
         await self._max.send_message(chat_id, text, buttons=buttons)
+
+    async def _skip_clarification(
+        self, chat_id: int, user_id: int | None, state: ChatState, clarification: Clarification
+    ) -> None:
+        """Вопрос без живой находки — снимается без сообщения ребёнку, переходим к следующему."""
+        rest = state.clarifications[1:]
+        state = state.model_copy(
+            update={"clarifications": rest, "phase": "clarifying" if rest else "review"}
+        )
+        await self._store.set(chat_id, state)
+        self._events.log("clarification_skipped", user_id=user_id, kind=clarification.kind)
+        if rest:
+            await self._ask_clarification(chat_id, user_id, state)
+
+    async def _word_image_token(
+        self, state: ChatState, item: CheckedTask, clarification: Clarification
+    ) -> str | None:
+        """Кроп слова для вопроса «здесь написано …?»: любой сбой — вопрос уходит текстом."""
+        try:
+            finding = _finding(item, clarification)
+            word = finding.word if finding is not None else None
+            if word is None or word.box is None:
+                return None
+            if not 0 <= word.photo_index < len(state.photo_paths):
+                # альбом в состоянии короче, чем ждёт находка (старое состояние Redis,
+                # упавшее фото): это не сбой кропа — вопрос просто уходит текстом
+                return None
+            path = state.photo_paths[word.photo_index]
+            image = self._photos.load(path) if self._photos is not None else None
+            if image is None:
+                return None
+            # PIL блокирует поток: кроп уходит в отдельный, цикл событий бота остаётся свободным
+            crop = await asyncio.to_thread(crop_word, image, word.box)
+            return await self._max.upload_image(crop)
+        except Exception:
+            logger.warning("word crop/upload failed", exc_info=True)
+            return None
 
     async def _answer_clarification(
         self, chat_id: int, user_id: int | None, state: ChatState, updated: CheckedTask | None
@@ -357,6 +494,19 @@ class Bot:
             buttons = None
         else:
             tasks[clarification.task_index] = updated
+            confirmed_finding = next(
+                (f for f in updated.findings if f.id == clarification.finding_id), None
+            )
+            if clarification.kind == "word" and confirmed_finding is not None:
+                # спецификация каркаса §8: доля «нет» — мера ложных срабатываний OCR по предмету
+                self._events.log(
+                    "finding_confirmed",
+                    user_id=user_id,
+                    user_initiated=True,
+                    subject=self._module.code,
+                    kind=confirmed_finding.kind,
+                    answer="yes" if confirmed_finding.confirmed else "no",
+                )
             # отдельное событие: задание уже учтено в task_checked, в отчёте не дублируем
             self._events.log(
                 "task_clarified",
@@ -366,7 +516,7 @@ class Bot:
                 verdict=updated.grade.verdict,
                 reason=updated.grade.uncertain_reason,
             )
-            message, button = _clarified_line(clarification.task_index, updated)
+            message, button = clarified_line(clarification.task_index, updated)
             buttons = [button] if button else None
         state = state.model_copy(
             update={
@@ -394,7 +544,12 @@ class Bot:
             current = state.clarifications[0]
             if token != current.token:
                 return  # кнопка прошлого вопроса: следующий вопрос она не отвечает
-            updated = apply_sign(state.tasks[current.task_index], current, key)
+            item = state.tasks[current.task_index]
+            updated = (
+                apply_word(item, current, key)
+                if current.kind == "word"
+                else apply_sign(item, current, key)
+            )
             await self._answer_clarification(chat_id, user_id, state, updated)
             return
         index = (
@@ -408,7 +563,7 @@ class Bot:
             callback_id, notification=f"Разбираем {_lower(task_label(item.task))}"
         )
         try:
-            session = await self._start_tutoring(user_id, item)
+            session = await self._start_tutoring(user_id, index, item)
             reply, session = await tutor_reply(
                 self._llm, session, "Помоги найти ошибку", model=self._settings.tutor_model
             )
@@ -431,37 +586,19 @@ class Bot:
         await self._store.set(chat_id, state)
         await self._max.send_message(chat_id, reply)
 
-    async def _start_tutoring(self, user_id: int | None, item: CheckedTask) -> TutorSession:
-        ref = item.ref or _pseudo_ref(item.grade)
-        error = None
-        if item.ref is not None:
-            try:
-                error = await classify_error(
-                    self._llm,
-                    item.task.task_text,
-                    item.task.student_solution_steps,
-                    item.task.student_answer,
-                    item.ref,
-                    item.grade,
-                    model=self._settings.tutor_model,
-                )
-                self._events.log(
-                    "error_classified",
-                    user_id=user_id,
-                    component="classifier",
-                    error_type=error.error_type,
-                )
-            except StructuredOutputError:
-                logger.warning("classifier failed")
-        return TutorSession(
-            task_text=item.task.task_text or "\n".join(item.task.student_solution_steps),
-            student_steps=item.task.student_solution_steps,
-            student_answer=item.task.student_answer,
-            ref=ref,
-            error=error,
-            first_error_line=item.grade.first_error_line,
-            expected=_error_line_value(item.grade),
-        )
+    async def _start_tutoring(
+        self, user_id: int | None, index: int, item: CheckedTask
+    ) -> TutorSession:
+        result = task_result_of(index, item)
+        session = await self._module.start_tutoring(result, to_subject_task(item.task), kb=None)
+        if session.error is not None:
+            self._events.log(
+                "error_classified",
+                user_id=user_id,
+                component="classifier",
+                error_type=session.error.error_type,
+            )
+        return session
 
     async def _on_text(self, chat_id: int, user_id: int | None, text: str) -> None:
         self._events.log("message_received", user_id=user_id, user_initiated=True)
@@ -523,44 +660,31 @@ class Bot:
             await self._max.send_message(chat_id, reply)
 
 
-# «не уверен» без вопроса — с причиной, а не безличное «покажи взрослому»
-UNCERTAIN_TEXT = {
-    "unreadable": "часть записи неразборчива",
-    "ambiguous_equation": "не уверен в ходе решения уравнений",
-    "answer_unparseable": "не разобрал ответ",
-    "no_answer": "не нашёл итоговый ответ",
-    "steps_unparseable": "не смог разобрать решение",
-    "column_unreadable": "не смог прочитать деление уголком",
-}
+def task_result_of(index: int, item: CheckedTask) -> TaskResult:
+    """`TaskResult` для тьютора из уже посчитанного `CheckedTask`.
 
-
-def _task_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str]] | None]:
-    """Строка вердикта по заданию и кнопка «Разобрать» для ошибки."""
-    label = task_label(item.task)
-    if item.grade.verdict == "correct":
-        return f"{label} — верно ✅", None
-    if item.grade.verdict == "wrong":
-        where = f" (строка {item.grade.first_error_line})" if item.grade.first_error_line else ""
-        button = [callback_button(f"Разобрать {_lower(label)}", f"tutor:{index}")]
-        return f"{label} — есть ошибка{where} ❌", button
-    reason = UNCERTAIN_TEXT.get(item.grade.uncertain_reason or "", "не уверен в проверке")
-    return f"{label} — {reason} 🤔", None
-
-
-def _clarified_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str]] | None]:
-    """Итог после ответа ученика: «не уверен» здесь — ответ понят, но проверка не сошлась."""
-    if item.grade.verdict == "uncertain":
-        return f"{task_label(item.task)} — спасибо, но и так не получилось проверить 🤔", None
-    return _task_line(index, item)
-
-
-def _remaining_buttons(state: ChatState) -> list[list[dict[str, str]]]:
-    """Кнопки для ещё не разобранных ошибок."""
-    return [
-        [callback_button(f"Разобрать {_lower(task_label(t.task))}", f"tutor:{i}")]
-        for i, t in enumerate(state.tasks)
-        if t.grade.verdict == "wrong" and i not in state.resolved_indices
-    ]
+    Доверие эталону — по `item.ref_status`, а не по одному факту «эталон есть»:
+    `checked.ref` из `bot/check.py` бывает не пуст только когда солвер сам себя проверил
+    (`ref_status == "ok"`), но это поле не должно тихо подменяться в других сценариях.
+    """
+    subject_task = to_subject_task(item.task)
+    trust: Trust = "verified" if item.ref_status == "ok" else "unverified"
+    reference = (
+        Reference(
+            task_number=subject_task.number,
+            origin="derived",
+            trust=trust,
+            payload={"ref": item.ref.model_dump()},
+        )
+        if item.ref is not None
+        else None
+    )
+    return TaskResult(
+        task_index=index,
+        findings=item.findings or findings_from_grade(index, item.grade),
+        reference=reference,
+        payload={"grade": item.grade.model_dump(), "ref_status": item.ref_status},
+    )
 
 
 def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:
@@ -575,24 +699,3 @@ def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:
 def _validator_only_grade(steps: list[str], *, condition: str | None = None) -> GradeResult:
     """Столбик примеров без условия: проверка — только детерминированный пересчёт."""
     return validator_only_grade(steps, condition=condition)
-
-
-def _error_line_value(result: GradeResult) -> str | None:
-    """Верное значение первой ошибочной строки (SymPy) — цель разбора для тьютора."""
-    if result.first_error_line is None:
-        return None
-    check = result.line_checks[result.first_error_line - 1]
-    return check.values[0] if check.status == "mismatch" and check.values else None
-
-
-def _pseudo_ref(result: GradeResult) -> RefSolution:
-    """Для задания без условия: «эталон» — верное значение первой ошибочной строки."""
-    for check in result.line_checks:
-        if check.status == "mismatch" and check.values:
-            return RefSolution(steps=[], answer=check.values[0], units=None)
-    return RefSolution(steps=[], answer="", units=None)
-
-
-def _lower(label: str) -> str:
-    """«Задание 1» посреди фразы: «Разобрать задание 1»; «№19» не меняется."""
-    return label[:1].lower() + label[1:]

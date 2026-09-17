@@ -308,6 +308,40 @@ async def test_task_checked_when_reference_not_verified(
     assert checked_events(tmp_path)[-1]["ref_status"] == "ref_not_verified"
 
 
+def resolved_events(tmp_path: Path) -> list[dict[str, Any]]:
+    lines = (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    return [e for e in map(json.loads, lines) if e["type"] == "reference_resolved"]
+
+
+async def test_reference_resolved_logged_when_solver_verifies(
+    harness: Harness, tmp_path: Path
+) -> None:
+    """Условие есть, солвер сам себя проверил — одно событие reference_resolved, verified."""
+    bot, _max, _store, _solved = harness
+    await bot.handle_update(photo_update("textbook", "notebook"))
+    [event] = resolved_events(tmp_path)
+    assert (event["subject"], event["origin"], event["trust"]) == ("math", "derived", "verified")
+
+
+async def test_reference_resolved_absent_when_solver_unsure(
+    harness: Harness, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Солвер не проверил себя (ref_not_verified) — эталона нет (bot/check.py), событие не
+    пишется: reference_resolved про уже разрешённый эталон, а не про попытку его получить."""
+
+    async def unverified_solve(*_args: Any, **_kw: Any) -> tuple[SolvedTask, None]:
+        solution = RefSolution(steps=["220 + 180 = 500"], answer="200")
+        solved = SolvedTask(
+            solution=solution, ref_ok=False, from_cache=False, model="m", prompt_version="v1"
+        )
+        return solved, None
+
+    monkeypatch.setattr(check, "solve_task", unverified_solve)
+    bot, _max, _store, _solved = harness
+    await bot.handle_update(photo_update("textbook", "notebook"))
+    assert resolved_events(tmp_path) == []
+
+
 # --- уточняющие вопросы (шаг 1) ---
 
 

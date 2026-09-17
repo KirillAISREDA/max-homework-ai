@@ -40,17 +40,27 @@ class FakeMax:
     def __init__(self) -> None:
         self.sent: list[tuple[int, str, Buttons | None]] = []
         self.callbacks: list[str] = []
+        self.image_tokens: list[str | None] = []
 
     async def send_message(
-        self, chat_id: int, text: str, *, buttons: Buttons | None = None
+        self,
+        chat_id: int,
+        text: str,
+        *,
+        buttons: Buttons | None = None,
+        image_token: str | None = None,
     ) -> None:
         self.sent.append((chat_id, text, buttons))
+        self.image_tokens.append(image_token)
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> None:
         self.callbacks.append(callback_id)
 
     async def download(self, url: str) -> bytes:
         return b"fake-image"
+
+    async def upload_image(self, image: bytes) -> str:
+        return "tok"
 
 
 def make_bot(tmp_path: Path, photos: PhotoStore | None = None) -> tuple[Bot, FakeMax, Path]:
@@ -182,6 +192,50 @@ def test_pseudo_ref_uses_computed_value() -> None:
     result = _validator_only_grade(["950+50-660=320"])
     ref = _pseudo_ref(result)
     assert ref.answer == "340"  # правильное значение, посчитанное валидатором
+
+
+async def test_findings_logged_and_saved(tmp_path: Path) -> None:
+    """Каждая находка — событие finding_created и запись в репозитории; всё в одном trace_id."""
+    from hwcheck.bot.fsm import ChatState
+    from hwcheck.db.findings import InMemoryFindingsRepository
+    from hwcheck.pipeline.schemas import VisionTask
+
+    bot, fake_max, events_path = make_bot(tmp_path)
+    findings = InMemoryFindingsRepository()
+    bot._findings = findings
+    task = VisionTask(number=7, task_text="", student_solution_steps=["2 + 2 = 5"], confidence=1)
+    checked = await bot._check_task(42, task, 0)
+    assert checked.grade.verdict == "wrong" and checked.findings[0].strength == "verified"
+    [record] = findings.saved
+    assert (record.user_hash, record.task_number, record.kind) == (anonymize(42), "7", "arithmetic")
+    created = [e for e in read_events(events_path) if e["type"] == "finding_created"]
+    assert [(e["subject"], e["strength"]) for e in created] == [("math", "verified")]
+    assert record.trace_id is None  # trace_id есть только внутри handle_update
+    await bot._store.set(7, ChatState(phase="review", tasks=[checked]))
+
+
+def test_task_result_of_trust_follows_ref_status() -> None:
+    """Доверие эталону в разборе — по статусу солвера, а не по факту «эталон не пуст»."""
+    from hwcheck.bot.fsm import CheckedTask
+    from hwcheck.bot.handlers import task_result_of
+    from hwcheck.pipeline.schemas import VisionTask
+    from hwcheck.pipeline.solver import RefSolution
+
+    steps = ["220 + 180 = 400"]
+    ref = RefSolution(steps=steps, answer="400")
+    task = VisionTask(number=19, task_text="Сколько?", student_solution_steps=steps, confidence=1)
+    unverified = CheckedTask(
+        task=task, ref=ref, grade=_validator_only_grade(steps), ref_status="ref_not_verified"
+    )
+    result = task_result_of(0, unverified)
+    assert result.reference is not None and result.reference.trust == "unverified"
+    assert result.payload["ref_status"] == "ref_not_verified"
+
+    verified = unverified.model_copy(update={"ref_status": "ok"})
+    verified_result = task_result_of(0, verified)
+    assert verified_result.reference is not None
+    assert verified_result.reference.trust == "verified"
+    assert verified_result.payload["ref_status"] == "ok"
 
 
 def test_anonymize_stable_and_irreversible() -> None:
@@ -364,3 +418,165 @@ async def test_text_after_review_points_to_buttons_not_welcome(tmp_path: Path) -
     await store.set(7, ChatState(phase="review", tasks=[wrong], resolved_indices=[0]))
     await bot.handle_update(MaxUpdate.model_validate(TEXT_UPDATE))
     assert fake_max.sent[-1][1:] == (REVIEW_DONE, None)
+
+
+def _word_clarification_state(photo_paths: list[str]) -> Any:
+    """`ChatState` с одним заданием и одним word-вопросом по нему (code review 17.09)."""
+    from hwcheck.bot.fsm import ChatState, CheckedTask, Clarification
+    from hwcheck.pipeline.schemas import VisionTask
+    from hwcheck.subjects.base import Box, Finding, Word
+
+    task = VisionTask(number=3, task_text="", student_solution_steps=[], confidence=1)
+    word = Word(text="машына", box=Box(x0=5, y0=5, x1=40, y1=20), confidence=0.4, photo_index=0)
+    finding = Finding(
+        task_index=0, kind="spelling", strength="candidate", actual="машына", word=word
+    )
+    item = CheckedTask(task=task, ref=None, grade=_validator_only_grade([]), findings=[finding])
+    clarification = Clarification(task_index=0, kind="word", finding_id=finding.id, token="tok1")
+    return ChatState(
+        phase="clarifying",
+        tasks=[item],
+        clarifications=[clarification],
+        photo_paths=photo_paths,
+    )
+
+
+async def test_word_clarification_sends_crop_and_confirms(tmp_path: Path) -> None:
+    """Вопрос «здесь написано …?» уходит с картинкой; ответ подтверждает находку (спец. §8)."""
+    import io
+
+    from PIL import Image
+
+    photos = PhotoStore(tmp_path / "photos", ttl_days=30)
+    buffer = io.BytesIO()
+    Image.new("RGB", (100, 50), "white").save(buffer, format="JPEG")
+    photo_path = photos.save("u1", buffer.getvalue())
+
+    bot, fake_max, events_path = make_bot(tmp_path, photos=photos)
+    state = _word_clarification_state([photo_path])
+    await bot._store.set(7, state)
+    await bot._ask_clarification(7, 42, state)
+
+    assert fake_max.image_tokens[-1] == "tok"
+    assert fake_max.sent[-1][1] == "№3: здесь написано «машына»?"
+    asked = [e for e in read_events(events_path) if e["type"] == "clarification_asked"][-1]
+    assert asked["kind"] == "word" and asked["with_image"] is True
+
+    callback_update = {
+        "update_type": "message_callback",
+        "chat_id": 7,
+        "callback": {"callback_id": "cb1", "payload": "clarify:tok1:yes", "user": {"user_id": 42}},
+    }
+    await bot.handle_update(MaxUpdate.model_validate(callback_update))
+
+    confirmed_state = await bot._store.get(7)
+    assert confirmed_state.tasks[0].findings[0].confirmed is True
+    finding_confirmed = [e for e in read_events(events_path) if e["type"] == "finding_confirmed"][
+        -1
+    ]
+    assert finding_confirmed["answer"] == "yes"
+    assert finding_confirmed["subject"] == "math"
+    assert finding_confirmed["kind"] == "spelling"
+    assert fake_max.sent[-1][1] == "№3 — есть ошибка (слово «машына») ❌"
+
+
+async def test_word_clarification_falls_back_to_text_without_photo(tmp_path: Path) -> None:
+    """Фото недоступно (не сохранилось/удалено) — вопрос уходит текстом, без падения."""
+    photos = PhotoStore(tmp_path / "photos", ttl_days=30)
+    bot, fake_max, events_path = make_bot(tmp_path, photos=photos)
+    state = _word_clarification_state(["missing.jpg"])
+    await bot._store.set(7, state)
+
+    await bot._ask_clarification(7, 42, state)
+
+    assert fake_max.image_tokens[-1] is None
+    assert fake_max.sent[-1][1] == "№3: здесь написано «машына»?"
+    asked = [e for e in read_events(events_path) if e["type"] == "clarification_asked"][-1]
+    assert asked["kind"] == "word" and asked["with_image"] is False
+
+
+async def test_check_task_marks_findings_with_task_index(tmp_path: Path) -> None:
+    """Находки основного пути помечены номером задания в альбоме, а не нулём (ревью 17.09, F10)."""
+    from hwcheck.pipeline.schemas import VisionTask
+
+    bot, _fake_max, _events = make_bot(tmp_path)
+    task = VisionTask(
+        number=7, task_text="", student_solution_steps=["2 + 2 = 5"], confidence=1
+    )  # без условия солвер не зовётся — LLM не нужен
+
+    checked = await bot._check_task(42, task, 3)
+
+    assert [f.task_index for f in checked.findings] == [3]
+    assert checked.findings[0].kind == "arithmetic"
+
+
+async def test_word_crop_runs_in_worker_thread(tmp_path: Path, monkeypatch: Any) -> None:
+    """Кроп PIL — блокирующий: он уходит в поток, а не держит цикл событий бота (F7)."""
+    import io
+    import threading
+
+    from PIL import Image
+
+    from hwcheck.bot import handlers as handlers_module
+
+    photos = PhotoStore(tmp_path / "photos", ttl_days=30)
+    buffer = io.BytesIO()
+    Image.new("RGB", (100, 50), "white").save(buffer, format="JPEG")
+    photo_path = photos.save("u1", buffer.getvalue())
+    threads: list[str] = []
+
+    def spy(image: bytes, box: Any) -> bytes:
+        threads.append(threading.current_thread().name)
+        return b"crop"
+
+    monkeypatch.setattr(handlers_module, "crop_word", spy)
+    bot, fake_max, _events = make_bot(tmp_path, photos=photos)
+    state = _word_clarification_state([photo_path])
+
+    await bot._ask_clarification(7, 42, state)
+
+    assert fake_max.image_tokens[-1] == "tok"
+    assert threads and threads[0] != threading.current_thread().name
+
+
+async def test_word_crop_skips_photo_index_outside_album(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Номер фото вне альбома — вопрос уходит текстом; это не сбой кропа, в лог не пишем (F11)."""
+    photos = PhotoStore(tmp_path / "photos", ttl_days=30)
+    bot, fake_max, _events = make_bot(tmp_path, photos=photos)
+    state = _word_clarification_state([])  # альбома в состоянии нет (старое состояние Redis)
+    item = state.tasks[0]
+
+    with caplog.at_level("WARNING"):
+        token = await bot._word_image_token(state, item, state.clarifications[0])
+
+    assert token is None
+    assert not [r for r in caplog.records if "crop" in r.message]
+
+
+async def test_recognize_all_keeps_album_order_for_failed_photos(tmp_path: Path) -> None:
+    """Пути фото — индекс `Word.photo_index`: упавшее фото занимает своё место пустой строкой."""
+    from hwcheck.bot.check import RecognizedPhoto
+    from hwcheck.pipeline.vision import RecognizedPage
+
+    bot, fake_max, _events = make_bot(tmp_path, photos=PhotoStore(tmp_path / "photos", ttl_days=30))
+
+    async def download(url: str) -> bytes:
+        if url.endswith("2.jpg"):
+            raise RuntimeError("сеть отвалилась на втором фото")
+        return b"fake-image"
+
+    async def recognize(user_id: int | None, image: bytes, photo: str | None) -> Any:
+        page = RecognizedPage(
+            page=None, orientation=0, attempts=0, tokens_in=0, tokens_out=0, latency_s=0.0, raw=""
+        )
+        return RecognizedPhoto(page=None, role="notebook", rec=page)
+
+    fake_max.download = download  # type: ignore[method-assign]
+    bot._recognize = recognize  # type: ignore[method-assign]
+
+    results, paths = await bot._recognize_all(42, ["u/1.jpg", "u/2.jpg", "u/3.jpg"])
+
+    assert len(results) == 2
+    assert len(paths) == 3 and paths[1] == "" and paths[0] and paths[2]

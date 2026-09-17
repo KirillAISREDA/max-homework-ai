@@ -160,8 +160,8 @@ def test_line_clarification_requires_line_index() -> None:
 
 
 def test_still_uncertain_after_clarification_reads_differently() -> None:
-    from hwcheck.bot.handlers import _clarified_line
+    from hwcheck.bot.summary import clarified_line
 
     item = without_ref(["15 * 1<неразборчиво> = 150"])
-    line, button = _clarified_line(0, item)
+    line, button = clarified_line(0, item)
     assert "и так не получилось проверить" in line and button is None
