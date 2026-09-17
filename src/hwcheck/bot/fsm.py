@@ -8,7 +8,7 @@ Redis (арх. §6.2, TTL 24 ч) на сервере, in-memory — локаль
 
 import logging
 from secrets import token_hex
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field, ValidationError
 from redis.asyncio import Redis
@@ -19,7 +19,7 @@ from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.tutor import TutorSession
-from hwcheck.subjects.base import Finding
+from hwcheck.subjects.base import Finding, Reference, SubjectTask
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +29,18 @@ DialogPhase = Literal["idle", "checking", "clarifying", "review", "tutoring"]
 
 
 class CheckedTask(BaseModel):
+    # у языков — to_vision_task(subject_task): подпись задания, номер, строки
     task: VisionTask
     ref: RefSolution | None  # None — условия нет, проверка только пересчётом
-    grade: GradeResult
+    grade: GradeResult | None = None  # None — предмет без пересчёта (языки)
     # находки предметного модуля (спецификация каркаса §4); пусто — вывести из grade (математика)
     findings: list[Finding] = Field(default_factory=list)
     # статус эталона (bot/check.py): по умолчанию — старые записи Redis без этого поля
     ref_status: RefStatus = "no_condition"
+    # исходное задание модуля (у языков — слова с координатами); None — старые записи Redis
+    subject_task: SubjectTask | None = None
+    reference: Reference | None = None  # эталон модуля — тьютору
+    payload: dict[str, Any] = Field(default_factory=dict)  # TaskResult.payload модуля
 
 
 class Clarification(BaseModel):
@@ -52,6 +57,8 @@ class Clarification(BaseModel):
 
 class ChatState(BaseModel):
     phase: DialogPhase = "idle"
+    # предмет проверяемой домашки (профиль ученика); старые записи Redis — математика
+    subject: str = "math"
     tasks: list[CheckedTask] = Field(default_factory=list)
     tutor: TutorSession | None = None
     tutoring_index: int | None = None
@@ -59,6 +66,8 @@ class ChatState(BaseModel):
     # условия со страниц учебника по номеру задания: фото тетради может прийти
     # следующим сообщением (сценарий «учебник + тетрадь», сессия 9)
     textbook_tasks: list[VisionTask] = Field(default_factory=list)
+    # то же для языков: упражнения учебника как их прочитал предметный модуль
+    conditions: list[SubjectTask] = Field(default_factory=list)
     textbook_saved_at: float | None = None  # время сохранения условий (TTL в pages.py)
     clarifications: list[Clarification] = Field(default_factory=list)  # очередь вопросов
     # относительные пути PhotoStore фото альбома по порядку (Word.photo_index — индекс сюда)

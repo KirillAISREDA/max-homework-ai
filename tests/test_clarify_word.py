@@ -17,7 +17,8 @@ from hwcheck.bot.clarify import (
 from hwcheck.bot.crops import crop_word
 from hwcheck.bot.fsm import CheckedTask, Clarification
 from hwcheck.pipeline.schemas import VisionTask
-from hwcheck.subjects.base import Box, Finding, Word
+from hwcheck.subjects.base import Box, Finding, SubjectTask, Word
+from hwcheck.subjects.math.module import to_vision_task
 
 
 def test_crop_word_adds_margin_and_clamps() -> None:
@@ -52,6 +53,17 @@ def test_word_question_and_answers() -> None:
     denied = apply_word(item, clarification, "no")
     assert denied is not None and denied.findings[0].confirmed is False
     assert apply_word(item, clarification, "maybe") is None
+
+
+def test_plan_clarifications_skips_grade_when_missing() -> None:
+    """Языки идут без пересчёта: `grade` у задания нет, вопрос ставится по находке."""
+    task = SubjectTask(number="1", words=[])
+    word = Word(text="а", box=Box(x0=0, y0=0, x1=1, y1=1))
+    item = CheckedTask(task=to_vision_task(task), ref=None, subject_task=task,
+                       findings=[Finding(task_index=0, kind="spelling", strength="candidate",
+                                         actual="а", word=word)])  # fmt: skip
+    [clarification] = plan_clarifications([item])
+    assert clarification.kind == "word"
 
 
 def test_word_questions_share_limit_with_math(tmp_path: Path) -> None:

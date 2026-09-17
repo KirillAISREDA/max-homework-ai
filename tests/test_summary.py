@@ -4,7 +4,8 @@ from hwcheck.bot.check import validator_only_grade
 from hwcheck.bot.fsm import ChatState, CheckedTask
 from hwcheck.bot.summary import remaining_buttons, review_header, task_findings, task_line
 from hwcheck.pipeline.schemas import VisionTask
-from hwcheck.subjects.base import Finding
+from hwcheck.subjects.base import Box, Finding, SubjectTask, Word
+from hwcheck.subjects.math.module import to_vision_task
 
 
 def checked(number: int, steps: list[str], findings: list[Finding] | None = None) -> CheckedTask:
@@ -35,6 +36,27 @@ def test_explicit_findings_override_grade() -> None:
     confirmed = word.model_copy(update={"confirmed": True})
     text, button = task_line(0, checked(3, [], findings=[confirmed]))
     assert text == "№3 — есть ошибка (слово «машына») ❌" and button is not None
+
+
+def test_task_line_for_language_task_without_grade() -> None:
+    word = Word(text="позняя", box=Box(x0=1, y0=1, x1=9, y1=9), confidence=0.8, line=1)
+    finding = Finding(task_index=0, kind="spelling", strength="candidate", actual="позняя",
+                      expected="поздняя", word=word, detail="проверь слово «позняя»")  # fmt: skip
+    task = SubjectTask(number="245", words=[word])
+    item = CheckedTask(task=to_vision_task(task), ref=None, subject_task=task, findings=[finding])
+    line, button = task_line(0, item)
+    assert line == "№245 — проверь слово «позняя» 🤔" and button is None
+    confirmed = item.model_copy(
+        update={"findings": [finding.model_copy(update={"confirmed": True})]}
+    )
+    line, button = task_line(0, confirmed)
+    assert line == "№245 — есть ошибка (слово «позняя») ❌" and button is not None
+
+
+def test_review_header_counts_language_tasks() -> None:
+    task = SubjectTask(number="1", words=[])
+    state = ChatState(tasks=[CheckedTask(task=to_vision_task(task), ref=None, subject_task=task)])
+    assert review_header(state) == "Проверил! 1 из 1 верно.\n"
 
 
 def test_header_and_remaining_buttons() -> None:
