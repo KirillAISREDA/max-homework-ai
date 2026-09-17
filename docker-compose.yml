@@ -29,11 +29,14 @@ services:
     #   mkdir -p var .cache && chown -R 1000:1000 var .cache
     # иначе Docker создаст каталоги от root и бот не сможет писать marker/журнал/кэш
     volumes:
-      - ./var:/app/var          # events.jsonl (метрика/антифрод), max_marker.txt, photos/ (TTL 30 дней)
+      # events.jsonl (метрика/антифрод), max_marker.txt, photos/ (TTL 30 дней),
+      # kb_photos/ — страницы учебников базы знаний (TTL 365 дней, данных ребёнка нет)
+      - ./var:/app/var
       - ./.cache:/app/.cache    # кэш ответов солвера — не перегонять одни и те же задания
     deploy:
       resources:
         limits:
+          # +~170 МБ: словарь русского (spylls) грузится в память при старте, до polling
           memory: 1g
     # marker пишется после каждого GET /updates (long poll ≤30 с); обработка альбома
     # из 4 фото может занять минуту-две — потому окно 5 минут

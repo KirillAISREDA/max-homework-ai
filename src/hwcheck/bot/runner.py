@@ -15,6 +15,7 @@ import asyncio
 import contextlib
 import logging
 import signal
+import time
 from pathlib import Path
 from types import FrameType
 from typing import Any
@@ -23,7 +24,7 @@ import asyncpg
 from redis.asyncio import Redis
 
 from hwcheck.bot.fsm import InMemoryStateStore, RedisStateStore, StateStore
-from hwcheck.bot.handlers import Bot
+from hwcheck.bot.handlers import SOLVER_CACHE_DIR, Bot, models_for
 from hwcheck.bot.max_api import MaxClient
 from hwcheck.bot.onboarding.context import OnboardingContext
 from hwcheck.bot.onboarding.policy import POLICY_VERSION, policy_messages
@@ -36,11 +37,16 @@ from hwcheck.bot.onboarding.state import (
 from hwcheck.config import Settings
 from hwcheck.crypto import UserIdCipher, UserIdCipherError
 from hwcheck.db.findings import PgFindingsRepository
+from hwcheck.db.kb import PgKnowledgeBase
 from hwcheck.db.pool import create_pool
 from hwcheck.db.repo import PgProfileRepository
 from hwcheck.events import EventLog, set_id_hash_key
 from hwcheck.llm.gigachat_client import GigaChatClient
+from hwcheck.ocr_client import OcrClient
 from hwcheck.photos import PhotoStore
+from hwcheck.pipeline.solver import FileCache
+from hwcheck.subjects.registry import SubjectDeps
+from hwcheck.subjects.russian.gaps import HunspellDictionary
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +90,29 @@ def _make_photo_store(settings: Settings) -> PhotoStore | None:
     if settings.photos_ttl_days <= 0:
         return None
     return PhotoStore(Path(settings.photos_dir), settings.photos_ttl_days)
+
+
+def _make_kb_photo_store(settings: Settings) -> PhotoStore | None:
+    """Страницы учебников базы знаний: своё хранилище и свой TTL (данных ребёнка на них нет)."""
+    if settings.kb_photos_ttl_days <= 0:
+        return None
+    return PhotoStore(Path(settings.kb_photos_dir), settings.kb_photos_ttl_days)
+
+
+def load_dictionary() -> HunspellDictionary | None:
+    """Словарь русского — один раз при старте (секунды и ~170 МБ), до первого фото.
+
+    Нет файлов словаря — предметы на нём (русский) станут недоступны, но бот стартует:
+    математика от словаря не зависит.
+    """
+    started = time.monotonic()
+    try:
+        dictionary = HunspellDictionary.load()
+    except Exception:
+        logger.exception("dictionary load failed: предметы со словарём недоступны")
+        return None
+    logger.info("dictionary loaded in %.1f s", time.monotonic() - started)
+    return dictionary
 
 
 async def _poll_loop(
@@ -240,6 +269,20 @@ async def run_polling(settings: Settings) -> None:
             me=me,
         )
         log_onboarding_mode(settings, onboarding)
+        ocr = None
+        if settings.ocr_url:
+            # OCR-сервис для языков; пусто — модуль ответит «не смог прочитать тетрадь»
+            ocr = await resources.enter_async_context(
+                OcrClient(settings.ocr_url, timeout_s=settings.ocr_timeout_s)
+            )
+        subjects = SubjectDeps(
+            llm,
+            models_for(settings),
+            FileCache(SOLVER_CACHE_DIR),
+            ocr=ocr,
+            kb=PgKnowledgeBase(pool) if pool is not None else None,
+            dictionary=load_dictionary(),
+        )
         bot = Bot(
             max_client,
             llm,
@@ -247,7 +290,9 @@ async def run_polling(settings: Settings) -> None:
             events,
             settings,
             photos=_make_photo_store(settings),
+            kb_photos=_make_kb_photo_store(settings),
             onboarding=onboarding,
+            subjects=subjects,
             findings=PgFindingsRepository(pool) if pool is not None else None,
         )
         await _poll_loop(max_client, bot, marker_path, stop)

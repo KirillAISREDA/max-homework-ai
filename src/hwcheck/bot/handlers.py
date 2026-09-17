@@ -90,6 +90,16 @@ SUBJECT_UNAVAILABLE = "Проверка по этому предмету пок�
 NOTHING_TO_TUTOR = "Здесь нечего разбирать — ошибка не подтверждена 🙂"
 REVIEW_HINT = "Выбери задание для разбора 👇 Или пришли фото новой домашки 📸"
 REVIEW_DONE = "Эту домашку я уже проверил 👍 Пришли фото следующей — проверю 📸"
+SOLVER_CACHE_DIR = Path(".cache/solver")
+
+
+def models_for(settings: Settings) -> CheckModels:
+    """Роутинг моделей по шагам (арх. §4) — один источник и для бота, и для раннера."""
+    return CheckModels(
+        vision=settings.vision_model,
+        structure=settings.tutor_model,
+        solver=settings.solver_model,
+    )
 
 
 class Bot:
@@ -118,7 +128,7 @@ class Bot:
         # None — ONBOARDING_REQUIRED=false: проверка без онбординга, как до этапа 2
         self._onboarding = onboarding
         self._findings = findings
-        self._cache = FileCache(Path(".cache/solver"))
+        self._cache = FileCache(SOLVER_CACHE_DIR)
         self._deps = subjects or SubjectDeps(llm, self._models, self._cache)
         self._kb = self._deps.kb
         # модуль предмета собирается по первому фото этого предмета и живёт до рестарта
@@ -136,11 +146,7 @@ class Bot:
 
     @property
     def _models(self) -> CheckModels:
-        return CheckModels(
-            vision=self._settings.vision_model,
-            structure=self._settings.tutor_model,
-            solver=self._settings.solver_model,
-        )
+        return models_for(self._settings)
 
     async def handle_update(self, update: MaxUpdate) -> None:
         # один trace_id на все вызовы компонентов по апдейту (антифрод, Прил. 2 п. 5)
@@ -754,10 +760,11 @@ class Bot:
         )
         try:
             session = await self._start_tutoring(user_id, index, item, state.subject)
-        except ValueError:
+        except ValueError as exc:
             # у языков разбирают подтверждённую ошибку: кнопка из старой сводки (находку сняли
-            # ответом «нет») — это не сбой бота, так ребёнку и скажем
-            logger.info("tutoring without a confirmed finding")
+            # ответом «нет») — это не сбой бота, так ребёнку и скажем. Текст в логе: сюда же
+            # попал бы неожиданный ValueError модуля (в том числе ValidationError pydantic)
+            logger.info("nothing to tutor: %s", exc)
             await self._max.send_message(chat_id, NOTHING_TO_TUTOR)
             return
         except Exception:
