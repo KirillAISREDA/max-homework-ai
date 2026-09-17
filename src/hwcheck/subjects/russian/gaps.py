@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import re
 from collections.abc import Hashable
@@ -103,7 +104,9 @@ def find_gaps(words: list[str], dictionary: Dictionary) -> list[Gap]:
     for index, word in enumerate(words):
         if "_" in word:
             gaps.append(Gap(index=index, pattern=word, candidates=fill_gap(word, dictionary)))
-        elif "(" in word:
+        elif _BRACKET.match(word):
+            # только «(предлог)слово» — токен со скобками, не подходящий под этот вид
+            # (например, целиком в скобках «(осень)») — обычное слово, не пропуск
             gaps.append(
                 Gap(index=index, pattern=word, candidates=_bracket_candidates(word, dictionary))
             )
@@ -136,19 +139,16 @@ async def derive_text(
     prompt_version: str = "v1",
 ) -> DerivedText:
     words = tokenize(text)
-    gaps = find_gaps(words, dictionary)
+    # перебор 33^slots в fill_gap — синхронный CPU, не блокируем event loop бота
+    gaps = await asyncio.to_thread(find_gaps, words, dictionary)
     chosen: dict[int, str] = {g.index: g.candidates[0] for g in gaps if len(g.candidates) == 1}
     ambiguous = [g for g in gaps if len(g.candidates) != 1]
-    if ambiguous:
-        # маркируем как llm-эталон, даже если llm недоступен или ничего не разрешил — раз есть
-        # неоднозначный пропуск, эталон в любом случае не проверен детерминированно словарём
+    derived_by = "dictionary"
+    if ambiguous and llm is not None:
         derived_by = f"llm:{model}@{prompt_version}"
-        if llm is not None:
-            chosen |= await _ask_llm(
-                llm, words, ambiguous, dictionary, model=model, version=prompt_version
-            )
-    else:
-        derived_by = "dictionary"
+        chosen |= await _ask_llm(
+            llm, words, ambiguous, dictionary, model=model, version=prompt_version
+        )
     filled = [chosen.get(i, w) for i, w in enumerate(words)]
     unresolved = [g.index for g in gaps if g.index not in chosen]
     trust: Trust = "verified" if not ambiguous else "unverified"
@@ -159,6 +159,16 @@ async def derive_text(
         derived_by=derived_by,
         unresolved=unresolved,
     )
+
+
+def _fits_pattern(pattern: str, word: str) -> bool:
+    """Для пропуска без словарных кандидатов LLM восстанавливает слово свободно — но слово должно
+    быть той же длины, что и шаблон, и совпадать с его нешаблонными буквами (без учёта регистра):
+    иначе «первое попавшееся словарное слово» (например, для `х_х` — `машина`) не должно проходить.
+    """
+    if len(pattern) != len(word):
+        return False
+    return all(p == "_" or p.lower() == w.lower() for p, w in zip(pattern, word, strict=True))
 
 
 async def _ask_llm(
@@ -185,13 +195,19 @@ async def _ask_llm(
     except StructuredOutputError:
         return {}
     allowed = {g.index: set(g.candidates) for g in gaps}
+    patterns = {g.index: g.pattern for g in gaps}
     chosen: dict[int, str] = {}
     for choice in answer.choices:
         index = choice.index - 1
         candidates = allowed.get(index)
         if candidates is None:
             continue
-        # без словарных кандидатов LLM восстанавливает слово свободно — но только словарное
-        if choice.word in candidates or (not candidates and dictionary.lookup(choice.word.lower())):
+        word_fits_dictionary_gap = choice.word in candidates
+        word_fits_free_gap = (
+            not candidates
+            and _fits_pattern(patterns[index], choice.word)
+            and dictionary.lookup(choice.word.lower())
+        )
+        if word_fits_dictionary_gap or word_fits_free_gap:
             chosen[index] = choice.word
     return chosen

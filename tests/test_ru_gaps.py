@@ -51,6 +51,11 @@ def test_brackets_joined_or_separate() -> None:
     assert sorted(gap.candidates) == ["с делать", "сделать"]  # предлог + слово или приставка
 
 
+def test_brackets_only_for_prefix_pattern_not_any_parenthesised_token() -> None:
+    # «(осень)» целиком в скобках — обычное слово, не «(предлог)слово»: не пропуск
+    assert find_gaps(["(осень)", "лес"], WORDS) == []
+
+
 async def test_derive_text_verified_when_all_gaps_single() -> None:
     derived = await derive_text("Наступила п_здняя осень.", WORDS, None, model="m")
     assert derived.words == ["Наступила", "поздняя", "осень"]
@@ -71,15 +76,41 @@ async def test_derive_text_asks_llm_for_ambiguous_and_is_unverified() -> None:
 
 
 async def test_derive_text_llm_must_pick_from_candidates() -> None:
-    llm = FakeLLMClient([json.dumps({"choices": [{"index": 0, "word": "щёки"}]})])
+    # index 1 — валидный (1-based) номер пропуска «щ_ка»; слово не из кандидатов — не берём
+    llm = FakeLLMClient([json.dumps({"choices": [{"index": 1, "word": "щёки"}]})])
     derived = await derive_text("щ_ка", WORDS, llm, model="m")
     assert derived.words == ["щ_ка"] and derived.unresolved == [0]  # чужое слово не берём
+
+
+async def test_derive_text_llm_unknown_index_is_ignored() -> None:
+    # index 99 не соответствует ни одному пропуску — ответ игнорируется, даже если слово словарное
+    llm = FakeLLMClient([json.dumps({"choices": [{"index": 99, "word": "щука"}]})])
+    derived = await derive_text("щ_ка", WORDS, llm, model="m")
+    assert derived.words == ["щ_ка"] and derived.unresolved == [0]
+
+
+async def test_derive_text_llm_free_answer_must_fit_pattern_and_dictionary() -> None:
+    # 4 слота — сверх MAX_SLOTS, словарь кандидатов не перебирает (0 кандидатов); свободный ответ
+    # LLM принимается, только если совпадает по длине с шаблоном и есть в словаре
+    llm = FakeLLMClient([json.dumps({"choices": [{"index": 1, "word": "лиса"}]})])
+    derived = await derive_text("____", WORDS, llm, model="m")
+    assert derived.words == ["лиса"]
+    assert derived.unresolved == []
+    assert derived.trust == "unverified"
+
+
+async def test_derive_text_llm_free_answer_rejected_if_length_does_not_fit() -> None:
+    # «машина» словарное, но не подходит под длину шаблона «х_х» — не берём
+    llm = FakeLLMClient([json.dumps({"choices": [{"index": 1, "word": "машина"}]})])
+    derived = await derive_text("х_х", WORDS, llm, model="m")
+    assert derived.words == ["х_х"] and derived.unresolved == [0]
 
 
 async def test_derive_text_without_llm_leaves_pattern() -> None:
     derived = await derive_text("щ_ка плывёт", WORDS, None, model="m")
     assert derived.words == ["щ_ка", "плывёт"] and derived.trust == "unverified"
     assert derived.unresolved == [0]
+    assert derived.derived_by == "dictionary"  # llm не вызывался — эталон не помечаем как llm:...
 
 
 @pytest.mark.slow
