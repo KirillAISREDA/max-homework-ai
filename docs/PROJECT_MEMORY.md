@@ -154,7 +154,7 @@ report | bench | kb`). Отдельный сервис `ocr/` (HTTP, движо�
 | Что | Где |
 |---|---|
 | Репозиторий | https://github.com/KirillAISREDA/max-homework-ai (публичный; «открытый контур» конкурса) |
-| VPS | `193.247.73.243` (HOSTKEY, Москва по геолокации IP), Ubuntu 22.04, 4 vCPU / 7.7 ГБ + swap 4 ГБ (с 16.09); общий с чужими проектами (28 контейнеров, доступно ~3,7 ГБ) — чужое не трогать; **для OCR (пик 3 ГБ) нужен апгрейд до 16 ГБ или Cloud.ru** |
+| VPS | `193.247.73.243` (HOSTKEY, Москва по геолокации IP), Ubuntu 22.04, 4 vCPU / 7.7 ГБ + swap 4 ГБ (с 16.09); общий с чужими проектами (28 контейнеров, доступно ~3,7 ГБ) — чужое не трогать; OCR помещается: пик 1,46 ГБ после спайка памяти (лимит 2 ГБ) |
 | Каталог на VPS | `/opt/max-homework-ai` — git-клон `main` + `.env` (бэкапы `.env.bak-20260913`, `.env.bak-2026-09-15`) |
 | Контейнеры | `homework-bot` (лимит 1 ГБ), `homework-redis` (`redis:8-alpine`, AOF, том `max-homework-ai_redis-data`), `homework-postgres` (`postgres:17-alpine`, 256 МБ, без портов, том `postgres-data`, миграции при старте бота), `homework-pgbackup` (ежедневный `pg_dump`) |
 | Данные на VPS | `var/events.jsonl`, `var/max_marker.txt`, `var/photos/` (TTL 30 дней), `var/bot.log`, `.cache/solver/`, `var/backups/` (дампы PostgreSQL, 7 дней, только root) |
