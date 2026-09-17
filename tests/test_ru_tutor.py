@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from conftest import FakeLLMClient
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.tutor import TutorSession, WordTutoring, tutor_reply
@@ -55,3 +57,11 @@ async def test_word_tutor_level_3_reveals_word() -> None:
     llm = FakeLLMClient([json.dumps({"reply": "Пишется «поздняя»: проверочное слово — опоздать."})])
     reply, session = await tutor_reply(llm, session, "всё равно не понимаю", model="t")
     assert session.hint_level == 3 and "поздняя" in reply
+
+
+async def test_word_tutor_passes_prompt_version_through() -> None:
+    # prompt_version не должен быть захардкожен на "v1" в _word_reply — версия промпта
+    # пишется в БД рядом с результатом (арх. §4), путь должен реально уйти в load_prompt
+    llm = FakeLLMClient([json.dumps({"reply": "неважно"})])
+    with pytest.raises(FileNotFoundError):
+        await tutor_reply(llm, _session(), "не знаю", model="t", prompt_version="v2")

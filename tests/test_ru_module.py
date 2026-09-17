@@ -7,7 +7,7 @@ import pytest
 from hwcheck.bot.check import CheckModels
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
 from hwcheck.ocr_client import OcrError
-from hwcheck.subjects.base import Box, SubjectTask, Word
+from hwcheck.subjects.base import Box, Finding, SubjectTask, TaskResult, Word
 from hwcheck.subjects.kb_models import KbRule
 from hwcheck.subjects.registry import SubjectDeps, module_for
 from hwcheck.subjects.russian.module import RussianModule
@@ -85,6 +85,41 @@ async def test_resolve_reference_ambiguous_goes_to_llm_and_review_queue() -> Non
     assert answer.derived_by == "llm:s@v1"
 
 
+async def test_resolve_reference_rejected_answer_is_not_resaved() -> None:
+    kb = InMemoryKnowledgeBase()
+    llm = FakeVision([])
+    llm.chat_responses = [
+        json.dumps({"choices": [{"index": 1, "word": "щука"}]}),
+        json.dumps({"choices": [{"index": 1, "word": "щука"}]}),
+    ]
+    module = RussianModule(llm, MODELS, ocr=None, dictionary=WORDS)
+    task = SubjectTask(number="1", condition="щ_ка")
+    [reference] = await module.resolve_reference([task], kb)
+    assert reference.origin == "derived"
+    page = await kb.find_page("russian", "щ_ка")
+    assert page is not None and page.tasks[0].id is not None
+    task_id = page.tasks[0].id
+    [answer] = await kb.answers_for(task_id)
+    await kb.set_answer_status(answer.id or 0, "rejected", "manual")
+    # ревьюер отклонил единственный ответ — модуль не должен молча пересоздать его
+    [again] = await module.resolve_reference([task], kb)
+    assert again.origin == "derived"
+    assert await kb.unverified_answers("russian", 10) == []
+    assert len(await kb.answers_for(task_id)) == 1
+
+
+class RaisingKb:
+    async def find_page(self, subject: str, text: str) -> object:
+        raise RuntimeError("kb недоступна")
+
+
+async def test_resolve_reference_kb_read_failure_falls_back_to_derive() -> None:
+    module = RussianModule(FakeVision([]), MODELS, ocr=None, dictionary=WORDS)
+    task = SubjectTask(number="1", condition="м_шина")
+    [reference] = await module.resolve_reference([task], RaisingKb())  # type: ignore[arg-type]
+    assert reference.payload["words"] == ["машина"]
+
+
 async def test_resolve_reference_without_kb_still_derives() -> None:
     module = RussianModule(FakeVision([]), MODELS, ocr=None, dictionary=WORDS)
     [reference] = await module.resolve_reference(
@@ -138,6 +173,30 @@ async def test_start_tutoring_builds_word_session_with_rule() -> None:
     assert session.word is not None and session.word.expected == "поздняя"
     assert session.word.rule_title == "Безударная гласная в корне"
     assert session.ref.answer == "поздняя" and session.expected == "поздняя"
+
+
+async def test_start_tutoring_skips_confirmed_missing_word_picks_spelling() -> None:
+    # находки в пропуске (сюда попадают все типы) сортируются первыми check_words — confirmed
+    # missing_word (без actual) не должен блокировать разбор следующей за ней spelling-находки
+    llm = FakeVision([])
+    llm.chat_responses = [json.dumps({"rule_code": "ru.orth.unstressed_vowel", "confidence": 0.9})]
+    module = RussianModule(llm, MODELS, ocr=None, dictionary=WORDS)
+    task = SubjectTask(number="1", words=[_w("Наступила", 0), _w("позняя", 1), _w("осень", 2)])
+    missing = Finding(
+        task_index=0, kind="missing_word", strength="candidate", expected="нас", confirmed=True
+    )
+    spelling = Finding(
+        task_index=0, kind="spelling", strength="candidate", expected="поздняя",
+        actual="позняя", word=_w("позняя", 1), confirmed=True,
+    )  # fmt: skip
+    result = TaskResult(
+        task_index=0,
+        findings=[missing, spelling],
+        payload={"sentence": {"позняя": "Наступила позняя осень"}},
+    )
+    session = await module.start_tutoring(result, task, kb=None)
+    assert session.word is not None and session.word.expected == "поздняя"
+    assert session.word.actual == "позняя"
 
 
 async def test_start_tutoring_without_error_raises() -> None:

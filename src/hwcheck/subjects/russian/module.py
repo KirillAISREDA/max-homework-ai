@@ -9,6 +9,7 @@ recognize — vision решает роль и читает печатный уч
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from hwcheck.bot.check import CheckModels
@@ -40,6 +41,14 @@ logger = logging.getLogger(__name__)
 
 NO_REFERENCE_DETAIL = "нет текста упражнения — пришли фото учебника"
 OCR_FAILED_DETAIL = "не смог прочитать тетрадь — попробуй переснять"
+
+
+@dataclass(frozen=True)
+class _KbLookup:
+    reference: Reference | None
+    # задание уже есть в базе (хотя бы один ответ, включая отклонённые ревьюером) — не
+    # пересоздавать ответ через `_save`, даже если действующего эталона сейчас нет
+    known: bool
 
 
 class RussianModule:
@@ -94,36 +103,51 @@ class RussianModule:
             condition = task.condition.strip()
             if not condition:
                 continue
-            reference = await self._from_kb(task, condition, kb) if kb is not None else None
-            if reference is None:
-                derived = await derive_text(
-                    condition, self._dictionary, self._llm, model=self._models.structure
-                )
-                reference = Reference(
-                    task_number=task.number,
-                    origin="derived",
-                    trust=derived.trust,
-                    payload=derived.model_dump(),
-                )
-                if kb is not None:
+            lookup = _KbLookup(None, False)
+            read_ok = True
+            if kb is not None:
+                try:
+                    lookup = await self._from_kb(task, condition, kb)
+                except Exception:
+                    # база недоступна — не роняем проверку, считаем страницу неизвестной и не
+                    # пробуем писать в неё (запись почти наверняка тоже упадёт)
+                    logger.warning("kb недоступна при чтении эталона", exc_info=True)
+                    read_ok = False
+            if lookup.reference is not None:
+                references.append(lookup.reference)
+                continue
+            derived = await derive_text(
+                condition, self._dictionary, self._llm, model=self._models.structure
+            )
+            reference = Reference(
+                task_number=task.number,
+                origin="derived",
+                trust=derived.trust,
+                payload=derived.model_dump(),
+            )
+            if kb is not None and read_ok and not lookup.known:
+                try:
                     await self._save(task, condition, derived, kb)
+                except Exception:
+                    logger.warning("kb недоступна при сохранении эталона", exc_info=True)
             references.append(reference)
         return references
 
-    async def _from_kb(
-        self, task: SubjectTask, condition: str, kb: KnowledgeBase
-    ) -> Reference | None:
+    async def _from_kb(self, task: SubjectTask, condition: str, kb: KnowledgeBase) -> _KbLookup:
         page = await kb.find_page(self.code, condition)
         if page is None or not page.tasks or page.tasks[0].id is None:
-            return None
-        answers = [a for a in await kb.answers_for(page.tasks[0].id) if a.status != "rejected"]
+            return _KbLookup(None, False)
+        raw_answers = await kb.answers_for(page.tasks[0].id)
+        known = bool(raw_answers)
+        answers = [a for a in raw_answers if a.status != "rejected"]
         if not answers:
-            return None
+            return _KbLookup(None, known)
         best = max(answers, key=lambda a: (a.trust == "verified", a.id or 0))
         derived = DerivedText.model_validate(best.answer)
-        return Reference(
+        reference = Reference(
             task_number=task.number, origin="kb", trust=best.trust, payload=derived.model_dump()
         )
+        return _KbLookup(reference, True)
 
     async def _save(
         self, task: SubjectTask, condition: str, derived: DerivedText, kb: KnowledgeBase
@@ -171,7 +195,9 @@ class RussianModule:
     async def start_tutoring(
         self, result: TaskResult, task: SubjectTask, kb: KnowledgeBase | None
     ) -> TutorSession:
-        finding = next((f for f in result.findings if f.is_error and f.expected), None)
+        # missing_word — тоже confirmed-способная находка (без actual), но разбор по слову
+        # тьютору не построить без того, что ребёнок написал — только spelling/extra_word
+        finding = next((f for f in result.findings if f.is_error and f.actual and f.expected), None)
         if finding is None or finding.actual is None or finding.expected is None:
             raise ValueError("нет подтверждённой ошибки для разбора")
         sentence = result.payload.get("sentence", {}).get(finding.actual, " ".join(task.lines))

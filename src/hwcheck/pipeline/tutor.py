@@ -78,7 +78,10 @@ async def tutor_reply(
     prompt_version: str = "v1",
 ) -> tuple[str, TutorSession]:
     if session.word is not None:
-        return await _word_reply(client, session, session.word, student_message, model=model)
+        return await _word_reply(
+            client, session, session.word, student_message,
+            model=model, prompt_version=prompt_version,
+        )  # fmt: skip
     # compare_answers: True → решено; False и None (реплика — не ответ, «не знаю» /
     # непарсящийся текст) одинаково тратят уровень — любая реплика без верного
     # ответа считается запросом следующей подсказки
@@ -252,6 +255,7 @@ async def _word_reply(
     student_message: str,
     *,
     model: str,
+    prompt_version: str = "v1",
 ) -> tuple[str, TutorSession]:
     solved_now = _mentions(student_message, word.expected)
     if solved_now:
@@ -261,7 +265,7 @@ async def _word_reply(
             update={"hint_level": min(session.hint_level + 1, MAX_HINT_LEVEL)}
         )
     messages = [
-        ChatMessage(role="system", content=load_prompt("ru_tutor", "v1")),
+        ChatMessage(role="system", content=load_prompt("ru_tutor", prompt_version)),
         ChatMessage(role="user", content=_word_context(session, word, solved_now)),
         *session.history,
         ChatMessage(role="user", content=student_message),
