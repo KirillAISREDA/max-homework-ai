@@ -68,7 +68,7 @@
 
 ---
 
-### Task R1: Движок ReadingPipeline в контейнере OCR
+### Task 1 (R1): Движок ReadingPipeline в контейнере OCR
 
 **Files:**
 - Modify: `ocr/engine.py` (заменить `ReadingPipelineEngine`)
@@ -346,7 +346,7 @@ git commit -m "feat(ocr): движок ReadingPipeline без torch — EXIF-п�
 
 ---
 
-### Task R2: Словарь Hunspell и заполнение пропусков
+### Task 2 (R2): Словарь Hunspell и заполнение пропусков
 
 **Files:**
 - Create: `assets/hunspell/ru_RU.dic`, `assets/hunspell/ru_RU.aff`, `assets/hunspell/README_ru_RU.txt` (из `github.com/LibreOffice/dictionaries/tree/master/ru_RU`, как в спайке)
@@ -694,7 +694,7 @@ git commit -m "feat(russian): словарь Hunspell и эталон пропу
 
 ---
 
-### Task R3: Распознавание страниц — роль и текст учебника через vision, тетрадь через OCR
+### Task 3 (R3): Распознавание страниц — роль и текст учебника через vision, тетрадь через OCR
 
 **Files:**
 - Create: `src/hwcheck/subjects/russian/recognize.py`, `prompts/ru_page/v1.md`
@@ -1002,7 +1002,7 @@ git commit -m "feat(russian): роль страницы и печатный те
 
 ---
 
-### Task R4: Выравнивание и находки
+### Task 4 (R4): Выравнивание и находки
 
 **Files:**
 - Create: `src/hwcheck/subjects/russian/align.py`, `src/hwcheck/subjects/russian/check.py`
@@ -1352,7 +1352,7 @@ git commit -m "feat(russian): выравнивание слов тетради �
 
 ---
 
-### Task R5: Модуль `RussianModule` и тьютор по слову
+### Task 5 (R5): Модуль `RussianModule` и тьютор по слову
 
 **Files:**
 - Create: `src/hwcheck/subjects/russian/module.py`, `src/hwcheck/subjects/russian/rules.py`, `prompts/ru_orthogram/v1.md`, `prompts/ru_tutor/v1.md`
@@ -2109,7 +2109,7 @@ git commit -m "feat(russian): модуль предмета — эталон и�
 
 ---
 
-### Task R6: Карточки орфограмм 1–4 класса и `hwcheck kb load-rules`
+### Task 6 (R6): Карточки орфограмм 1–4 класса и `hwcheck kb load-rules`
 
 **Files:**
 - Create: `assets/kb/rules_russian.json`
@@ -2277,7 +2277,7 @@ git commit -m "feat(kb): карточки орфограмм 1–4 класса 
 
 ---
 
-### Task R7: Бот — маршрутизация по предмету, путь языков через `SubjectPage`
+### Task 7 (R7): Бот — маршрутизация по предмету, путь языков через `SubjectPage`
 
 Закрывает блокеры финального ревью каркаса: бот вызывает `recognize`/`resolve_reference` модуля; `CheckedTask.grade` необязателен; `clarify.py` не трогает `grade` у языков; `KnowledgeBase` и `OcrClient` подключены; `photo_index` — по позиции в альбоме; при пропуске word-вопроса ребёнку сообщается. Отложено (в TODO): `findings.confirmed`/`homework_id` в БД.
 
@@ -2662,7 +2662,7 @@ git commit -m "feat(bot): маршрутизация по предмету пр�
 
 ---
 
-### Task R8: Стенд русского — golden-кейсы с ожидаемыми находками
+### Task 8 (R8): Стенд русского — golden-кейсы с ожидаемыми находками
 
 Спецификация §3 п.6: форма задания открывается через стенд на ≥ 10 реальных фото. Для русского
 `verified` без подтверждения ребёнка не ставится, поэтому главные метрики — **точность кандидатов**
@@ -2925,7 +2925,7 @@ git commit -m "feat(bench): стенд русского — точность и 
 
 ---
 
-### Task R9: Открытие предмета — OCR на VPS, флаг, выкатка, живой тест
+### Task 9 (R9): Открытие предмета — OCR на VPS, флаг, выкатка, живой тест
 
 **Files:**
 - Modify: `src/hwcheck/bot/subjects.py` (`russian` → `available=True`), `docs/deploy.md` («OCR-сервис»: запуск, память, `OCR_URL`; «Обновить бота»: `kb load-rules`), `docs/PROJECT_MEMORY.md` (§2 состояние, §4 решения, §8 артефакты), `docs/legal/privacy-policy-v0.md` (фото учебников, срок 365 дней), `TODO.md`, `HISTORY.md`
