@@ -96,22 +96,63 @@ def test_only_header_words_with_reference_is_uncertain() -> None:
     )
 
 
-def test_date_line_before_header_stays_in_body() -> None:
-    words = [
-        *_words("17", "сентября"),
-        *_words("Упражнение", "245."),
-        *_words("Наступила", "осень"),
-    ]
-    for w in words[2:4]:
-        w.line = 1
-    for w in words[4:]:
-        w.line = 2
-    task = SubjectTask(number="245", words=words)
-    findings = check_words(0, task, _derived("Наступила", "осень"))
-    assert [(f.kind, f.actual) for f in findings] == [
-        ("extra_word", "17"),
-        ("extra_word", "сентября"),
-    ]
+def _lines(*lines: list[str]) -> list[Word]:
+    """Слова тетради по строкам: номер строки — её порядок, x0 — порядок слова в строке."""
+    words = []
+    for number, texts in enumerate(lines):
+        for position, text in enumerate(texts):
+            words.append(
+                Word(
+                    text=text,
+                    box=Box(
+                        x0=position * 40, y0=number * 30, x1=position * 40 + 30, y1=number * 30 + 20
+                    ),
+                    confidence=0.9,
+                    line=number,
+                )  # fmt: skip
+            )
+    return words
+
+
+def test_date_line_before_header_is_not_a_finding() -> None:
+    """Дата над номером упражнения — «мебель» тетради, а не лишние слова: иначе честное «да»
+    ребёнка на «здесь написано «17»?» превращается в ошибку на верной странице (ревью 17.09)."""
+    task = SubjectTask(
+        number="245",
+        words=_lines(["17", "сентября"], ["Упражнение", "245."], ["Наступила", "осень"]),
+    )
+    assert check_words(0, task, _derived("Наступила", "осень")) == []
+
+
+def test_number_on_the_text_line_is_stripped_not_the_line() -> None:
+    task = SubjectTask(
+        number="245", number_on_page=False,
+        words=_lines(["245.", "Наступила", "поздняя", "осень"]),
+    )  # fmt: skip
+    assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
+
+
+def test_header_words_before_text_in_one_line_are_stripped() -> None:
+    task = SubjectTask(number="245", words=_lines(["Упр.", "245", "Наступила", "поздняя", "осень"]))
+    assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
+
+
+def test_work_heading_line_is_not_a_finding() -> None:
+    task = SubjectTask(
+        number="1", number_on_page=False,
+        words=_lines(["Домашняя", "работа"], ["Наступила", "поздняя", "осень"]),
+    )  # fmt: skip
+    assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
+
+
+def test_unrecognised_furniture_before_the_text_is_dropped() -> None:
+    """Запасной путь для того, что не разобрали как заголовок («17.09.2026»): лишние слова до
+    первого совпадения — то, что ребёнок написал над упражнением, а не ошибка в тексте."""
+    task = SubjectTask(
+        number="1", number_on_page=False,
+        words=_lines(["17.09.2026"], ["Наступила", "поздняя", "осень"]),
+    )  # fmt: skip
+    assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
 
 
 def test_too_many_near_miss_words_is_uncertain() -> None:
