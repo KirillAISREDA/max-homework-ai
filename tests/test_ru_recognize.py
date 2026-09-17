@@ -9,6 +9,7 @@ from PIL import Image
 from hwcheck.llm.base import ChatMessage, LLMResult
 from hwcheck.subjects.base import Box, Word
 from hwcheck.subjects.russian.recognize import (
+    FILLED_BY_HAND_COMMENT,
     RuExercise,
     RuPage,
     header_number,
@@ -75,6 +76,25 @@ async def test_notebook_page_has_no_text_from_vision() -> None:
     vision = FakeVision([handwritten])
     page, _ = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "notebook" and page.exercises == []
+
+
+async def test_filled_in_workbook_is_not_a_reference() -> None:
+    """Заполненная от руки рабочая тетрадь: vision прочитал бы вместе с рукописью ученика —
+    эталон совпал бы с тем, что ребёнок написал, и проверка всегда говорила бы «верно». Такая
+    страница не становится эталоном и не уходит в базу знаний (финальное ревью 17.09, I5)."""
+    filled = json.dumps(
+        {
+            "role": "textbook",
+            "handwritten": True,
+            "exercises": [{"number": "245", "text": "Наступила поздняя осень."}],
+        },
+        ensure_ascii=False,
+    )
+    vision = FakeVision([filled])
+    page, usage = await recognize_page(vision, _jpeg(), model="v")
+    assert (page.role, page.exercises) == ("unknown", [])
+    assert page.comment == FILLED_BY_HAND_COMMENT
+    assert usage.calls == 1  # доворачивать заполненную страницу незачем
 
 
 async def test_unknown_role_tries_next_orientation_then_gives_up() -> None:

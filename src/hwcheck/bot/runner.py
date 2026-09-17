@@ -34,6 +34,7 @@ from hwcheck.bot.onboarding.state import (
     OnboardingStateStore,
     RedisOnboardingStateStore,
 )
+from hwcheck.bot.subjects import subject_by_code
 from hwcheck.config import Settings
 from hwcheck.crypto import UserIdCipher, UserIdCipherError
 from hwcheck.db.findings import PgFindingsRepository
@@ -102,9 +103,16 @@ def _make_kb_photo_store(settings: Settings) -> PhotoStore | None:
 def load_dictionary() -> HunspellDictionary | None:
     """Словарь русского — один раз при старте (секунды и ~170 МБ), до первого фото.
 
+    Пока русский выключен в каталоге предметов (`bot/subjects.py`), словарь не грузим совсем:
+    предмет всё равно недоступен ученику, а память и секунды старта — не бесплатные (I6).
+
     Нет файлов словаря — предметы на нём (русский) станут недоступны, но бот стартует:
     математика от словаря не зависит.
     """
+    russian = subject_by_code("russian")
+    if russian is None or not russian.available:
+        logger.info("dictionary skipped: russian not available")
+        return None
     started = time.monotonic()
     try:
         dictionary = HunspellDictionary.load()

@@ -25,6 +25,7 @@ _NUMBER = re.compile(r"(?:упр\w*\.?|№|n)\s*(\d{1,4})", re.IGNORECASE)
 # страница «стр. 12» и год «в 1945 году» ловились бы как номер упражнения); 3 цифры — не 4, чтобы
 # год «2026» отдельной строкой не совпал
 _BARE_NUMBER = re.compile(r"^(\d{1,3})\.?$")
+FILLED_BY_HAND_COMMENT = "страница уже заполнена от руки — нужна чистая страница учебника"
 
 
 class RuExercise(BaseModel):
@@ -37,6 +38,10 @@ class RuPage(BaseModel):
     role: Literal["textbook", "notebook", "unknown"]
     exercises: list[RuExercise] = Field(default_factory=list)
     comment: str | None = None
+    # на странице есть рукописные записи ученика (заполненные пропуски, ответы): печатной
+    # страницей учебника такая рабочая тетрадь быть перестаёт — поле последним, чтобы старые
+    # ответы модели без него валидировались
+    handwritten: bool = False
 
 
 def _hide_handwriting(page: RuPage) -> RuPage:
@@ -74,6 +79,12 @@ async def recognize_page(
         except ValidationError:
             page = RuPage(role="unknown", comment="ответ модели не разобран")
         page = _hide_handwriting(page)
+        if page.role == "textbook" and page.handwritten:
+            # заполненная от руки рабочая тетрадь: vision читает её вместе с рукописью ученика,
+            # и эталон совпал бы с тем, что ребёнок написал — проверка всегда говорила бы
+            # «верно», а текст и фото ушли бы в базу знаний (финальное ревью 17.09, I5).
+            # Доворачивать незачем — страница не станет чистой от поворота
+            return RuPage(role="unknown", exercises=[], comment=FILLED_BY_HAND_COMMENT), usage
         if page.role == "notebook" or page.exercises:
             return page, usage
         if fallback is None and page.role != "unknown":

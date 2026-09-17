@@ -245,6 +245,33 @@ def _mentions(message: str, word: str) -> bool:
     return normalize_word(word) in {normalize_word(t) for t in re.findall(r"[А-Яа-яЁё-]+", message)}
 
 
+# буква как подсказка: в кавычках («д», "д", 'д') или после «буква/букву/буквой/через»
+_LETTER_HINT = re.compile(
+    r"«([А-Яа-яЁё])»|\"([А-Яа-яЁё])\"|'([А-Яа-яЁё])'"
+    r"|(?:букв\w*|через)\s+[«\"']?([А-Яа-яЁё])(?![А-Яа-яЁё])",
+    re.IGNORECASE,
+)
+
+
+def _secret_letters(actual: str, expected: str) -> set[str]:
+    """Буквы, которые и есть ответ: различие между тем, что ребёнок написал, и верным словом."""
+    written, correct = normalize_word(actual), normalize_word(expected)
+    letters = {c for c, other in zip(correct, written, strict=False) if c != other}
+    return letters | (set(correct) - set(written))
+
+
+def _mentions_letters(message: str, letters: set[str]) -> bool:
+    """Реплика называет нужную букву: «пиши через «д»» — та же подсказка ответа, что и слово."""
+    if not letters:
+        return False
+    found = {
+        match.group(match.lastindex)
+        for match in _LETTER_HINT.finditer(message)
+        if match.lastindex is not None
+    }
+    return any(normalize_word(letter) in letters for letter in found)
+
+
 WORD_REDIRECT = "Не спеши 🙂 Подумай, какое правило здесь работает, и напиши слово ещё раз."
 
 
@@ -275,15 +302,22 @@ async def _word_reply(
         reply = turn.reply
     except StructuredOutputError:
         reply = SAFE_RETRY
-    if not solved_now and session.hint_level < MAX_HINT_LEVEL and _mentions(reply, word.expected):
+    # до уровня 3 ответ не должен просочиться ни словом, ни нужной буквой
+    letters = _secret_letters(word.actual, word.expected)
+
+    def leaks(text: str) -> bool:
+        return _mentions(text, word.expected) or _mentions_letters(text, letters)
+
+    if not solved_now and session.hint_level < MAX_HINT_LEVEL and leaks(reply):
         retry = [*messages, ChatMessage(role="assistant", content=reply), ChatMessage(
             role="user",
-            content="СТОП: в реплике есть правильное написание слова, а уровень подсказки ещё "
-            "не 3. Переформулируй подсказку, не называя это слово и не называя букву.",
+            content="СТОП: в реплике есть правильное написание слова или нужная буква, а уровень "
+            "подсказки ещё не 3. Переформулируй подсказку, не называя это слово и не называя "
+            "букву — только правило.",
         )]  # fmt: skip
         try:
             turn, _ = await chat_structured(client, retry, TutorTurn, model=model)
-            reply = turn.reply if not _mentions(turn.reply, word.expected) else WORD_REDIRECT
+            reply = turn.reply if not leaks(turn.reply) else WORD_REDIRECT
         except StructuredOutputError:
             reply = WORD_REDIRECT
     history = [*session.history, ChatMessage(role="user", content=student_message),
@@ -309,5 +343,7 @@ def _word_context(session: TutorSession, word: WordTutoring, solved_now: bool) -
     if session.hint_level >= MAX_HINT_LEVEL:
         parts.append(f"Уровень 3 — назови верное написание «{word.expected}» и объясни его.")
     else:
-        parts.append(f"НЕ называй верное написание («{word.expected}») и НЕ называй нужную букву.")
+        # верного написания в промпте до уровня 3 нет совсем: «НЕ называй «поздняя»» — это и
+        # есть ответ, а модель его всё равно видит (ревью 17.09, I9)
+        parts.append("НЕ называй верное написание слова и НЕ называй нужную букву.")
     return "\n\n".join(parts)
