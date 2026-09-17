@@ -24,20 +24,20 @@
 - Бот: «Домашка ИИ» в MAX. Команда: Кирилл (основатель — продукт, разработка, запуск) + ИИ-агенты
   (Claude Code): разработка по TDD, ревью агентами, PR на каждое изменение.
 
-## 2. Текущее состояние (15.09.2026)
+## 2. Текущее состояние (17.09.2026)
 
 | Что | Состояние |
 |---|---|
-| Бот в MAX | работает в prod на VPS, long polling; `main` = `1e687ff` (15.09) |
+| Бот в MAX | работает в prod на VPS, long polling; `main` = `32e67c2` + PR #28 (каркас предметов, ждёт слияния/выкатки); на VPS — `7f38ec3` (онбординг этап 2, флаг `ONBOARDING_REQUIRED=true`) |
 | Пайплайн математики | фото → двухэтапный vision (транскрипция → структура) → Solver (GigaChat) → Validator (SymPy) → вердикт → разбор с тьютором |
 | Качество vision | 28/31 фото датасета распознаны (было 8/31 до двухэтапной схемы) |
 | Validator | арифметика, дроби, смешанные числа, уравнения с одной переменной, столбики (+ − × на однозначное), ответы фразой, многопунктовые задания; деление уголком — «верно» по результатам примеров условия, иначе «не уверен» |
-| Тесты | 441 (из них 4 — PostgreSQL), CI зелёный (ruff, mypy strict, pytest, PostgreSQL 17 в CI) |
+| Тесты | 596 в PR #28 (530 в prod), из них ~40 на PostgreSQL; CI зелёный (ruff, mypy strict с `ocr/`, pytest, PostgreSQL 17 в CI) |
 | Прод-данные 04–13.09 | 4 пользователя (3 тестера + 1 реальный), 29 загрузок домашки, 44 проверенных задания, ~189 тыс. токенов |
 | Отслеживание | `var/events.jsonl` (trace_id, обезличенный user, env prod/test), фото 30 дней, `var/bot.log` |
-| Онбординг и согласие родителя | спецификация + план из 5 этапов (`docs/superpowers/plans/2026-09-14-onboarding.md`); **этап 1 «Фундамент» в prod 15.09** (PostgreSQL, HMAC-хэши id, шифр id, каталог предметов, приглашения); вход ученика и согласие — этап 2, **до него пользователей не привлекаем** |
-| Русский язык | исследование закончено, прототип не начат |
-| Конкурс Sber500xDisrupt | допущены к этапу 1 (13.09); форма онбординга конкурса — ответы в `docs/contest/sber500-onboarding-answers.md` |
+| Онбординг и согласие родителя | этапы 1–2 в prod (16.09, PR #25): роль, класс, предмет, ссылка/код родителю, согласие, дети 1–4 класса через аккаунт родителя («Чья домашка?»); **флаг `ONBOARDING_REQUIRED=true` включён для живого теста** (пункты 1–4 чек-листа Task 11 — ждём Кирилла); этапы 3–5 (меню, удаление данных, уведомления, юрист) — впереди; **до них реальных пользователей не привлекаем** |
+| Предметы кроме математики | спецификация каркаса и план (16.09); спайки закончены (17.09); **каркас — PR #28** (контракт модуля, база знаний, находки, OCR-сервис с фейком, кропы слов); русский (этап 3) и английский (этап 4) — план по коду каркаса; **память для OCR не решена** (ReadingPipeline пик 3 ГБ: VPS 16 ГБ или Cloud.ru) |
+| Конкурс Sber500xDisrupt | допущены к этапу 1 (13.09); форма онбординга отправлена (16.09); регистрация бота на ИП — ок |
 
 ## 3. Конкурс Sber500xDisrupt — рамка всех приоритетов
 
@@ -89,9 +89,12 @@
 версионированы; данные детей минимизированы (152-ФЗ): без ФИО и школы, id MAX не хранится в открытом виде.
 
 Код (`src/hwcheck/`): `llm/` (клиент GigaChat, structured output) · `pipeline/` (normalize, vision, solver,
-mathparse, validator, grade, classifier, tutor, generator) · `bot/` (max_api, models, handlers, check, pages, clarify, fsm,
-runner) · `events.py` · `photos.py` · `config.py` · `cli.py` (`hwcheck ping | vision | eval | solve | grade |
-tutor | generate | bot`).
+mathparse, validator, grade, classifier, tutor, generator) · `subjects/` (контракт модуля `base.py`, `kb_models.py`,
+`math/module.py`, `registry.py`; PR #28) · `bot/` (max_api, models, handlers, check, pages, clarify, summary, crops, fsm,
+runner; `onboarding/` — router, linking, student, parent, subject, context, state, texts, policy) · `db/` (pool, migrate,
+migrations 001–003, repo, memory, kb, kb_memory, findings) · `events.py` · `photos.py` · `crypto.py` · `ocr_client.py` ·
+`kb_cli.py` · `config.py` · `cli.py` (`hwcheck ping | vision | eval | solve | grade | tutor | generate | bot | keys |
+report | bench | kb`). Отдельный сервис `ocr/` (HTTP, движок по `OCR_ENGINE`, контейнер `homework-ocr` под профилем).
 
 ## 6. Качество: что знаем
 
@@ -150,7 +153,7 @@ tutor | generate | bot`).
 | Что | Где |
 |---|---|
 | Репозиторий | https://github.com/KirillAISREDA/max-homework-ai (публичный; «открытый контур» конкурса) |
-| VPS | `193.247.73.243` (HOSTKEY, Москва по геолокации IP), Ubuntu 22.04, 4 vCPU / 7.7 ГБ; общий с чужими проектами — чужое не трогать |
+| VPS | `193.247.73.243` (HOSTKEY, Москва по геолокации IP), Ubuntu 22.04, 4 vCPU / 7.7 ГБ + swap 4 ГБ (с 16.09); общий с чужими проектами (28 контейнеров, доступно ~3,7 ГБ) — чужое не трогать; **для OCR (пик 3 ГБ) нужен апгрейд до 16 ГБ или Cloud.ru** |
 | Каталог на VPS | `/opt/max-homework-ai` — git-клон `main` + `.env` (бэкапы `.env.bak-20260913`, `.env.bak-2026-09-15`) |
 | Контейнеры | `homework-bot` (лимит 1 ГБ), `homework-redis` (`redis:8-alpine`, AOF, том `max-homework-ai_redis-data`), `homework-postgres` (`postgres:17-alpine`, 256 МБ, без портов, том `postgres-data`, миграции при старте бота), `homework-pgbackup` (ежедневный `pg_dump`) |
 | Данные на VPS | `var/events.jsonl`, `var/max_marker.txt`, `var/photos/` (TTL 30 дней), `var/bot.log`, `.cache/solver/`, `var/backups/` (дампы PostgreSQL, 7 дней, только root) |
@@ -174,6 +177,10 @@ tutor | generate | bot`).
   пересборка: `chrome --headless=new --no-pdf-header-footer --virtual-time-budget=15000 --print-to-pdf=…pdf …html`
 - `docs/research/2026-09-13-ru-handwriting-ocr.md` — исследование OCR рукописи для русского языка
 - `docs/superpowers/specs/2026-09-14-onboarding-design.md` — спецификация онбординга и согласия (ждёт вычитки)
+- `docs/superpowers/specs/2026-09-16-subjects-framework-design.md` — каркас предметов, база знаний, русский и английский;
+  план `docs/superpowers/plans/2026-09-16-subjects-framework.md` (спайки и каркас подробно, этапы 3–4 — по коду)
+- `docs/research/2026-09-17-readingpipeline-vps.md`, `…-hunspell-gaps.md`, `…-en-handwriting-ocr.md` — спайки 17.09; код в `spikes/`
+- `docs/legal/privacy-policy-v0.md` — черновик политики (реквизиты ИП не заполнены; к юристу)
 - `bench/` — стенд сравнения моделей: `README.md` (формат эталона, запуск), `golden/` (16 кейсов, sha256 фото),
   `configs/`, `reports/2026-09-14-models.md`; команды `hwcheck bench run | report`, `hwcheck report` (журнал)
 
@@ -187,7 +194,9 @@ tutor | generate | bot`).
 **Pull requests** — #1 скелет · #2 сертификат · #3 нормализация фото · #4 эксперименты vision · #5 solver +
 validator · #6 положение конкурса · #7 классификатор, тьютор, генератор · #8 двухэтапный vision · #9 бот MAX ·
 #10 живой тест · #11 контейнер на VPS · #12 ложные «ошибки» · #13 готовность к пользователям · #14 уравнения,
-столбики, OCR · #15 живой альбом, исследование русского.
+столбики, OCR · #15 живой альбом, исследование русского · #16–#21 уточняющие вопросы, стенд моделей, колонки и
+деление уголком · #22 онбординг этап 1 · #25 онбординг этап 2 · #26 спецификация и план каркаса предметов ·
+#27 спайки (ReadingPipeline на VPS, Hunspell, OCR латиницы) · #28 каркас предметов (открыт).
 
 **Внешние ресурсы**
 - Датасет `ai-forever/school_notebooks_RU` (MIT) — https://huggingface.co/datasets/ai-forever/school_notebooks_RU
@@ -226,6 +235,15 @@ validator · #6 положение конкурса · #7 классификат
 - **Агенту-разметчику — писать файл сразу после каждого кейса:** первый запуск завис, разобрав ~40 фото и не
   записав ни одного файла.
 - **Консоль Windows (cp1251)** роняет `print` со «→»; в CLI `stdout.reconfigure(errors="replace")`.
+- **Ревью ловит дефекты плана, а не только кода:** в онбординге и каркасе 8 из 10 важных находок сидели в тексте плана
+  (кнопка согласия без привязки к ссылке, `regrade` стирал находки, `.dockerignore` ломал сборку). Планы с полным кодом
+  всё равно проходят ревью каждой задачи + финальное + безопасность.
+- **Спайк раньше лимитов:** спецификация обещала OCR 1,5 ГБ, спайк показал 3 ГБ. Числа в инфраструктурные разделы —
+  только после замера.
+- **LLM-vision исправляет и латиницу:** GigaChat читает английскую рукопись точно (80 % слов), но исправляет 100 %
+  ошибок ученика; расхождение двух расшифровок как сигнал бесполезно (полнота 7 %). Для языков — только посимвольный OCR.
+- **На общем VPS без swap** OOM-killer может убить чужой контейнер; swap 4 ГБ включён 16.09, но памяти под OCR всё равно нет.
+- **Субагент-исполнитель может «отложить» требование** (событие `kb_review`) — сверять отчёт со списком требований до ревью.
 - **ReadingPipeline на CPU памяти нужно на порядок больше, чем «165 МБ весов»:** после загрузки моделей
   процесс уже занимает 609 МБ, после первого фото — 2,3–2,5 ГБ, пик на плотных (печатных) страницах —
   свыше 3 ГБ; `--memory=2g` штатно ловит OOM-kill. Планировать лимит контейнера `homework-ocr` от
