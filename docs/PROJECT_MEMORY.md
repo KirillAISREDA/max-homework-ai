@@ -180,6 +180,7 @@ report | bench | kb`). Отдельный сервис `ocr/` (HTTP, движо�
 - `docs/superpowers/specs/2026-09-14-onboarding-design.md` — спецификация онбординга и согласия (ждёт вычитки)
 - `docs/superpowers/specs/2026-09-16-subjects-framework-design.md` — каркас предметов, база знаний, русский и английский;
   план `docs/superpowers/plans/2026-09-16-subjects-framework.md` (спайки и каркас подробно, этапы 3–4 — по коду)
+- `docs/superpowers/plans/2026-09-17-russian-stage3.md` — план этапа 3 «Русский язык», R1–R9 с кодом и тестами (17.09)
 - `docs/research/2026-09-17-readingpipeline-vps.md`, `…-hunspell-gaps.md`, `…-en-handwriting-ocr.md` — спайки 17.09; код в `spikes/`
 - `docs/research/2026-09-17-readingpipeline-memory.md` — follow-up: снижение пика ReadingPipeline до ≤ 1,5 ГБ без потери качества; код `spikes/ocr_memory/`
 - `docs/legal/privacy-policy-v0.md` — черновик политики (реквизиты ИП не заполнены; к юристу)
@@ -231,7 +232,9 @@ validator · #6 положение конкурса · #7 классификат
 - **MAX `POST /answers` требует `message` или `notification`** — пустое тело `{}` даёт 400, кнопка «крутится»,
   апдейт падал целиком (онбординг у тестировщика 17.09). Документация об этом молчит; шлём `notification: ""`.
   Ошибка ack не должна ронять сценарий. Кнопки в проде без живого нажатия — не проверены.
-- **`.env` на VPS с CRLF** — `grep|cut` по нему отдаёт хвост ``, добавлять `tr -d ''`; бот переживает.
+- **`.env` на VPS с CRLF** — `grep|cut` по нему отдаёт хвост `
+`, добавлять `tr -d '
+'`; бот переживает.
 - **Windows-окружение:** `TaskStop` фонового `uv run` не убивает дочерний python; heredoc с кавычками в bash
   ломается — правки через скрипты в scratchpad; Clash Verge (TUN, fake-ip) блокирует фреймы claude.ai в Chromium.
 - **Хэш id `sha256("hwcheck:"+id)` обратим перебором** — в онбординге переходим на HMAC с секретом.
