@@ -36,6 +36,44 @@ async def test_upload_image_and_send_with_attachment() -> None:
     assert "Authorization" not in requests[1].headers  # файл — на сторонний хост без токена бота
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"token": "tok123"},  # по документации dev.max.ru
+        {"photos": {"g1/abc==": {"token": "tok123"}}},  # живой ответ iu.oneme.ru, 17.09
+    ],
+)
+async def test_upload_accepts_both_response_shapes(body: dict[str, object]) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/uploads":
+            return httpx.Response(200, json={"url": "https://iu.test/upload/abc"})
+        return httpx.Response(200, json=body)
+
+    async with MaxClient("token") as client:
+        await client._http.aclose()
+        await client._files.aclose()
+        transport = httpx.MockTransport(handler)
+        client._http = httpx.AsyncClient(base_url="https://max.test", transport=transport)
+        client._files = httpx.AsyncClient(transport=transport)
+        assert await client.upload_image(b"jpegbytes") == "tok123"
+
+
+async def test_upload_without_token_is_an_error() -> None:
+    handler = httpx.MockTransport(
+        lambda r: httpx.Response(
+            200,
+            json={"url": "https://iu.test/u"} if r.url.path == "/uploads" else {"photos": {}},
+        )
+    )
+    async with MaxClient("token") as client:
+        await client._http.aclose()
+        await client._files.aclose()
+        client._http = httpx.AsyncClient(base_url="https://max.test", transport=handler)
+        client._files = httpx.AsyncClient(transport=handler)
+        with pytest.raises(ValueError, match="token"):
+            await client.upload_image(b"jpegbytes")
+
+
 async def test_upload_refuses_plain_http_address() -> None:
     """Адрес загрузки приходит из ответа MAX: фото домашки уходит только по https."""
     handler = httpx.MockTransport(
