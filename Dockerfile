@@ -20,6 +20,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Исходники, промпты (версионированные файлы, читаются с диска) и корень НУЦ Минцифры
 COPY src ./src
 COPY prompts ./prompts
+# эталонные кейсы стендов (`hwcheck bench`, `bench ru`): стенд гоняется из одноразового
+# контейнера бота внутри сети compose — без них команда не находит ни одного кейса
+COPY bench ./bench
 COPY assets ./assets
 # полный текст политики обработки данных показывается в чате (онбординг §10.3)
 COPY docs/legal ./docs/legal

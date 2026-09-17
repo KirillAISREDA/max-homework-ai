@@ -32,7 +32,7 @@
 | Пайплайн математики | фото → двухэтапный vision (транскрипция → структура) → Solver (GigaChat) → Validator (SymPy) → вердикт → разбор с тьютором |
 | Качество vision | 28/31 фото датасета распознаны (было 8/31 до двухэтапной схемы) |
 | Validator | арифметика, дроби, смешанные числа, уравнения с одной переменной, столбики (+ − × на однозначное), ответы фразой, многопунктовые задания; деление уголком — «верно» по результатам примеров условия, иначе «не уверен» |
-| Тесты | 596 в PR #28 (530 в prod), из них ~40 на PostgreSQL; CI зелёный (ruff, mypy strict с `ocr/`, pytest, PostgreSQL 17 в CI) |
+| Тесты | 596 в PR #28 (530 в prod), из них ~40 на PostgreSQL; CI зелёный (ruff, mypy strict с `ocrsvc/`, pytest, PostgreSQL 17 в CI) |
 | Прод-данные 04–13.09 | 4 пользователя (3 тестера + 1 реальный), 29 загрузок домашки, 44 проверенных задания, ~189 тыс. токенов |
 | Отслеживание | `var/events.jsonl` (trace_id, обезличенный user, env prod/test), фото 30 дней, `var/bot.log` |
 | Онбординг и согласие родителя | этапы 1–2 в prod (16.09, PR #25): роль, класс, предмет, ссылка/код родителю, согласие, дети 1–4 класса через аккаунт родителя («Чья домашка?»); **флаг `ONBOARDING_REQUIRED=true` включён для живого теста** (пункты 1–4 чек-листа Task 11 — ждём Кирилла); этапы 3–5 (меню, удаление данных, уведомления, юрист) — впереди; **до них реальных пользователей не привлекаем** |
@@ -98,7 +98,7 @@ mathparse, validator, grade, classifier, tutor, generator) · `subjects/` (ко�
 runner; `onboarding/` — router, linking, student, parent, subject, context, state, texts, policy) · `db/` (pool, migrate,
 migrations 001–003, repo, memory, kb, kb_memory, findings) · `events.py` · `photos.py` · `crypto.py` · `ocr_client.py` ·
 `kb_cli.py` · `config.py` · `cli.py` (`hwcheck ping | vision | eval | solve | grade | tutor | generate | bot | keys |
-report | bench | kb`). Отдельный сервис `ocr/` (HTTP, движок по `OCR_ENGINE`, контейнер `homework-ocr` под профилем).
+report | bench | kb`). Отдельный сервис `ocrsvc/` (HTTP, движок по `OCR_ENGINE`, контейнер `homework-ocr` под профилем).
 
 ## 6. Качество: что знаем
 

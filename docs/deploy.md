@@ -202,12 +202,22 @@ docker compose --profile ocr up -d ocr
 # фото кейсов — на VPS в /opt/max-homework-ai/data (скопировать заранее, каталог не в образе — .dockerignore)
 docker compose run --rm -v "$PWD/data:/app/data:ro" bot \
   python -m hwcheck bench ru --ocr-url http://ocr:8080 --photos data \
-  --out bench/reports/$(date +%F)-russian.md
+  --out var/bench-russian-$(date +%F).md
 ```
 
-Отчёт (`bench/reports/<дата>-russian.md`) — точность и полнота кандидатов, можно коммитить. Прогон
-сохраняется в `.cache/bench/runs/russian.jsonl` — там текст слов из тетрадей детей; этот файл **не
-должен уходить с VPS и не должен попадать в git** (уже в `.gitignore`/`.dockerignore` — не выносить).
+Эталонные кейсы (`bench/golden_ru/`) лежат в образе (`COPY bench ./bench` в `Dockerfile`), а отчёт
+пишется в `var/` — он смонтирован с хоста (как и `.cache/`): `--rm` уносит с собой всё, что
+контейнер записал в свою файловую систему, поэтому `--out bench/reports/…` внутри контейнера
+потерялся бы. Отчёт (`var/bench-russian-<дата>.md`) — точность и полнота кандидатов; на хосте его
+кладут в `bench/reports/<дата>-russian.md` и коммитят:
+
+```bash
+cp var/bench-russian-$(date +%F).md bench/reports/$(date +%F)-russian.md
+```
+
+Прогон сохраняется в `.cache/bench/runs/russian.jsonl` — там текст слов из тетрадей детей; этот файл
+**не должен уходить с VPS и не должен попадать в git** (уже в `.gitignore`/`.dockerignore` — не
+выносить).
 
 ## Диагностика
 
