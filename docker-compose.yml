@@ -16,9 +16,10 @@ services:
       LOG_PATH: var/bot.log
       # профили, согласия, приглашения; пароль — из .env (python -m hwcheck keys)
       DATABASE_URL: postgresql://homework:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD не задан в .env}@postgres:5432/homework
-      # OCR для языков (контейнер homework-ocr, профиль ocr — не стартует по умолчанию); клиент
-      # создаётся только при заданном OCR_URL, модуль math OCR не использует
-      OCR_URL: http://ocr:8080
+      # OCR для языков (контейнер homework-ocr, профиль ocr). Пусто, пока контейнер не запущен:
+      # клиент создаётся только при заданном OCR_URL, модуль math OCR не использует. Включение —
+      # OCR_URL=http://ocr:8080 в .env вместе с запуском сервиса ocr (этап «русский»)
+      OCR_URL: ${OCR_URL:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -92,7 +93,9 @@ services:
       dockerfile: ocr/Dockerfile
     image: max-homework-ai-ocr
     container_name: homework-ocr
-    restart: unless-stopped
+    # пока только сборка (docker compose --profile ocr build ocr); unless-stopped — при включении
+    # в этапе «русский», см. docs/deploy.md «OCR-сервис»
+    restart: "no"
     profiles: ["ocr"]            # стартует только явно: docker compose --profile ocr up -d ocr
     environment:
       OCR_ENGINE: ${OCR_ENGINE:-fake}

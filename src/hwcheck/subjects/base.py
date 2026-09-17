@@ -117,6 +117,16 @@ class Finding(BaseModel):
 
 
 class TaskResult(BaseModel):
+    """Результат проверки одного задания.
+
+    `payload` — предметное содержимое, которое читает только тот, кто его положил, с одним
+    исключением на время перехода: у математики бот читает `grade` (`GradeResult` целиком),
+    `ref_status`, `solver_from_cache` и `solver_tokens` — сводка и события сейчас строятся
+    из `GradeResult`, а не из находок. Для остальных предметов бот читает только `findings`
+    и `reference`; математика переходит на тот же путь в этапе 3 (решение R7: `grade`
+    становится необязательным, запасной вывод находок — только когда он есть).
+    """
+
     task_index: int
     findings: list[Finding]
     reference: Reference | None = None

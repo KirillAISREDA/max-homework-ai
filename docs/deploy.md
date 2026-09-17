@@ -197,6 +197,9 @@ docker compose exec bot python -m hwcheck kb review --subject english --limit 10
 docker compose exec bot python -m hwcheck kb load-words --subject russian --source grade_list:2 /path/to/words.txt
 ```
 
+`DATABASE_URL` команды не требуют: она берётся из окружения контейнера бота (задана в
+`docker-compose.yml`), поэтому пароль базы не попадает в историю команд.
+
 Формат ввода при проверке:
 - `y` — ответ верный, подтвердить
 - `n` — ответ неправильный, отклонить
