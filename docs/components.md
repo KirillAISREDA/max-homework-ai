@@ -1,7 +1,7 @@
 # Реестр сторонних компонентов
 
 Раскрытие сторонних библиотек, моделей и API проекта — п. 5.3 Положения о конкурсе Sber500xDisrupt
-(см. `docs/contest/contest.md`). Актуально на: **2026-09-13**.
+(см. `docs/contest/contest.md`). Актуально на: **2026-09-17**.
 
 ## 1. Python-зависимости runtime
 
@@ -19,6 +19,7 @@
 | pydantic | 2.13.5 | MIT | Модели данных и валидация: JSON Schema LLM-контрактов (`pipeline/schemas.py`), состояние FSM (`bot/fsm.py`, `bot/models.py`) |
 | pydantic-settings | 2.15.0 | MIT | Загрузка конфигурации из `.env` в `Settings` (`config.py`) |
 | redis | 8.1.0 | MIT | Асинхронный клиент Redis: состояние диалога `RedisStateStore` (`bot/fsm.py`, `bot/runner.py`) |
+| spylls | 0.1.7 | MIT | Hunspell на Python: словарные кандидаты для пропусков (`subjects/russian/gaps.py`) |
 | sympy | 1.14.0 | BSD | Детерминированная проверка арифметики/алгебры (`pipeline/mathparse.py`, `pipeline/validator.py`) — источник истины по математике, не LLM |
 
 Транзитивных зависимостей, импортируемых напрямую из `src/` в обход прямых зависимостей выше, не
@@ -81,6 +82,15 @@ TLS к `platform-api2.max.ru` требует корня НУЦ Минцифры 
 |---|---|---|
 | `ai-forever/school_notebooks_RU` (датасет, Hugging Face) | MIT | **Рассматривается, не используется.** Упомянут в `HISTORY.md` как кандидат для оценки self-hosted OCR рукописного текста; в коде проекта не подключён |
 | ReadingPipeline / `ai-forever/ReadingPipeline-notebooks` (модель+веса, GitHub/Hugging Face) | см. репозиторий проекта (не проверялось отдельно) | **Рассматривается, не используется.** Кандидат на self-hosted OCR (арх. §11.2); в коде проекта не подключён |
+
+## 7. Словари и данные
+
+Данные предметных модулей (не Python-пакеты из §1 — файлы фиксированного содержимого, читаются с
+диска, `COPY assets ./assets` в `Dockerfile`).
+
+| Компонент | Лицензия | Источник | Назначение |
+|---|---|---|---|
+| `ru_RU` (словарь Hunspell) | BSD-подобная (Copyright Alexander I. Lebedev; текст — `assets/hunspell/README_ru_RU.txt`) | github.com/LibreOffice/dictionaries, ветка `master`, каталог `ru_RU` | Словарные кандидаты для эталона «вставь буквы / раскрой скобки» — `subjects/russian/gaps.py` (`assets/hunspell/ru_RU.dic`, `ru_RU.aff`) |
 
 ## Как обновлять реестр
 
