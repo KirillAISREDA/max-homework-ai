@@ -149,7 +149,8 @@ class MaxClient:
         body: dict[str, Any] = {"notification": notification or ""}
         response = await self._http.post("/answers", params={"callback_id": callback_id}, json=body)
         if response.is_error:
-            logger.warning("answer_callback: HTTP %s %s", response.status_code, response.text[:300])
+            detail = response.text[:300].replace(callback_id, "<callback_id>")
+            logger.warning("answer_callback: HTTP %s %s", response.status_code, detail)
 
     async def download(self, url: str) -> bytes:
         """Скачивает вложение (фото) по URL из апдейта — без токена бота."""

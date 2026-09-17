@@ -42,8 +42,9 @@ async def test_answer_4xx_is_logged_with_body_and_does_not_raise(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
+        # тело ответа может эхом содержать callback_id — в лог он попасть не должен
         return httpx.Response(
-            400, json={"code": "proto.payload", "message": "notification: required"}
+            400, json={"code": "proto.payload", "message": "callback_id: cb1 is expired"}
         )
 
     with caplog.at_level(logging.WARNING, logger="hwcheck.bot.max_api"):
@@ -51,5 +52,5 @@ async def test_answer_4xx_is_logged_with_body_and_does_not_raise(
             # ack не критичен: кнопка «крутится», но сценарий идёт
             await client.answer_callback("cb1")
 
-    assert "notification: required" in caplog.text
+    assert "HTTP 400" in caplog.text and "is expired" in caplog.text
     assert "cb1" not in caplog.text  # callback_id — одноразовый секрет кнопки, в лог не пишем
