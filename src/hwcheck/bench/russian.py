@@ -77,6 +77,8 @@ async def run_ru_case(
             return RuCaseRun(case.id, [], None, time.monotonic() - started, "ocr_failed")
         if not notebook:
             return RuCaseRun(case.id, [], None, time.monotonic() - started, "no_notebook")
+        if not conditions:
+            conditions = [_typed_condition(case)]
         references = await module.resolve_reference(conditions, kb)
         if not references:
             return RuCaseRun(case.id, [], None, time.monotonic() - started, "no_reference")
@@ -88,6 +90,20 @@ async def run_ru_case(
             case.id, [], None, time.monotonic() - started, f"{type(exc).__name__}: {exc}"
         )
     return RuCaseRun(case.id, findings, trust, time.monotonic() - started)
+
+
+def _typed_condition(case: RuGoldenCase) -> SubjectTask:
+    """Кейс без страницы учебника: условие набрано руками в разметке (`exercise.text`).
+
+    Живые фото приходят тетрадями без учебника (упражнение диктует учитель, текст даёт родитель),
+    и раньше такой кейс падал с `no_reference`. Номер — заголовок страницы, только если он и
+    правда написан в упражнении; текст может нести пропуски `_`, а для «спиши» это сам эталон.
+    """
+    return SubjectTask(
+        number=case.exercise.number or "1",
+        number_on_page=case.exercise.number is not None,
+        condition=case.exercise.text,
+    )
 
 
 @dataclass
