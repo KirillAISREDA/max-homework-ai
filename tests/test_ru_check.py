@@ -206,6 +206,23 @@ def test_missing_word_at_start_has_generic_detail() -> None:
     assert finding.detail == "кажется, в начале пропущено слово"
 
 
+def test_hyphenated_word_split_by_line_break_is_not_a_finding() -> None:
+    """Перенос «сред-/них» — одно слово эталона, а не описка плюс лишнее слово."""
+    task = SubjectTask(number="1", words=_lines(["в", "сред-"], ["них", "классах"]))
+    assert check_words(0, task, _derived("в", "средних", "классах")) == []
+
+
+def test_dash_at_the_end_of_a_line_keeps_both_words() -> None:
+    """«до дома — / уставшие»: обе половины есть в эталоне, а склеенного «домауставшие» нет —
+    слова остаются раздельными, и остальной текст сходится (живой прогон 18.09, ru-1)."""
+    task = SubjectTask(
+        number="1", words=_lines(["Мы", "шли", "до", "дома-"], ["уставшие", "и", "мокрые"])
+    )
+    # тире на краю слова снимает `normalize`, поэтому «дома-» сходится с «дома» без находки
+    derived = _derived("Мы", "шли", "до", "дома", "уставшие", "и", "мокрые")
+    assert check_words(0, task, derived) == []
+
+
 def test_two_consecutive_missing_words_reference_last_written_word() -> None:
     task = SubjectTask(number="1", words=_words("у", "гость"))
     findings = check_words(0, task, _derived("у", "нас", "опять", "гость"))

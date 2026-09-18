@@ -15,7 +15,8 @@ from pydantic import BaseModel, Field, ValidationError
 from hwcheck.llm.base import VisionClient, extract_json
 from hwcheck.pipeline.normalize import normalize_image, rotate_image
 from hwcheck.prompts import load_prompt
-from hwcheck.subjects.base import SubjectTask, Usage, Word
+from hwcheck.subjects.base import Box, SubjectTask, Usage, Word
+from hwcheck.subjects.russian.align import normalize
 
 # без 180°: печатную страницу вверх ногами модель не прочитает и перевёрнутой — типографику она
 # узнаёт по общему виду текста, а не по строкам, доворачивать лишний раз незачем — экономим вызов
@@ -26,6 +27,9 @@ _NUMBER = re.compile(r"(?:упр\w*\.?|№|n)\s*(\d{1,4})", re.IGNORECASE)
 # год «2026» отдельной строкой не совпал
 _BARE_NUMBER = re.compile(r"^(\d{1,3})\.?$")
 FILLED_BY_HAND_COMMENT = "страница уже заполнена от руки — нужна чистая страница учебника"
+# дефис переноса как его отдаёт OCR: обычный, неразрывный (U+2010) и короткое тире (U+2013)
+HYPHENS = "-‐–"
+MIN_HYPHEN_STEM_LETTERS = 2
 
 
 class RuExercise(BaseModel):
@@ -141,6 +145,94 @@ def notebook_task(words: list[Word]) -> SubjectTask:
         lines=texts,
         words=ordered,
         confidence=min((w.confidence for w in words if w.confidence is not None), default=1.0),
+    )
+
+
+def merge_hyphenation(words: list[Word], reference: set[str] | None = None) -> list[Word]:
+    """Слово, перенесённое на следующую строку, — одно слово: «сред-» + «них» = «средних».
+
+    Слова приходят в порядке чтения (так их отдаёт `notebook_task`), поэтому «конец строки» —
+    это смена `line` у соседней пары. Без склейки обе половины уходили в находки: «сред-» как
+    описка, «них» как лишнее слово (живой прогон 18.09, ru-1 — 25 находок на изложении).
+
+    `reference` — нормализованные слова эталона. Тире в конце строки («до дома — / уставшие»)
+    выглядит так же, как перенос, поэтому склеиваем, только если склеенное слово есть в эталоне
+    ИЛИ ни одной половины в эталоне нет (эталона не дали — склейка вероятнее).
+    """
+    plan = _hyphenation_plan(words, reference)
+    merged: list[Word] = []
+    consumed: set[int] = set()
+    for index, word in enumerate(words):
+        if index in consumed:
+            continue
+        right_index = plan.get(index)
+        if right_index is None:
+            merged.append(word)
+            continue
+        consumed.add(right_index)
+        stem = _hyphen_stem(word.text) or word.text
+        merged.append(_join_words(word, words[right_index], stem))
+    return merged
+
+
+def _hyphenation_plan(words: list[Word], reference: set[str] | None) -> dict[int, int]:
+    """Пары «конец строки → начало следующей», которые надо склеить: левый индекс → правый.
+
+    Слова без номера строки (`line is None` — поля тетради, номера на полях: их OCR в строку не
+    собрал) в строки не входят и последним словом строки не считаются: иначе цифра с поля
+    вклинивалась бы между половинами перенесённого слова (живой прогон 18.09, «раз-/вести»).
+    """
+    lines: dict[int, list[int]] = {}
+    for index, word in enumerate(words):
+        if word.line is not None:
+            lines.setdefault(word.line, []).append(index)
+    plan: dict[int, int] = {}
+    keys = sorted(lines)
+    for current, following in zip(keys, keys[1:], strict=False):
+        left_index, right_index = lines[current][-1], lines[following][0]
+        stem = _hyphen_stem(words[left_index].text)
+        if stem is not None and _is_hyphenation(stem, words[right_index].text, reference):
+            plan[left_index] = right_index
+    return plan
+
+
+def _hyphen_stem(text: str) -> str | None:
+    """Начало перенесённого слова без дефиса; `None` — переносом это быть не может."""
+    if not text or text[-1] not in HYPHENS:
+        return None
+    stem = text.rstrip(HYPHENS)
+    # «а -» в конце строки — тире, а не перенос: слово переносят минимум с двух букв
+    if sum(1 for char in stem if char.isalpha()) < MIN_HYPHEN_STEM_LETTERS:
+        return None
+    return stem
+
+
+def _is_hyphenation(stem: str, right: str, reference: set[str] | None) -> bool:
+    if reference is None or normalize(stem + right) in reference:
+        return True
+    return normalize(stem) not in reference and normalize(right) not in reference
+
+
+def _join_words(left: Word, right: Word, stem: str) -> Word:
+    confidences = [c for c in (left.confidence, right.confidence) if c is not None]
+    return Word(
+        text=stem + right.text,
+        box=_union(left.box, right.box),
+        confidence=min(confidences) if confidences else None,
+        line=left.line,
+        photo_index=left.photo_index,
+    )
+
+
+def _union(left: Box | None, right: Box | None) -> Box | None:
+    """Объединение рамок: кроп в вопросе «здесь написано …?» покажет обе половины слова."""
+    if left is None or right is None:
+        return left or right
+    return Box(
+        x0=min(left.x0, right.x0),
+        y0=min(left.y0, right.y0),
+        x1=max(left.x1, right.x1),
+        y1=max(left.y1, right.y1),
     )
 
 

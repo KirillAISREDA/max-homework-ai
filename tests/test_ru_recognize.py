@@ -13,6 +13,7 @@ from hwcheck.subjects.russian.recognize import (
     RuExercise,
     RuPage,
     header_number,
+    merge_hyphenation,
     notebook_task,
     recognize_page,
     task_kind,
@@ -201,3 +202,58 @@ def test_header_number_ignores_dates_and_page_numbers() -> None:
 
 def test_header_number_bare_line() -> None:
     assert header_number(["245."]) == "245"
+
+
+# --- переносы слов через дефис (живой прогон 18.09) ---
+
+
+def _hyphen_word(text: str, line: int, x: int, confidence: float = 0.9) -> Word:
+    return Word(
+        text=text,
+        box=Box(x0=x, y0=line * 20, x1=x + 30, y1=line * 20 + 15),
+        confidence=confidence,
+        line=line,
+    )
+
+
+def test_merge_hyphenation_joins_word_split_by_line_break() -> None:
+    """«сред-» в конце строки и «них» в начале следующей — одно слово «средних»: без склейки
+    обе половины уходили в находки (живой прогон 18.09, ru-1)."""
+    words = [
+        _hyphen_word("в", 0, 0),
+        _hyphen_word("сред-", 0, 40, confidence=0.4),
+        _hyphen_word("них", 1, 0, confidence=0.8),
+        _hyphen_word("классах", 1, 40),
+    ]
+    merged = merge_hyphenation(words)
+    assert [w.text for w in merged] == ["в", "средних", "классах"]
+    joined = merged[1]
+    assert joined.box is not None
+    assert (joined.box.x0, joined.box.y0, joined.box.x1, joined.box.y1) == (0, 0, 70, 35)
+    assert joined.confidence == 0.4 and joined.line == 0
+
+
+def test_hyphen_not_at_the_end_of_a_line_is_not_a_hyphenation() -> None:
+    words = [_hyphen_word("сред-", 0, 0), _hyphen_word("них", 0, 40)]
+    assert [w.text for w in merge_hyphenation(words)] == ["сред-", "них"]
+
+
+def test_single_letter_before_the_hyphen_is_a_dash_not_a_hyphenation() -> None:
+    """«а -» в конце строки — тире, а не перенос: слово переносят минимум с двух букв."""
+    words = [_hyphen_word("а-", 0, 0), _hyphen_word("Потом", 1, 0)]
+    assert [w.text for w in merge_hyphenation(words)] == ["а-", "Потом"]
+
+
+def test_dash_between_two_reference_words_is_not_merged() -> None:
+    """«до дома — уставшие»: склеенного «домауставшие» в эталоне нет, а обе половины есть —
+    это тире на конце строки, склеивать нельзя (живой прогон 18.09, ru-1)."""
+    words = [_hyphen_word("дома-", 0, 0), _hyphen_word("уставшие", 1, 0)]
+    reference = {"дома", "уставшие", "до"}
+    assert [w.text for w in merge_hyphenation(words, reference)] == ["дома-", "уставшие"]
+    # склеенное слово есть в эталоне — это перенос, а не тире
+    assert [w.text for w in merge_hyphenation(words, {"домауставшие"})] == ["домауставшие"]
+
+
+def test_merge_hyphenation_without_reference_prefers_merging() -> None:
+    words = [_hyphen_word("круп-", 0, 0), _hyphen_word("ным", 1, 0)]
+    assert [w.text for w in merge_hyphenation(words, set())] == ["крупным"]

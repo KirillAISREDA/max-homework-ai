@@ -5,6 +5,13 @@ def test_normalize() -> None:
     assert normalize("Ёжик,") == "ежик" and normalize("м_шина") == "мшина"
 
 
+def test_normalize_strips_hyphen_at_the_edges_but_keeps_it_inside() -> None:
+    """Дефис на краю слова — перенос строки или тире, которое OCR приклеил к соседу («дома-»):
+    не часть слова, иначе верно написанное слово уходит в описки (живой прогон 18.09)."""
+    assert normalize("дома-") == "дома" and normalize("-вести") == "вести"
+    assert normalize("кто-то") == "кто-то"
+
+
 def test_similarity() -> None:
     assert similarity("машина", "машына") == 1 - 1 / 6
     assert similarity("кот", "собака") < 0.5

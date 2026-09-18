@@ -18,7 +18,9 @@ _STRIP = re.compile(r"[^а-яa-z0-9-]")
 
 
 def normalize(word: str) -> str:
-    return _STRIP.sub("", word.lower().replace("ё", "е"))
+    # дефис на краю слова частью слова не бывает: это перенос строки («сред-») или тире, которое
+    # OCR приклеил к соседнему слову («до дома-»); внутри слова он значим («кто-то», «из-за»)
+    return _STRIP.sub("", word.lower().replace("ё", "е")).strip("-")
 
 
 def levenshtein(a: str, b: str) -> int:

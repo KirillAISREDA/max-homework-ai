@@ -7,8 +7,9 @@ from __future__ import annotations
 import re
 
 from hwcheck.subjects.base import Finding, SubjectTask, Word
-from hwcheck.subjects.russian.align import Pair, align
+from hwcheck.subjects.russian.align import Pair, align, normalize
 from hwcheck.subjects.russian.gaps import DerivedText
+from hwcheck.subjects.russian.recognize import merge_hyphenation
 
 MAX_DIFF_SHARE = 0.4  # больше расхождений — это не то упражнение или не та страница
 # калибруется стендом: больше половины слов — «описки» — вероятнее, плохо прочитанная страница
@@ -45,7 +46,8 @@ def check_words(task_index: int, task: SubjectTask, derived: DerivedText) -> lis
     expected = derived.words
     if not expected:
         return []
-    words = _body_words(task)
+    # перенос «сред-/них» склеиваем до выравнивания: иначе обе половины — находки на верной копии
+    words = merge_hyphenation(_body_words(task), {normalize(word) for word in expected})
     if not words:
         # эталон есть, а сверять не с чем (например, на странице — только строка-заголовок):
         # это не «всё верно», а «не разобрали текст» — так и скажем, а не промолчим
