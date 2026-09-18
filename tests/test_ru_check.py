@@ -30,6 +30,26 @@ def test_spelling_in_gap_is_candidate_with_word_and_expected() -> None:
     assert finding.detail == "проверь слово «позняя»"
 
 
+def test_punctuation_glued_to_the_word_stays_out_of_the_question() -> None:
+    """OCR приклеил к слову запятую («спасти,»): в вопрос и в находку идёт слово, а в `word`
+    остаётся прочитанное как есть — по нему кропается картинка (живой прогон 18.09, ru-1)."""
+    task = SubjectTask(number="1", words=_words("Он", "взял", "спасти,"))
+    [finding] = check_words(0, task, _derived("Он", "взял", "снасти"))
+    assert (finding.actual, finding.expected) == ("спасти", "снасти")
+    assert finding.detail == "проверь слово «спасти»"
+    assert finding.word is not None and finding.word.text == "спасти,"
+
+
+def test_extra_and_missing_word_details_are_cleaned_too() -> None:
+    task = SubjectTask(number="1", words=_words("Наступила", "вдруг,", "осень"))
+    [extra] = check_words(0, task, _derived("Наступила", "осень"))
+    assert (extra.actual, extra.detail) == ("вдруг", "лишнее слово «вдруг»?")
+
+    task = SubjectTask(number="1", words=_words("Наступила,"))
+    [missing] = check_words(0, task, _derived("Наступила", "осень"))
+    assert missing.detail == "кажется, пропущено слово после «Наступила»"
+
+
 def test_gap_findings_come_first_then_high_confidence() -> None:
     words = _words("Настипила", "позняя", "осинь")
     words[2] = words[2].model_copy(update={"confidence": 0.3})

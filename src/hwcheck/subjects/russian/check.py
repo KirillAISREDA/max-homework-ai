@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 
 from hwcheck.subjects.base import Finding, SubjectTask, Word
-from hwcheck.subjects.russian.align import Pair, align, normalize
+from hwcheck.subjects.russian.align import Pair, align, display_word, normalize
 from hwcheck.subjects.russian.gaps import DerivedText
 from hwcheck.subjects.russian.recognize import merge_hyphenation
 
@@ -230,7 +230,7 @@ def _previous_actual(pairs: list[Pair], idx: int, words: list[Word]) -> str | No
     слово эталона: иначе подсказка называет ребёнку то самое слово, которое он не написал."""
     for prev in reversed(pairs[:idx]):
         if prev.kind in ("match", "subst") and prev.actual_index is not None:
-            return words[prev.actual_index].text
+            return display_word(words[prev.actual_index].text)
     return None
 
 
@@ -245,15 +245,17 @@ def _finding(
     if pair.kind == "subst":
         assert pair.expected_index is not None and pair.actual_index is not None
         word = words[pair.actual_index]
+        # в находке и в вопросе — слово без прилипших знаков препинания, в `word` — как прочитали
+        actual = display_word(word.text)
         return Finding(
             task_index=task_index,
             kind="spelling",
             strength="candidate",
             expected=expected[pair.expected_index],
-            actual=word.text,
+            actual=actual,
             word=word,
             line=(word.line or 0) + 1,
-            detail=KIND_DETAIL["spelling"].format(actual=word.text),
+            detail=KIND_DETAIL["spelling"].format(actual=actual),
         )
     if pair.kind == "missing":
         assert pair.expected_index is not None
@@ -272,12 +274,13 @@ def _finding(
         )
     assert pair.actual_index is not None
     word = words[pair.actual_index]
+    actual = display_word(word.text)
     return Finding(
         task_index=task_index,
         kind="extra_word",
         strength="candidate",
-        actual=word.text,
+        actual=actual,
         word=word,
         line=(word.line or 0) + 1,
-        detail=KIND_DETAIL["extra_word"].format(actual=word.text),
+        detail=KIND_DETAIL["extra_word"].format(actual=actual),
     )

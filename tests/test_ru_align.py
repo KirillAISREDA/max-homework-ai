@@ -1,4 +1,4 @@
-from hwcheck.subjects.russian.align import align, normalize, similarity
+from hwcheck.subjects.russian.align import align, display_word, normalize, similarity
 
 
 def test_normalize() -> None:
@@ -10,6 +10,19 @@ def test_normalize_strips_hyphen_at_the_edges_but_keeps_it_inside() -> None:
     не часть слова, иначе верно написанное слово уходит в описки (живой прогон 18.09)."""
     assert normalize("дома-") == "дома" and normalize("-вести") == "вести"
     assert normalize("кто-то") == "кто-то"
+
+
+def test_display_word_drops_punctuation_glued_by_ocr() -> None:
+    """Вопрос ребёнку — про слово, а не про запятую рядом с ним: «здесь написано «спасти»?»."""
+    assert display_word("спасти,") == "спасти"
+    assert display_word("«Волгадонске».") == "Волгадонске"
+    assert display_word("прово-") == "прово"
+    assert display_word("кто-то") == "кто-то"  # дефис внутри слова — часть слова
+
+
+def test_display_word_of_punctuation_only_keeps_it() -> None:
+    # от «!» после обрезки ничего не остаётся — показывать нечего, оставляем как прочитали
+    assert display_word("!") == "!"
 
 
 def test_similarity() -> None:
