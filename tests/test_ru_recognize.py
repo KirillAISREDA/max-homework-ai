@@ -204,6 +204,58 @@ def test_notebook_task_orders_words_by_line_then_x() -> None:
     assert task.lines == ["Наступила осень"]
 
 
+def _boxed(text: str, top: int, x: int, *, height: int = 20, line: int | None = 0) -> Word:
+    return Word(text=text, box=Box(x0=x, y0=top, x1=x + 30, y1=top + height), line=line)
+
+
+def test_notebook_task_joins_engine_lines_that_are_one_row() -> None:
+    """Порядок строк — свой, по рамкам (исследование 13.09). Движок на наклонной странице развёл
+    одну строку на две и перепутал их местами: «Белка спрятала» оказалась ПОСЛЕ «орехи в»
+    (живой прогон 18.09, ru-6)."""
+    words = [
+        _boxed("орехи", 630, 300, line=3),
+        _boxed("в", 632, 400, line=3),
+        _boxed("Белка", 628, 100, line=4),
+        _boxed("спрятала", 626, 180, line=4),
+        _boxed("дупло", 700, 100, line=5),
+    ]
+    task = notebook_task(words)
+    assert task.lines == ["Белка спрятала орехи в", "дупло"]
+    assert [(w.text, w.line) for w in task.words] == [
+        ("Белка", 0), ("спрятала", 0), ("орехи", 0), ("в", 0), ("дупло", 1),
+    ]  # fmt: skip
+
+
+def test_notebook_task_keeps_a_slanted_row_together() -> None:
+    """Строка «уезжает» вниз к правому краю: собранный движком кусок мы не рассыпаем — строки
+    склеиваем, но не делим (на живых фото наклон доходит до высоты строки, ru-1 и ru-3 18.09)."""
+    words = [
+        _boxed("Я", 90, 0), _boxed("учусь", 94, 40), _boxed("писать", 98, 100),
+        _boxed("ровно", 140, 0, line=1),
+    ]  # fmt: skip
+    task = notebook_task(words)
+    assert task.lines == ["Я учусь писать", "ровно"]
+
+
+def test_notebook_task_without_boxes_keeps_engine_lines() -> None:
+    words = [Word(text="осень", line=1), Word(text="Наступила", line=0)]
+    task = notebook_task(words)
+    assert task.lines == ["Наступила", "осень"]
+
+
+def test_notebook_task_keeps_words_without_a_line_out_of_rows() -> None:
+    """Слово, которое движок ни в одну строку не собрал, — пометка на полях: своей геометрией мы
+    его в строку тоже не вставляем (иначе цифра с поля вклинится в текст, ru-1 18.09)."""
+    words = [
+        _boxed("Наступила", 100, 0),
+        _boxed("осень", 104, 100),
+        _boxed("5", 102, 900, height=10, line=None),
+    ]
+    task = notebook_task(words)
+    assert [w.line for w in task.words if w.text == "5"] == [None]
+    assert "Наступила осень" in task.lines[0]
+
+
 def test_header_number_ignores_dates_and_page_numbers() -> None:
     assert header_number(["17 сентября 2026"]) is None
     assert header_number(["стр. 12"]) is None

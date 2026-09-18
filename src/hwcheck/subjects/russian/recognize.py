@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import re
+from statistics import median
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -30,6 +31,8 @@ FILLED_BY_HAND_COMMENT = "страница уже заполнена от рук
 # дефис переноса как его отдаёт OCR: обычный, неразрывный (U+2010) и короткое тире (U+2013)
 HYPHENS = "-‐–"
 MIN_HYPHEN_STEM_LETTERS = 2
+# доля медианной высоты слова: дальше по вертикали от медианы строки — уже следующая строка
+LINE_GAP_RATIO = 0.6
 
 
 class RuExercise(BaseModel):
@@ -139,8 +142,8 @@ def textbook_tasks(page: RuPage, photo_path: str | None) -> list[SubjectTask]:
 
 
 def notebook_task(words: list[Word]) -> SubjectTask:
-    """Страница тетради — одно задание: строки по `line`, слова слева направо."""
-    ordered = sorted(words, key=lambda w: (w.line or 0, w.box.x0 if w.box else 0))
+    """Страница тетради — одно задание: строки по геометрии рамок, слова слева направо."""
+    ordered = sorted(_reading_order(words), key=lambda w: (w.line or 0, w.box.x0 if w.box else 0))
     lines: dict[int, list[str]] = {}
     for word in ordered:
         lines.setdefault(word.line or 0, []).append(word.text)
@@ -241,6 +244,62 @@ def _union(left: Box | None, right: Box | None) -> Box | None:
         x1=max(left.x1, right.x1),
         y1=max(left.y1, right.y1),
     )
+
+
+def _reading_order(words: list[Word]) -> list[Word]:
+    """Свой порядок строк по рамкам слов (исследование 13.09: «порядок строк нужно делать своим»).
+
+    Движок собирает строки по своему разумению и на наклонной странице путает соседние: в ru-6
+    (живой прогон 18.09) одна строка «Белка спрятала орехи в» разошлась на две и встала задом
+    наперёд, а половинки переноса «прово-/дить» оказались в разных кусках.
+
+    Куски движка порядком не считаем: строки идут по вертикали (медиана центров слов), а внутри
+    строки слова — слева направо, с нашей нумерацией. Куски, чьи медианы расходятся меньше чем на
+    `LINE_GAP_RATIO` медианной высоты слова, — одна строка, разорванная движком: их склеиваем.
+
+    Строим НАД кусками движка, а не по словам с нуля: на живых фото строка «уезжает» вниз к
+    правому краю на целую высоту строки (ru-1, ru-3 18.09), и порогом по центру слова строки
+    рассыпаются — а куски движка на тех же фото собраны верно. Здесь мы чиним ровно то, что он
+    ломает: разорванную строку и её порядок.
+
+    Запасной путь — строки движка как есть: без рамки хотя бы у одного слова геометрии нет.
+    Слова, для которых движок строки не нашёл (`line is None`), в строки не собираем: это
+    пометки на полях, и в тексте им не место (см. `check._body_words`).
+    """
+    lined = [word for word in words if word.line is not None]
+    if not lined or any(word.box is None for word in words):
+        return words
+    heights = sorted(_height(word) for word in lined)
+    limit = LINE_GAP_RATIO * heights[len(heights) // 2]
+    chunks: dict[int, list[Word]] = {}
+    for word in lined:
+        chunks.setdefault(word.line or 0, []).append(word)
+    rows: list[list[Word]] = []
+    for chunk in sorted(chunks.values(), key=_row_center):
+        if rows and _row_center(chunk) - _row_center(rows[-1]) <= limit:
+            rows[-1] += chunk
+        else:
+            rows.append(list(chunk))
+    ordered = [word for word in words if word.line is None]
+    for index, row in enumerate(rows):
+        ordered += [w.model_copy(update={"line": index}) for w in sorted(row, key=_x0)]
+    return ordered
+
+
+def _row_center(row: list[Word]) -> float:
+    return median(_y_center(word) for word in row)
+
+
+def _y_center(word: Word) -> float:
+    return (word.box.y0 + word.box.y1) / 2 if word.box is not None else 0.0
+
+
+def _height(word: Word) -> int:
+    return word.box.y1 - word.box.y0 if word.box is not None else 0
+
+
+def _x0(word: Word) -> int:
+    return word.box.x0 if word.box is not None else 0
 
 
 def header_number(lines: list[str]) -> str | None:
