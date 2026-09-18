@@ -122,6 +122,11 @@ class _LanguageAlbum:
         return list(self.conditions.values())
 
 
+def _rotate(image: bytes, degrees: int) -> bytes:
+    """Тот же кадр, что распознал модуль (`russian.module._rotated`): нормализация и поворот."""
+    return rotate_image(normalize_image(image), degrees)
+
+
 def _split_language_album(
     pages: list[SubjectPage | None], kb_paths: list[str | None], known: list[SubjectTask]
 ) -> _LanguageAlbum:
@@ -514,9 +519,12 @@ class Bot:
                 if page.rotation:
                     # модуль довернул фото, чтобы распознать страницу: координаты слов OCR
                     # относятся к повёрнутому кадру — в хранилище едет он же, иначе кроп в
-                    # вопросе «здесь написано …?» покажет не то место (живой прогон 18.09, ru-2)
-                    image = rotate_image(normalize_image(image), page.rotation)
-                    photo = self._save_photo(user_id, image) or photo
+                    # вопросе «здесь написано …?» покажет не то место (живой прогон 18.09, ru-2).
+                    # PIL блокирует поток — поворот в отдельном, цикл событий бота свободен
+                    image = await asyncio.to_thread(_rotate, image, page.rotation)
+                    # без запасного пути на исходный кадр: пустой путь — вопрос уйдёт текстом,
+                    # а кроп по координатам повёрнутого кадра с исходного фото — не то место
+                    photo = self._save_photo(user_id, image)
                 if page.role == "textbook":
                     kb_photo = self._save_kb_photo(user_id, image)
                 self._events.log("page_recognized", user_id=user_id, subject=module.code,

@@ -233,8 +233,40 @@ async def test_sideways_notebook_photo_is_stored_rotated(tmp_path: Path) -> None
     stored = (tmp_path / "photos" / state.photo_paths[1]).read_bytes()
     with Image.open(io.BytesIO(stored)) as saved:
         assert saved.size == (60, 200)  # исходник 200×60, повёрнут на 270°
+    # координаты слов и кроп обязаны жить в одном кадре: OCR читал ровно то, что сохранено
+    assert ocr.images == [stored]
     recognized = [e for e in read_events(events_path) if e["type"] == "page_recognized"]
     assert [e["rotation"] for e in recognized] == [0, 270]
+
+
+class FlakyPhotoStore(PhotoStore):
+    """Второе сохранение (повёрнутый кадр) падает — диск кончился."""
+
+    def __init__(self, root: Path, ttl_days: int) -> None:
+        super().__init__(root, ttl_days)
+        self.calls = 0
+
+    def save(self, user: str | None, data: bytes) -> str:
+        self.calls += 1
+        if self.calls == 2:
+            raise OSError("диск кончился")
+        return super().save(user, data)
+
+
+async def test_unsaved_rotated_photo_does_not_fall_back_to_the_original_frame(
+    tmp_path: Path,
+) -> None:
+    """Повёрнутый кадр не сохранился: путь остаётся пустым, а не указывает на исходный кадр —
+    иначе кроп покажет не то место (координаты слов относятся к повёрнутому)."""
+    unknown = json.dumps({"role": "unknown", "exercises": []})
+    vision = FakeVision([unknown, NOTEBOOK])
+    ocr = FakeOcr([_w("Наступила", 0), _w("осень", 1)])
+    bot, _max_client, _events = _bot(tmp_path, vision, ocr)
+    bot._photos = FlakyPhotoStore(tmp_path / "photos", 30)
+
+    await bot._on_photo(chat_id=1, user_id=7, urls=["u1"], subject="russian")
+
+    assert (await bot._store.get(1)).photo_paths == [""]
 
 
 async def test_textbook_photo_saved_for_knowledge_base(tmp_path: Path) -> None:
