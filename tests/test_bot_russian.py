@@ -218,6 +218,25 @@ async def test_textbook_of_another_subject_drops_the_old_review(tmp_path: Path) 
     assert [t.number for t in state.conditions] == ["245"]
 
 
+async def test_sideways_notebook_photo_is_stored_rotated(tmp_path: Path) -> None:
+    """Фото боком: vision узнал тетрадь только в повёрнутом кадре, и координаты слов OCR
+    относятся к нему же — в хранилище едет повёрнутый снимок, иначе кроп покажет не то слово
+    (живой прогон 18.09, ru-2)."""
+    unknown = json.dumps({"role": "unknown", "exercises": []})
+    vision = FakeVision([TEXTBOOK, unknown, NOTEBOOK])
+    ocr = FakeOcr([_w("Наступила", 0), _w("позняя", 1), _w("осень", 2)])
+    bot, _max_client, events_path = _bot(tmp_path, vision, ocr)
+
+    await bot._on_photo(chat_id=1, user_id=7, urls=["u1", "u2"], subject="russian")
+
+    state = await bot._store.get(1)
+    stored = (tmp_path / "photos" / state.photo_paths[1]).read_bytes()
+    with Image.open(io.BytesIO(stored)) as saved:
+        assert saved.size == (60, 200)  # исходник 200×60, повёрнут на 270°
+    recognized = [e for e in read_events(events_path) if e["type"] == "page_recognized"]
+    assert [e["rotation"] for e in recognized] == [0, 270]
+
+
 async def test_textbook_photo_saved_for_knowledge_base(tmp_path: Path) -> None:
     """Страница учебника едет в базу знаний вместе с фото (TTL 365 дней, свой каталог)."""
     bot, _max_client, _ = _bot(tmp_path, FakeVision([TEXTBOOK]), FakeOcr([]))

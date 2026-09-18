@@ -10,6 +10,7 @@ from hwcheck.llm.base import ChatMessage, LLMResult
 from hwcheck.subjects.base import Box, Word
 from hwcheck.subjects.russian.recognize import (
     FILLED_BY_HAND_COMMENT,
+    ORIENTATIONS,
     RuExercise,
     RuPage,
     header_number,
@@ -21,9 +22,9 @@ from hwcheck.subjects.russian.recognize import (
 )
 
 
-def _jpeg() -> bytes:
+def _jpeg(width: int = 8, height: int = 8) -> bytes:
     buffer = io.BytesIO()
-    Image.new("RGB", (8, 8), "white").save(buffer, format="JPEG")
+    Image.new("RGB", (width, height), "white").save(buffer, format="JPEG")
     return buffer.getvalue()
 
 
@@ -63,7 +64,7 @@ NOTEBOOK = json.dumps({"role": "notebook", "exercises": []})
 
 async def test_recognize_textbook_page() -> None:
     vision = FakeVision([TEXTBOOK])
-    page, usage = await recognize_page(vision, _jpeg(), model="v")
+    page, usage, _degrees = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "textbook" and page.exercises[0].number == "245"
     assert (usage.calls, usage.tokens) == (1, 10)
 
@@ -75,7 +76,7 @@ async def test_notebook_page_has_no_text_from_vision() -> None:
         ensure_ascii=False,
     )
     vision = FakeVision([handwritten])
-    page, _ = await recognize_page(vision, _jpeg(), model="v")
+    page, _usage, _degrees = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "notebook" and page.exercises == []
 
 
@@ -92,7 +93,7 @@ async def test_filled_in_workbook_is_not_a_reference() -> None:
         ensure_ascii=False,
     )
     vision = FakeVision([filled])
-    page, usage = await recognize_page(vision, _jpeg(), model="v")
+    page, usage, _degrees = await recognize_page(vision, _jpeg(), model="v")
     assert (page.role, page.exercises) == ("unknown", [])
     assert page.comment == FILLED_BY_HAND_COMMENT
     assert usage.calls == 1  # доворачивать заполненную страницу незачем
@@ -101,13 +102,23 @@ async def test_filled_in_workbook_is_not_a_reference() -> None:
 async def test_unknown_role_tries_next_orientation_then_gives_up() -> None:
     unknown = json.dumps({"role": "unknown", "exercises": [], "comment": "пусто"})
     vision = FakeVision([unknown, unknown, unknown])
-    page, usage = await recognize_page(vision, _jpeg(), model="v")
+    page, usage, degrees = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "unknown" and usage.calls == 3
+    assert degrees == 0  # страницу не узнали ни в одной ориентации — поворачивать нечего
+
+
+async def test_recognize_page_reports_the_orientation_it_recognised() -> None:
+    """Ориентацию, в которой vision узнал страницу, возвращаем наверх: OCR обязан читать тот же
+    кадр, иначе страница боком читается как мусор (живой прогон 18.09, ru-2: 184 слова)."""
+    unknown = json.dumps({"role": "unknown", "exercises": []})
+    vision = FakeVision([unknown, NOTEBOOK])
+    page, _usage, degrees = await recognize_page(vision, _jpeg(), model="v")
+    assert page.role == "notebook" and degrees == ORIENTATIONS[1] == 270
 
 
 async def test_invalid_json_counts_as_unknown() -> None:
     vision = FakeVision(["не json", NOTEBOOK])
-    page, _ = await recognize_page(vision, _jpeg(), model="v")
+    page, _usage, _degrees = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "notebook"
 
 
@@ -116,7 +127,7 @@ async def test_textbook_without_exercises_tries_next_orientation() -> None:
     # прочитать задания; следующая ориентация находит их
     empty_textbook = json.dumps({"role": "textbook", "exercises": []})
     vision = FakeVision([empty_textbook, TEXTBOOK])
-    page, usage = await recognize_page(vision, _jpeg(), model="v")
+    page, usage, _degrees = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "textbook" and page.exercises[0].number == "245"
     assert usage.calls == 2
 

@@ -50,6 +50,7 @@ from hwcheck.events import EventLog, anonymize, current_trace_id, trace
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.grade import GradeResult
+from hwcheck.pipeline.normalize import normalize_image, rotate_image
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import FileCache, RefSolution
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
@@ -510,11 +511,18 @@ class Bot:
                 image = await self._max.download(url)
                 photo = self._save_photo(user_id, image)
                 page = await module.recognize(image)
+                if page.rotation:
+                    # модуль довернул фото, чтобы распознать страницу: координаты слов OCR
+                    # относятся к повёрнутому кадру — в хранилище едет он же, иначе кроп в
+                    # вопросе «здесь написано …?» покажет не то место (живой прогон 18.09, ru-2)
+                    image = rotate_image(normalize_image(image), page.rotation)
+                    photo = self._save_photo(user_id, image) or photo
                 if page.role == "textbook":
                     kb_photo = self._save_kb_photo(user_id, image)
                 self._events.log("page_recognized", user_id=user_id, subject=module.code,
                                  role=page.role, n_tasks=len(page.tasks), calls=page.usage.calls,
-                                 tokens=page.usage.tokens, photo=photo)  # fmt: skip
+                                 tokens=page.usage.tokens, photo=photo,
+                                 rotation=page.rotation)  # fmt: skip
                 if page.failure == "ocr_failed":
                     self._events.log("ocr_failed", user_id=user_id, subject=module.code)
                 pages.append(page)

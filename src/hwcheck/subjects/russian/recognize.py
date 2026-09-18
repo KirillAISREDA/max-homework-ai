@@ -60,19 +60,22 @@ def _hide_handwriting(page: RuPage) -> RuPage:
 
 async def recognize_page(
     client: VisionClient, image: bytes, *, model: str, prompt_version: str = "v1"
-) -> tuple[RuPage, Usage]:
-    """Роль страницы и печатные упражнения.
+) -> tuple[RuPage, Usage, int]:
+    """Роль страницы, печатные упражнения и ориентация, в которой страница узналась.
 
     На «unknown» и на "textbook" без упражнений пробуем следующую ориентацию — не как в
     `pipeline/vision.py` (математика): без 180° (см. комментарий у `ORIENTATIONS`) и без выбора
     «лучшей» по числу заданий страницы — только первая, где нашлись упражнения (или "notebook").
+
+    Градусы отдаём наверх: рукопись читает OCR, и читать он обязан тот же кадр, в котором vision
+    узнал страницу — иначе снятая боком тетрадь превращается в мусор (живой прогон 18.09, ru-2).
     """
     prompt = load_prompt("ru_page", prompt_version)
     normalized = normalize_image(image)
     usage = Usage()
     page = RuPage(role="unknown")
-    fallback: RuPage | None = None  # первая распознанная не-"unknown" страница — если так и не
-    # найдём упражнений ни в одной ориентации, вернём её, а не "unknown" последней попытки
+    fallback: tuple[RuPage, int] | None = None  # первая распознанная не-"unknown" страница — если
+    # так и не найдём упражнений ни в одной ориентации, вернём её, а не "unknown" последней попытки
     for degrees in ORIENTATIONS:
         data = normalized if degrees == 0 else rotate_image(normalized, degrees)
         result = await client.analyze_image(data, prompt=prompt, model=model, filename="page.jpg")
@@ -88,12 +91,16 @@ async def recognize_page(
             # и эталон совпал бы с тем, что ребёнок написал — проверка всегда говорила бы
             # «верно», а текст и фото ушли бы в базу знаний (финальное ревью 17.09, I5).
             # Доворачивать незачем — страница не станет чистой от поворота
-            return RuPage(role="unknown", exercises=[], comment=FILLED_BY_HAND_COMMENT), usage
+            filled = RuPage(role="unknown", exercises=[], comment=FILLED_BY_HAND_COMMENT)
+            return filled, usage, degrees
         if page.role == "notebook" or page.exercises:
-            return page, usage
+            return page, usage, degrees
         if fallback is None and page.role != "unknown":
-            fallback = page
-    return (fallback if fallback is not None else page), usage
+            fallback = (page, degrees)
+    if fallback is not None:
+        return fallback[0], usage, fallback[1]
+    # страницу не узнали ни в одной ориентации: поворачивать нечего и незачем
+    return page, usage, 0
 
 
 def task_kind(condition: str) -> str:
