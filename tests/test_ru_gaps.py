@@ -35,6 +35,21 @@ def test_tokenize_keeps_gaps_and_brackets_drops_punctuation() -> None:
     ]  # fmt: skip
 
 
+def test_tokenize_drops_a_lone_bracket_of_a_numbered_item() -> None:
+    """«1) Я живу в городе» — скобка нумерации словом не является: эталон ru-4 нёс пять токенов
+    «)», и проверка спрашивала про пять пропущенных слов «)» (живой прогон 18.09)."""
+    assert tokenize("1) Я живу в городе.") == ["Я", "живу", "в", "городе"]
+
+
+def test_tokenize_keeps_bracket_patterns_of_the_exercise() -> None:
+    # «раскрой скобки» и слово целиком в скобках — как было: скобки тут часть задания
+    assert tokenize("(с)делать (осень)") == ["(с)делать", "(осень)"]
+
+
+def test_tokenize_strips_a_bracket_glued_to_a_word() -> None:
+    assert tokenize("(вставь буквы)") == ["вставь", "буквы"]
+
+
 def test_fill_gap_single_and_ambiguous() -> None:
     assert fill_gap("м_шина", WORDS) == ["машина"]
     assert sorted(fill_gap("щ_ка", WORDS)) == ["щека", "щука"]

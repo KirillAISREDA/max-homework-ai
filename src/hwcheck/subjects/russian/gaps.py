@@ -34,6 +34,9 @@ PREPOSITIONS = frozenset(
 )  # fmt: skip
 _TOKEN = re.compile(r"[А-Яа-яЁё_()]+(?:-[А-Яа-яЁё_()]+)*")
 _BRACKET = re.compile(r"^\(([А-Яа-яЁё]+)\)([А-Яа-яЁё]+)$")
+# слово целиком в скобках — тоже часть задания, а не «слово с прилипшей скобкой»: «(осень)»
+_PARENTHESISED = re.compile(r"^\([^()]+\)$")
+_HAS_LETTER = re.compile(r"[А-Яа-яЁё_]")
 
 
 class Dictionary(Hashable, Protocol):
@@ -57,7 +60,17 @@ class HunspellDictionary:
 
 
 def tokenize(text: str) -> list[str]:
-    return _TOKEN.findall(text)
+    """Слова эталона. Скобка на краю — не часть слова: нумерация «1) Я живу…» давала токен «)»,
+    и проверка спрашивала про пропущенное слово «)» (живой прогон 18.09, ru-4). Скобки задания
+    («(с)делать», «(осень)») остаются, а токен без единой буквы словом не считается."""
+    tokens = (_strip_brackets(token) for token in _TOKEN.findall(text))
+    return [token for token in tokens if _HAS_LETTER.search(token)]
+
+
+def _strip_brackets(token: str) -> str:
+    if _BRACKET.match(token) or _PARENTHESISED.match(token):
+        return token
+    return token.strip("()")
 
 
 class Gap(BaseModel):
