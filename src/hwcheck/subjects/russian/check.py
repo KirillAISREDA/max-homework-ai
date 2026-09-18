@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 
 from hwcheck.subjects.base import Finding, SubjectTask, Word
-from hwcheck.subjects.russian.align import Pair, align, display_word, normalize
+from hwcheck.subjects.russian.align import Pair, align, display_word, is_word, normalize
 from hwcheck.subjects.russian.gaps import DerivedText
 from hwcheck.subjects.russian.recognize import merge_hyphenation
 
@@ -179,6 +179,9 @@ def _body_words(task: SubjectTask) -> list[Word]:
     Слова, которые OCR не отнёс ни к одной строке (`line is None`), — пометки на полях: колонка
     цифр вдоль поля тетради, галочка учителя (живой прогон 18.09, ru-1: шесть лишних слов из
     такой колонки посреди текста). Если строк нет вообще — сверяем всё, что есть.
+
+    Не-слова (одинокий знак «!», номер пункта «2)») выбрасываем последними: до этого они нужны —
+    по ним узнаются дата и заголовок упражнения («17 сентября», «245.»).
     """
     words = [w for w in task.words if w.line is not None] or list(task.words)
     skip: set[int] = set()
@@ -191,7 +194,7 @@ def _body_words(task: SubjectTask) -> list[Word]:
             skip.update(indices)
             continue
         skip.update(indices[: _header_prefix(texts, task.number, task.number_on_page)])
-    return [w for i, w in enumerate(words) if i not in skip]
+    return [w for i, w in enumerate(words) if i not in skip and is_word(w.text)]
 
 
 def _x0(word: Word) -> int:

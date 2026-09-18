@@ -5,11 +5,12 @@ def test_normalize() -> None:
     assert normalize("Ёжик,") == "ежик" and normalize("м_шина") == "мшина"
 
 
-def test_normalize_strips_hyphen_at_the_edges_but_keeps_it_inside() -> None:
-    """Дефис на краю слова — перенос строки или тире, которое OCR приклеил к соседу («дома-»):
-    не часть слова, иначе верно написанное слово уходит в описки (живой прогон 18.09)."""
+def test_normalize_drops_hyphens() -> None:
+    """Дефис при сверке не значим: на краю слова это перенос или тире, которое OCR приклеил к
+    соседу («дома-»), а внутри — след переноса в склеенном слове («сде-делал» — это «сделал» с
+    ошибкой ребёнка, а не другое слово). «кто-то» сверяется с «кто-то» — обе стороны без дефиса."""
     assert normalize("дома-") == "дома" and normalize("-вести") == "вести"
-    assert normalize("кто-то") == "кто-то"
+    assert normalize("сде-делал") == "сдеделал" and normalize("кто-то") == "ктото"
 
 
 def test_display_word_drops_punctuation_glued_by_ocr() -> None:
@@ -17,7 +18,9 @@ def test_display_word_drops_punctuation_glued_by_ocr() -> None:
     assert display_word("спасти,") == "спасти"
     assert display_word("«Волгадонске».") == "Волгадонске"
     assert display_word("прово-") == "прово"
-    assert display_word("кто-то") == "кто-то"  # дефис внутри слова — часть слова
+    # дефис внутри слова остаётся: «кто-то» и след переноса в склеенном «сде-делал» — то, что
+    # ребёнок и написал, и именно это называет вопрос
+    assert display_word("кто-то") == "кто-то" and display_word("сде-делал") == "сде-делал"
 
 
 def test_display_word_of_punctuation_only_keeps_it() -> None:

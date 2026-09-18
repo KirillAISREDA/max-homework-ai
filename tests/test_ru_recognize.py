@@ -243,6 +243,32 @@ def test_notebook_task_without_boxes_keeps_engine_lines() -> None:
     assert task.lines == ["Наступила", "осень"]
 
 
+def test_notebook_task_does_not_join_two_rows_overlapping_in_x() -> None:
+    """Половинки разорванной строки стоят рядом (по горизонтали не пересекаются), а две настоящие
+    строки идут одна над другой и по горизонтали перекрываются — такие не склеиваем."""
+    halves = [
+        _boxed("правая", 620, 633, line=0), _boxed("половина", 622, 700, line=0),
+        _boxed("левая", 618, 226, line=1), _boxed("часть", 616, 400, line=1),
+    ]  # fmt: skip
+    assert notebook_task(halves).lines == ["левая часть правая половина"]
+
+    rows = [
+        _boxed("первая", 600, 2, line=0), _boxed("строка", 602, 400, line=0),
+        _boxed("вторая", 610, 3, line=1), _boxed("строка", 612, 420, line=1),
+    ]  # fmt: skip
+    assert notebook_task(rows).lines == ["первая строка", "вторая строка"]
+
+
+def test_notebook_task_uses_geometry_even_if_a_margin_mark_has_no_box() -> None:
+    """Пометка на полях без рамки не должна отключать свой порядок строк для всей страницы."""
+    words = [
+        _boxed("орехи", 630, 300, line=3),
+        _boxed("Белка", 628, 100, line=4),
+        Word(text="5", line=None),
+    ]
+    assert notebook_task(words).lines[0] == "5 Белка орехи"
+
+
 def test_notebook_task_keeps_words_without_a_line_out_of_rows() -> None:
     """Слово, которое движок ни в одну строку не собрал, — пометка на полях: своей геометрией мы
     его в строку тоже не вставляем (иначе цифра с поля вклинится в текст, ru-1 18.09)."""
@@ -280,8 +306,12 @@ def _hyphen_word(text: str, line: int, x: int, confidence: float = 0.9) -> Word:
 
 
 def test_merge_hyphenation_joins_word_split_by_line_break() -> None:
-    """«сред-» в конце строки и «них» в начале следующей — одно слово «средних»: без склейки
-    обе половины уходили в находки (живой прогон 18.09, ru-1)."""
+    """«сред-» в конце строки и «них» в начале следующей — одно слово «сред-них»: без склейки
+    обе половины уходили в находки (живой прогон 18.09, ru-1).
+
+    Дефис в склеенном слове остаётся: ребёнок именно так и написал, и вопрос «здесь написано
+    «сде-делал»?» называет то, что на странице. Рамка — левой половины: объединение растянуло бы
+    кроп на две строки целиком (ревью ветки)."""
     words = [
         _hyphen_word("в", 0, 0),
         _hyphen_word("сред-", 0, 40, confidence=0.4),
@@ -289,10 +319,9 @@ def test_merge_hyphenation_joins_word_split_by_line_break() -> None:
         _hyphen_word("классах", 1, 40),
     ]
     merged = merge_hyphenation(words)
-    assert [w.text for w in merged] == ["в", "средних", "классах"]
+    assert [w.text for w in merged] == ["в", "сред-них", "классах"]
     joined = merged[1]
-    assert joined.box is not None
-    assert (joined.box.x0, joined.box.y0, joined.box.x1, joined.box.y1) == (0, 0, 70, 35)
+    assert joined.box == words[1].box  # кроп покажет «сред-», а не две строки
     assert joined.confidence == 0.4 and joined.line == 0
 
 
@@ -314,9 +343,9 @@ def test_dash_between_two_reference_words_is_not_merged() -> None:
     reference = {"дома", "уставшие", "до"}
     assert [w.text for w in merge_hyphenation(words, reference)] == ["дома-", "уставшие"]
     # склеенное слово есть в эталоне — это перенос, а не тире
-    assert [w.text for w in merge_hyphenation(words, {"домауставшие"})] == ["домауставшие"]
+    assert [w.text for w in merge_hyphenation(words, {"домауставшие"})] == ["дома-уставшие"]
 
 
 def test_merge_hyphenation_without_reference_prefers_merging() -> None:
     words = [_hyphen_word("круп-", 0, 0), _hyphen_word("ным", 1, 0)]
-    assert [w.text for w in merge_hyphenation(words, set())] == ["крупным"]
+    assert [w.text for w in merge_hyphenation(words, set())] == ["круп-ным"]

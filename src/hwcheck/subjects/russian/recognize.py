@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from hwcheck.llm.base import VisionClient, extract_json
 from hwcheck.pipeline.normalize import normalize_image, rotate_image
 from hwcheck.prompts import load_prompt
-from hwcheck.subjects.base import Box, SubjectTask, Usage, Word
+from hwcheck.subjects.base import SubjectTask, Usage, Word
 from hwcheck.subjects.russian.align import normalize
 
 # без 180°: печатную страницу вверх ногами модель не прочитает и перевёрнутой — типографику она
@@ -159,11 +159,16 @@ def notebook_task(words: list[Word]) -> SubjectTask:
 
 
 def merge_hyphenation(words: list[Word], reference: set[str] | None = None) -> list[Word]:
-    """Слово, перенесённое на следующую строку, — одно слово: «сред-» + «них» = «средних».
+    """Слово, перенесённое на следующую строку, — одно слово: «сред-» + «них» = «сред-них».
 
     Слова приходят в порядке чтения (так их отдаёт `notebook_task`), поэтому «конец строки» —
     это смена `line` у соседней пары. Без склейки обе половины уходили в находки: «сред-» как
     описка, «них» как лишнее слово (живой прогон 18.09, ru-1 — 25 находок на изложении).
+
+    Дефис в склеенном слове остаётся, а рамка берётся у ЛЕВОЙ половины (ревью ветки): вопрос
+    «здесь написано «сде-делал»?» называет то, что ребёнок и правда написал, а кроп показывает
+    место на странице, а не две строки целиком (объединение рамок давало 793×118 на ru-6).
+    При сверке дефис не значим — его снимает `normalize`.
 
     `reference` — нормализованные слова эталона. Тире в конце строки («до дома — / уставшие»)
     выглядит так же, как перенос, поэтому склеиваем, только если склеенное слово есть в эталоне
@@ -226,23 +231,11 @@ def _is_hyphenation(stem: str, right: str, reference: set[str] | None) -> bool:
 def _join_words(left: Word, right: Word, stem: str) -> Word:
     confidences = [c for c in (left.confidence, right.confidence) if c is not None]
     return Word(
-        text=stem + right.text,
-        box=_union(left.box, right.box),
+        text=f"{stem}-{right.text}",
+        box=left.box,
         confidence=min(confidences) if confidences else None,
         line=left.line,
         photo_index=left.photo_index,
-    )
-
-
-def _union(left: Box | None, right: Box | None) -> Box | None:
-    """Объединение рамок: кроп в вопросе «здесь написано …?» покажет обе половины слова."""
-    if left is None or right is None:
-        return left or right
-    return Box(
-        x0=min(left.x0, right.x0),
-        y0=min(left.y0, right.y0),
-        x1=max(left.x1, right.x1),
-        y1=max(left.y1, right.y1),
     )
 
 
@@ -255,7 +248,9 @@ def _reading_order(words: list[Word]) -> list[Word]:
 
     Куски движка порядком не считаем: строки идут по вертикали (медиана центров слов), а внутри
     строки слова — слева направо, с нашей нумерацией. Куски, чьи медианы расходятся меньше чем на
-    `LINE_GAP_RATIO` медианной высоты слова, — одна строка, разорванная движком: их склеиваем.
+    `LINE_GAP_RATIO` медианной высоты слова И которые не перекрываются по горизонтали, — одна
+    строка, разорванная движком: их склеиваем. Перекрытие по горизонтали означает, что это две
+    настоящие строки одна над другой: половинки разорванной строки стоят рядом, а не друг на друге.
 
     Строим НАД кусками движка, а не по словам с нуля: на живых фото строка «уезжает» вниз к
     правому краю на целую высоту строки (ru-1, ru-3 18.09), и порогом по центру слова строки
@@ -266,8 +261,10 @@ def _reading_order(words: list[Word]) -> list[Word]:
     Слова, для которых движок строки не нашёл (`line is None`), в строки не собираем: это
     пометки на полях, и в тексте им не место (см. `check._body_words`).
     """
+    # рамки нужны только у слов строк: пометка на полях без рамки (её движок в строку и не
+    # собрал) не должна отключать свой порядок строк для всей страницы
     lined = [word for word in words if word.line is not None]
-    if not lined or any(word.box is None for word in words):
+    if not lined or any(word.box is None for word in lined):
         return words
     heights = sorted(_height(word) for word in lined)
     limit = LINE_GAP_RATIO * heights[len(heights) // 2]
@@ -276,7 +273,8 @@ def _reading_order(words: list[Word]) -> list[Word]:
         chunks.setdefault(word.line or 0, []).append(word)
     rows: list[list[Word]] = []
     for chunk in sorted(chunks.values(), key=_row_center):
-        if rows and _row_center(chunk) - _row_center(rows[-1]) <= limit:
+        near = rows and _row_center(chunk) - _row_center(rows[-1]) <= limit
+        if near and not _overlap_in_x(rows[-1], chunk):
             rows[-1] += chunk
         else:
             rows.append(list(chunk))
@@ -290,6 +288,13 @@ def _row_center(row: list[Word]) -> float:
     return median(_y_center(word) for word in row)
 
 
+def _overlap_in_x(left: list[Word], right: list[Word]) -> bool:
+    """Пересекаются ли куски по горизонтали — тогда это две строки, а не половинки одной."""
+    left_end, right_end = max(_x1(w) for w in left), max(_x1(w) for w in right)
+    left_start, right_start = min(_x0(w) for w in left), min(_x0(w) for w in right)
+    return left_end > right_start and right_end > left_start
+
+
 def _y_center(word: Word) -> float:
     return (word.box.y0 + word.box.y1) / 2 if word.box is not None else 0.0
 
@@ -300,6 +305,10 @@ def _height(word: Word) -> int:
 
 def _x0(word: Word) -> int:
     return word.box.x0 if word.box is not None else 0
+
+
+def _x1(word: Word) -> int:
+    return word.box.x1 if word.box is not None else 0
 
 
 def header_number(lines: list[str]) -> str | None:

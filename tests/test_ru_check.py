@@ -292,6 +292,26 @@ def test_hyphenated_word_split_by_line_break_is_not_a_finding() -> None:
     assert check_words(0, task, _derived("в", "средних", "классах")) == []
 
 
+def test_childs_own_hyphenation_error_is_one_finding_with_the_left_crop() -> None:
+    """Ребёнок написал «сде-делал» через перенос: это одна описка, а не половинки. В вопросе —
+    слово с дефисом (так на странице), в `word` — левая половина, по ней и кроп (ревью ветки)."""
+    words = _lines(["Учитель", "сде-"], ["делал", "важные", "объявления"])
+    task = SubjectTask(number="1", words=words)
+    [finding] = check_words(0, task, _derived("Учитель", "сделал", "важные", "объявления"))
+    assert (finding.kind, finding.actual, finding.expected) == ("spelling", "сде-делал", "сделал")
+    assert finding.detail == "проверь слово «сде-делал»"
+    assert finding.word is not None and finding.word.box == words[1].box
+
+
+def test_punctuation_and_item_numbers_of_the_page_are_not_words() -> None:
+    """«!» и номер пункта «2)» словом не являются: в эталоне цифр и знаков нет (`tokenize`), с
+    ними нечего сверять, а в находках это шум (живой прогон 18.09: «лишнее слово «!»»)."""
+    task = SubjectTask(
+        number="1", words=_words("Наступила", "!", "поздняя", "2)", "осень")
+    )  # fmt: skip
+    assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
+
+
 def test_dash_at_the_end_of_a_line_keeps_both_words() -> None:
     """«до дома — / уставшие»: обе половины есть в эталоне, а склеенного «домауставшие» нет —
     слова остаются раздельными, и остальной текст сходится (живой прогон 18.09, ru-1)."""
