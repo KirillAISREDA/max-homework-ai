@@ -26,11 +26,18 @@ _MONTHS = "января|февраля|марта|апреля|мая|июня|�
 # «мебель» тетради: дата и заголовок работы — их нет в тексте упражнения, но ребёнок их пишет
 _DATE_LINE = re.compile(rf"^\d{{1,2}}\s+(?:{_MONTHS})(?:\s+\d{{4}})?\.?$", re.IGNORECASE)
 _WORK_LINE = re.compile(r"^(?:классная|домашняя)\s+работа\.?$", re.IGNORECASE)
-# заголовок упражнения в начале строки: «Упр.», «Упражнение», «№», «N» (номер бывает слитно)
-_HEADER_KEYWORD = re.compile(r"^(?:упр\w*|№|n)\.?\s*(?:\d{1,4}[.)]?)?$", re.IGNORECASE)
-# номер с точкой — заголовок и без слова «упражнение» («245. Наступила поздняя осень»);
+# заголовок упражнения в начале строки: «Упр.», «Упражнение», «№», «N» — слово-маркер срезаем
+# только вместе с номером, слитно («Упр.245», «№245», «N245») или следующим словом («Упражнение»,
+# «245.»); без цифр это не заголовок, а слово текста («Упрямый», «Управление», «Упругий» тоже
+# начинаются на «упр», но не называют упражнение — регрессия ревью 18.09)
+_HEADER_KEYWORD_GLUED = re.compile(r"^(?:упр[а-яё]*|№|n)\.?\d{1,4}[.)]?$", re.IGNORECASE)
+_HEADER_KEYWORD_BARE = re.compile(r"^(?:упр[а-яё]*|№|n)\.?$", re.IGNORECASE)
+# номер с точкой без слова-заголовка («245. Наступила поздняя осень») — заголовок, только если
+# это номер САМОГО упражнения (`task.number`) и он подтверждён страницей (`number_on_page`);
+# иначе это маркер списка внутри текста («1. Яблоко...») — срезать его нельзя, «мебель» до
+# первого совпадения и так поглощает `_leading_extra_indices`, если она и правда лишняя
+_NUMBER_DOT = re.compile(r"^(\d{1,3})[.)]$")
 # номер без точки — только сразу за словом-заголовком, иначе это число из текста («7 лет»)
-_NUMBER_DOT = re.compile(r"^\d{1,3}[.)]$")
 _NUMBER_PLAIN = re.compile(r"^\d{1,4}[.)]?$")
 
 
@@ -142,7 +149,7 @@ def _body_words(task: SubjectTask) -> list[Word]:
         if _DATE_LINE.match(" ".join(texts)) or _WORK_LINE.match(" ".join(texts)):
             skip.update(indices)
             continue
-        skip.update(indices[: _header_prefix(texts)])
+        skip.update(indices[: _header_prefix(texts, task.number, task.number_on_page)])
     return [w for i, w in enumerate(words) if i not in skip]
 
 
@@ -150,19 +157,31 @@ def _x0(word: Word) -> int:
     return word.box.x0 if word.box is not None else 0
 
 
-def _header_prefix(texts: list[str]) -> int:
-    """Сколько слов в начале строки — заголовок упражнения («Упр. 245», «№ 245», «245.»)."""
-    count = 0
-    after_keyword = False
-    for text in texts:
-        if _HEADER_KEYWORD.match(text):
-            after_keyword, count = True, count + 1
+def _header_prefix(texts: list[str], number: str, number_on_page: bool) -> int:
+    """Сколько слов в начале строки — заголовок упражнения («Упр. 245», «№ 245», «245.»).
+
+    Слово-маркер («Упр», «Упражнение», «№», «N») — заголовок только вместе с номером, слитно
+    или следующим словом; без цифр это слово текста, а не заголовок (см. `_HEADER_KEYWORD_*`).
+    Голый «N.» без маркера — заголовок, только если N — номер этого упражнения и он написан на
+    странице (`number_on_page`); иначе это может быть маркер списка внутри текста.
+    """
+    target = number.strip(".)")
+    index = 0
+    while index < len(texts):
+        text = texts[index]
+        if _HEADER_KEYWORD_GLUED.match(text):
+            index += 1
             continue
-        if _NUMBER_DOT.match(text) or (after_keyword and _NUMBER_PLAIN.match(text)):
-            after_keyword, count = False, count + 1
+        has_next_number = index + 1 < len(texts) and _NUMBER_PLAIN.match(texts[index + 1])
+        if _HEADER_KEYWORD_BARE.match(text) and has_next_number:
+            index += 2
             continue
-        return count
-    return count
+        dot_match = _NUMBER_DOT.match(text)
+        if dot_match and number_on_page and dot_match.group(1) == target:
+            index += 1
+            continue
+        break
+    return index
 
 
 def _previous_actual(pairs: list[Pair], idx: int, words: list[Word]) -> str | None:

@@ -137,6 +137,30 @@ def test_header_words_before_text_in_one_line_are_stripped() -> None:
     assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
 
 
+def test_word_starting_with_upr_without_a_number_is_not_a_header() -> None:
+    """«Упрямый» начинается на «упр», как и «Упр.», но без номера следом — это слово текста,
+    не заголовок: `упр\\w*` без обязательных цифр срезал первое слово верной копии (ревью 18.09)."""
+    words = _words("Упрямый", "осёл", "не", "пошёл", "дальше", "моста")
+    task = SubjectTask(number="1", words=words)
+    derived = _derived("Упрямый", "осёл", "не", "пошёл", "дальше", "моста")
+    assert check_words(0, task, derived) == []
+
+
+def test_word_starting_with_upr_letters_only_is_not_a_header() -> None:
+    task = SubjectTask(number="1", words=_words("Управление", "заводом", "идёт", "хорошо"))
+    derived = _derived("Управление", "заводом", "идёт", "хорошо")
+    assert check_words(0, task, derived) == []
+
+
+def test_leading_list_marker_with_other_number_is_not_a_header() -> None:
+    """«1.» в начале текста — маркер списка внутри упражнения №245, а не заголовок: цифры не
+    совпадают с номером задания, поэтому заголовок его не срезает — но лишнее слово перед первым
+    совпадением всё равно поглощает `_leading_extra_indices`, и находки на верной копии нет."""
+    task = SubjectTask(number="245", words=_lines(["1.", "Яблоко", "красное", "и", "сладкое"]))
+    derived = _derived("Яблоко", "красное", "и", "сладкое")
+    assert check_words(0, task, derived) == []
+
+
 def test_work_heading_line_is_not_a_finding() -> None:
     task = SubjectTask(
         number="1", number_on_page=False,
