@@ -14,6 +14,9 @@ from hwcheck.subjects.math.module import findings_from_grade
 
 
 def task_findings(index: int, item: CheckedTask) -> list[Finding]:
+    """Находки модуля; запасной вывод из `grade` — только у предмета с пересчётом (математика)."""
+    if item.grade is None:
+        return item.findings
     return item.findings or findings_from_grade(index, item.grade)
 
 

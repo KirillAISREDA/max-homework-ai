@@ -34,9 +34,9 @@
 
 | Файл | Ответственность |
 |---|---|
-| `ocr/engine.py` (изменить) | `ReadingPipelineEngine`: загрузка ONNX-пайплайна без torch, конвертация предсказаний в слова; EXIF-поворот и лимит пикселей входа |
-| `ocr/patch_no_torch.py` (создать, перенос из `spikes/ocr_memory/`) | патч апстрима: убрать безусловные `import torch` на ONNX-пути |
-| `ocr/Dockerfile`, `ocr/requirements.txt`, `ocr/README.md` (изменить) | образ по рецепту `Dockerfile.notorch`: python:3.10-slim, клоны ai-forever, веса при сборке, ENV арены onnxruntime |
+| `ocrsvc/engine.py` (изменить) | `ReadingPipelineEngine`: загрузка ONNX-пайплайна без torch, конвертация предсказаний в слова; EXIF-поворот и лимит пикселей входа |
+| `ocrsvc/patch_no_torch.py` (создать, перенос из `spikes/ocr_memory/`) | патч апстрима: убрать безусловные `import torch` на ONNX-пути |
+| `ocrsvc/Dockerfile`, `ocrsvc/requirements.txt`, `ocrsvc/README.md` (изменить) | образ по рецепту `Dockerfile.notorch`: python:3.10-slim, клоны ai-forever, веса при сборке, ENV арены onnxruntime |
 | `docker-compose.yml` (изменить) | `ocr`: лимит 2g, `restart: unless-stopped`, `OCR_ENGINE`; бот: `OCR_URL`, том `var/kb_photos` |
 | `assets/hunspell/ru_RU.dic`, `ru_RU.aff`, `README_ru_RU.txt` (создать) | словарь LibreOffice ru_RU с лицензией |
 | `src/hwcheck/subjects/russian/__init__.py` (создать) | пакет предмета |
@@ -68,16 +68,16 @@
 
 ---
 
-### Task R1: Движок ReadingPipeline в контейнере OCR
+### Task 1 (R1): Движок ReadingPipeline в контейнере OCR
 
 **Files:**
-- Modify: `ocr/engine.py` (заменить `ReadingPipelineEngine`)
-- Create: `ocr/patch_no_torch.py` (перенос `spikes/ocr_memory/patch_no_torch.py` без изменений кода, докстринг «не для прода» убрать)
-- Modify: `ocr/Dockerfile`, `ocr/requirements.txt`, `ocr/README.md`, `ocr/server.py` (комментарий о лимите), `docker-compose.yml` (сервис `ocr`), `pyproject.toml` (mypy overrides)
+- Modify: `ocrsvc/engine.py` (заменить `ReadingPipelineEngine`)
+- Create: `ocrsvc/patch_no_torch.py` (перенос `spikes/ocr_memory/patch_no_torch.py` без изменений кода, докстринг «не для прода» убрать)
+- Modify: `ocrsvc/Dockerfile`, `ocrsvc/requirements.txt`, `ocrsvc/README.md`, `ocrsvc/server.py` (комментарий о лимите), `docker-compose.yml` (сервис `ocr`), `pyproject.toml` (mypy overrides)
 - Test: `tests/test_ocr_engine.py`
 
 **Interfaces:**
-- Consumes: контракт `Engine.recognize(image: bytes) -> list[dict]` из `ocr/engine.py`; HTTP-сервер `ocr/server.py` без изменений.
+- Consumes: контракт `Engine.recognize(image: bytes) -> list[dict]` из `ocrsvc/engine.py`; HTTP-сервер `ocrsvc/server.py` без изменений.
 - Produces: `ReadingPipelineEngine(weights_dir, threads=2)`; функции `decode_image(image: bytes) -> "np.ndarray"` и `words_from_predictions(pred: dict) -> list[dict]` (чистые, тестируются без весов); переменные окружения `OCR_ENGINE=readingpipeline`, `OCR_WEIGHTS`, `OCR_THREADS`, `OCR_ORT_ARENA` (по умолчанию `0`), `OCR_ORT_MEMPATTERN` (`0`).
 
 - [ ] **Step 1: Тест конвертации предсказаний и декодирования (RED)**
@@ -93,7 +93,7 @@ import io
 import pytest
 from PIL import Image
 
-from ocr.engine import MAX_IMAGE_PIXELS, decode_image, words_from_predictions
+from ocrsvc.engine import MAX_IMAGE_PIXELS, decode_image, words_from_predictions
 
 
 def test_words_from_predictions_keeps_text_class_only() -> None:
@@ -152,7 +152,7 @@ Expected: FAIL, `ImportError: cannot import name 'decode_image'`.
 
 - [ ] **Step 3: Реализация движка**
 
-`ocr/engine.py` — заменить класс `ReadingPipelineEngine` и добавить функции (остальное без изменений):
+`ocrsvc/engine.py` — заменить класс `ReadingPipelineEngine` и добавить функции (остальное без изменений):
 
 ```python
 import numpy as np  # numpy есть у движка; в тестах бота ставится через pillow? нет — добавить в dev
@@ -181,7 +181,7 @@ def decode_image(image: bytes) -> "np.ndarray[Any, Any]":
 
 
 def words_from_predictions(pred: dict[str, Any]) -> list[dict[str, Any]]:
-    """Формат ответа сервиса (ocr/README.md) из предсказаний PipelinePredictor."""
+    """Формат ответа сервиса (ocrsvc/README.md) из предсказаний PipelinePredictor."""
     return [
         {
             "text": p.get("text") or "",
@@ -270,7 +270,7 @@ Expected: PASS; mypy без ошибок (импорты внутри `__init__`
 
 - [ ] **Step 5: Образ по рецепту спайка**
 
-`ocr/requirements.txt`:
+`ocrsvc/requirements.txt`:
 
 ```
 # ReadingPipeline (ai-forever) на ONNX/CPU без torch — версии из spikes/ocr_memory/Dockerfile.notorch
@@ -290,7 +290,7 @@ albumentations==1.1.0
 huggingface_hub
 ```
 
-`ocr/Dockerfile`:
+`ocrsvc/Dockerfile`:
 
 ```dockerfile
 # OCR-сервис «Домашки»: ReadingPipeline (ai-forever, MIT) на ONNX/CPU без языковой модели и без
@@ -300,7 +300,7 @@ FROM python:3.10-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git g++ libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY ocr/requirements.txt ./requirements.txt
+COPY ocrsvc/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # апстрим не запинен по хэшу: patch_no_torch.py падает assert'ом на сборке, если структура
@@ -310,7 +310,7 @@ RUN git clone --depth 1 https://github.com/ai-forever/ReadingPipeline.git \
     && git clone --depth 1 https://github.com/ai-forever/SEGM-model.git
 RUN printf 'class CTCBeamDecoder:\n    def __init__(self, *a, **kw):\n        raise NotImplementedError("LM disabled")\n' \
         > /usr/local/lib/python3.10/site-packages/ctcdecode.py
-COPY ocr/patch_no_torch.py ./patch_no_torch.py
+COPY ocrsvc/patch_no_torch.py ./patch_no_torch.py
 RUN python patch_no_torch.py && pip install --no-cache-dir --no-deps ./OCR-model ./SEGM-model
 RUN python -c "from huggingface_hub import snapshot_download; \
     snapshot_download('ai-forever/ReadingPipeline-notebooks', local_dir='/app/weights', \
@@ -320,17 +320,17 @@ ENV PYTHONPATH=/app:/app/ReadingPipeline \
     MALLOC_ARENA_MAX=2 OMP_NUM_THREADS=2 OCR_THREADS=2 \
     OCR_ORT_ARENA=0 OCR_ORT_MEMPATTERN=0 \
     OCR_ENGINE=readingpipeline OCR_WEIGHTS=/app/weights
-COPY ocr ./ocr
+COPY ocrsvc ./ocrsvc
 RUN useradd --uid 1000 --create-home app && chown -R app:app /app
 USER app
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"
-CMD ["python", "-m", "ocr.server"]
+CMD ["python", "-m", "ocrsvc.server"]
 ```
 
-`docker-compose.yml`, сервис `ocr`: `memory: 2g` (комментарий: спайк памяти 17.09, пик 1,46 ГБ + запас), `restart: unless-stopped`, `OCR_ENGINE: ${OCR_ENGINE:-readingpipeline}`; профиль `ocr` оставить (запуск явный). В `ocr/server.py` комментарий у семафора: «пик 1,46 ГБ при лимите 2 ГБ — два параллельных прогона не помещаются».
+`docker-compose.yml`, сервис `ocr`: `memory: 2g` (комментарий: спайк памяти 17.09, пик 1,46 ГБ + запас), `restart: unless-stopped`, `OCR_ENGINE: ${OCR_ENGINE:-readingpipeline}`; профиль `ocr` оставить (запуск явный). В `ocrsvc/server.py` комментарий у семафора: «пик 1,46 ГБ при лимите 2 ГБ — два параллельных прогона не помещаются».
 
-`ocr/README.md`: обновить раздел «Движок» (readingpipeline — реальный), «Ограничение памяти — 2 ГБ», переменные `OCR_ORT_ARENA/OCR_ORT_MEMPATTERN/OCR_THREADS`.
+`ocrsvc/README.md`: обновить раздел «Движок» (readingpipeline — реальный), «Ограничение памяти — 2 ГБ», переменные `OCR_ORT_ARENA/OCR_ORT_MEMPATTERN/OCR_THREADS`.
 
 - [ ] **Step 6: Локальная сборка и дымовой тест (Docker недоступен локально — на VPS, см. R9); здесь — только линт**
 
@@ -346,7 +346,7 @@ git commit -m "feat(ocr): движок ReadingPipeline без torch — EXIF-п�
 
 ---
 
-### Task R2: Словарь Hunspell и заполнение пропусков
+### Task 2 (R2): Словарь Hunspell и заполнение пропусков
 
 **Files:**
 - Create: `assets/hunspell/ru_RU.dic`, `assets/hunspell/ru_RU.aff`, `assets/hunspell/README_ru_RU.txt` (из `github.com/LibreOffice/dictionaries/tree/master/ru_RU`, как в спайке)
@@ -694,7 +694,7 @@ git commit -m "feat(russian): словарь Hunspell и эталон пропу
 
 ---
 
-### Task R3: Распознавание страниц — роль и текст учебника через vision, тетрадь через OCR
+### Task 3 (R3): Распознавание страниц — роль и текст учебника через vision, тетрадь через OCR
 
 **Files:**
 - Create: `src/hwcheck/subjects/russian/recognize.py`, `prompts/ru_page/v1.md`
@@ -1002,7 +1002,7 @@ git commit -m "feat(russian): роль страницы и печатный те
 
 ---
 
-### Task R4: Выравнивание и находки
+### Task 4 (R4): Выравнивание и находки
 
 **Files:**
 - Create: `src/hwcheck/subjects/russian/align.py`, `src/hwcheck/subjects/russian/check.py`
@@ -1352,7 +1352,7 @@ git commit -m "feat(russian): выравнивание слов тетради �
 
 ---
 
-### Task R5: Модуль `RussianModule` и тьютор по слову
+### Task 5 (R5): Модуль `RussianModule` и тьютор по слову
 
 **Files:**
 - Create: `src/hwcheck/subjects/russian/module.py`, `src/hwcheck/subjects/russian/rules.py`, `prompts/ru_orthogram/v1.md`, `prompts/ru_tutor/v1.md`
@@ -2109,7 +2109,7 @@ git commit -m "feat(russian): модуль предмета — эталон и�
 
 ---
 
-### Task R6: Карточки орфограмм 1–4 класса и `hwcheck kb load-rules`
+### Task 6 (R6): Карточки орфограмм 1–4 класса и `hwcheck kb load-rules`
 
 **Files:**
 - Create: `assets/kb/rules_russian.json`
@@ -2277,7 +2277,7 @@ git commit -m "feat(kb): карточки орфограмм 1–4 класса 
 
 ---
 
-### Task R7: Бот — маршрутизация по предмету, путь языков через `SubjectPage`
+### Task 7 (R7): Бот — маршрутизация по предмету, путь языков через `SubjectPage`
 
 Закрывает блокеры финального ревью каркаса: бот вызывает `recognize`/`resolve_reference` модуля; `CheckedTask.grade` необязателен; `clarify.py` не трогает `grade` у языков; `KnowledgeBase` и `OcrClient` подключены; `photo_index` — по позиции в альбоме; при пропуске word-вопроса ребёнку сообщается. Отложено (в TODO): `findings.confirmed`/`homework_id` в БД.
 
@@ -2662,7 +2662,7 @@ git commit -m "feat(bot): маршрутизация по предмету пр�
 
 ---
 
-### Task R8: Стенд русского — golden-кейсы с ожидаемыми находками
+### Task 8 (R8): Стенд русского — golden-кейсы с ожидаемыми находками
 
 Спецификация §3 п.6: форма задания открывается через стенд на ≥ 10 реальных фото. Для русского
 `verified` без подтверждения ребёнка не ставится, поэтому главные метрики — **точность кандидатов**
@@ -2925,7 +2925,7 @@ git commit -m "feat(bench): стенд русского — точность и 
 
 ---
 
-### Task R9: Открытие предмета — OCR на VPS, флаг, выкатка, живой тест
+### Task 9 (R9): Открытие предмета — OCR на VPS, флаг, выкатка, живой тест
 
 **Files:**
 - Modify: `src/hwcheck/bot/subjects.py` (`russian` → `available=True`), `docs/deploy.md` («OCR-сервис»: запуск, память, `OCR_URL`; «Обновить бота»: `kb load-rules`), `docs/PROJECT_MEMORY.md` (§2 состояние, §4 решения, §8 артефакты), `docs/legal/privacy-policy-v0.md` (фото учебников, срок 365 дней), `TODO.md`, `HISTORY.md`

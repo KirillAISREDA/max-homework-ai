@@ -83,3 +83,53 @@ def test_onboarding_off_in_prod_is_warned(caplog: pytest.LogCaptureFixture) -> N
         log_onboarding_mode(Settings(_env_file=None), None)
         log_onboarding_mode(prod, enabled)
     assert [r.getMessage() for r in caplog.records] == ["onboarding: off", "onboarding: required"]
+
+
+def _available_russian(monkeypatch: pytest.MonkeyPatch) -> None:
+    from hwcheck.bot import runner
+    from hwcheck.bot.subjects import Subject
+
+    available = Subject("russian", "Русский язык", range(1, 10), available=True)
+    monkeypatch.setattr(runner, "subject_by_code", lambda code: available)
+
+
+def test_dictionary_failure_does_not_stop_the_bot(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Нет файлов словаря — русский станет недоступен, но математика работает (R7)."""
+    from hwcheck.bot import runner
+
+    def broken(*_args: Any, **_kw: Any) -> Any:
+        raise FileNotFoundError("assets/hunspell/ru_RU.dic")
+
+    _available_russian(monkeypatch)
+    monkeypatch.setattr(runner.HunspellDictionary, "load", broken)
+    with caplog.at_level(logging.INFO, logger="hwcheck.bot.runner"):
+        assert runner.load_dictionary() is None
+    assert [r.levelno for r in caplog.records] == [logging.ERROR]
+
+
+def test_dictionary_is_not_loaded_while_russian_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Словарь — секунды и ~170 МБ на каждый старт бота: пока русский выключен в каталоге
+    предметов, грузить его незачем (финальное ревью 17.09, I6)."""
+    from hwcheck.bot import runner
+
+    def never(*_args: Any, **_kw: Any) -> Any:
+        raise AssertionError("словарь не должен грузиться")
+
+    monkeypatch.setattr(runner.HunspellDictionary, "load", never)
+    with caplog.at_level(logging.INFO, logger="hwcheck.bot.runner"):
+        assert runner.load_dictionary() is None
+    messages = [r.getMessage() for r in caplog.records]
+    assert messages == ["dictionary skipped: russian not available"]
+
+
+def test_kb_photo_store_is_separate_from_homework_photos() -> None:
+    from hwcheck.bot.runner import _make_kb_photo_store, _make_photo_store
+
+    configured = Settings(_env_file=None, kb_photos_dir="var/kb", kb_photos_ttl_days=365)
+    store = _make_kb_photo_store(configured)
+    assert store is not None and store is not _make_photo_store(configured)
+    assert _make_kb_photo_store(Settings(_env_file=None, kb_photos_ttl_days=0)) is None

@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from hwcheck.bot.check import (
@@ -52,9 +53,19 @@ from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import FileCache, RefSolution
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
-from hwcheck.subjects.base import Finding, Reference, SubjectTask, TaskResult, Trust
+from hwcheck.subjects.base import (
+    Finding,
+    NoTutorableFinding,
+    Reference,
+    SubjectModule,
+    SubjectPage,
+    SubjectTask,
+    TaskResult,
+    Trust,
+    strength_of_task,
+)
 from hwcheck.subjects.math.module import _pseudo_ref as _pseudo_ref  # ре-экспорт для тестов
-from hwcheck.subjects.math.module import findings_from_grade, to_subject_task
+from hwcheck.subjects.math.module import findings_from_grade, to_subject_task, to_vision_task
 from hwcheck.subjects.registry import SubjectDeps, module_for
 
 logger = logging.getLogger(__name__)
@@ -73,8 +84,66 @@ TEXTBOOK_ONLY = (
     "Вижу страницу учебника ({numbers}) 📖 Пришли фото тетради с решением — "
     "проверю по этим условиям."
 )
+OCR_FAILED = (
+    "Не смог прочитать тетрадь 😕 Попробуй переснять: страница целиком, без наклона, "
+    "при хорошем свете."
+)
+# часть альбома прочиталась: сводка по ней верна, но про пропущенную страницу надо сказать
+OCR_FAILED_PARTIAL = "Одну из страниц тетради не смог прочитать 😕 — переснять её можно отдельно."
+# предмет есть в профиле, но модуль в этом окружении не собран (нет словаря/OCR)
+SUBJECT_UNAVAILABLE = "Проверка по этому предмету пока недоступна 🙏"
+NOTHING_TO_TUTOR = "Здесь нечего разбирать — ошибка не подтверждена 🙂"
 REVIEW_HINT = "Выбери задание для разбора 👇 Или пришли фото новой домашки 📸"
 REVIEW_DONE = "Эту домашку я уже проверил 👍 Пришли фото следующей — проверю 📸"
+SOLVER_CACHE_DIR = Path(".cache/solver")
+
+
+def models_for(settings: Settings) -> CheckModels:
+    """Роутинг моделей по шагам (арх. §4) — один источник и для бота, и для раннера."""
+    return CheckModels(
+        vision=settings.vision_model,
+        structure=settings.tutor_model,
+        solver=settings.solver_model,
+    )
+
+
+@dataclass(frozen=True)
+class _LanguageAlbum:
+    """Разобранный альбом языков: что проверять, какие упражнения помним, что не прочли."""
+
+    notebook: list[SubjectTask]  # задания тетради, слова уже со ссылкой на своё фото
+    conditions: dict[str, SubjectTask]  # упражнения учебника по номеру (с запомненными раньше)
+    ocr_failed: bool  # хотя бы одну страницу тетради OCR не прочитал
+    saw_textbook: bool
+
+    @property
+    def remembered(self) -> list[SubjectTask]:
+        return list(self.conditions.values())
+
+
+def _split_language_album(
+    pages: list[SubjectPage | None], kb_paths: list[str | None], known: list[SubjectTask]
+) -> _LanguageAlbum:
+    """Страницы альбома → задания тетради и упражнения учебника (запомненные раньше — в основе)."""
+    conditions = {t.number: t for t in known}
+    notebook: list[SubjectTask] = []
+    ocr_failed = False
+    saw_textbook = False
+    for index, page in enumerate(pages):
+        if page is None:
+            continue
+        ocr_failed = ocr_failed or page.failure == "ocr_failed"
+        if page.role == "textbook":
+            saw_textbook = True
+            kb_photo = kb_paths[index]
+            for task in page.tasks:
+                conditions[task.number] = task.model_copy(update={"photo_path": kb_photo})
+        elif page.role == "notebook":
+            for task in page.tasks:
+                # координаты слов относятся к своему фото альбома: по ним бот кропает слово
+                words = [w.model_copy(update={"photo_index": index}) for w in task.words]
+                notebook.append(task.model_copy(update={"words": words}))
+    return _LanguageAlbum(notebook, conditions, ocr_failed, saw_textbook)
 
 
 class Bot:
@@ -87,6 +156,7 @@ class Bot:
         settings: Settings,
         *,
         photos: PhotoStore | None = None,
+        kb_photos: PhotoStore | None = None,
         onboarding: Onboarding | None = None,
         subjects: SubjectDeps | None = None,
         findings: FindingsRepository | None = None,
@@ -97,20 +167,30 @@ class Bot:
         self._events = events
         self._settings = settings
         self._photos = photos
+        # страницы учебников для базы знаний: свой TTL (365 дней) и свой каталог
+        self._kb_photos = kb_photos
         # None — ONBOARDING_REQUIRED=false: проверка без онбординга, как до этапа 2
         self._onboarding = onboarding
         self._findings = findings
-        self._cache = FileCache(Path(".cache/solver"))
-        # математика — единственный реализованный предмет; профиль ученика определит код позже
-        self._module = module_for("math", subjects or SubjectDeps(llm, self._models, self._cache))
+        self._cache = FileCache(SOLVER_CACHE_DIR)
+        self._deps = subjects or SubjectDeps(llm, self._models, self._cache)
+        self._kb = self._deps.kb
+        # модуль предмета собирается по первому фото этого предмета и живёт до рестарта
+        self._modules: dict[str, SubjectModule] = {}
+
+    def _module_for(self, subject: str) -> SubjectModule:
+        """KeyError — предмет не реализован или не настроен в этом окружении (нет словаря/OCR)."""
+        if subject not in self._modules:
+            self._modules[subject] = module_for(subject, self._deps)
+        return self._modules[subject]
+
+    @property
+    def _module(self) -> SubjectModule:  # математика — как раньше
+        return self._module_for("math")
 
     @property
     def _models(self) -> CheckModels:
-        return CheckModels(
-            vision=self._settings.vision_model,
-            structure=self._settings.tutor_model,
-            solver=self._settings.solver_model,
-        )
+        return models_for(self._settings)
 
     async def handle_update(self, update: MaxUpdate) -> None:
         # один trace_id на все вызовы компонентов по апдейту (антифрод, Прил. 2 п. 5)
@@ -145,7 +225,8 @@ class Bot:
             # онбординг первым: до согласия фото не скачивается (спецификация онбординга §10.2)
             route = await self._onboarding.route(update)
             if isinstance(route, CheckPhotos):
-                await self._on_photo(chat_id, user_id, route.urls)
+                # предмет знает только онбординг (профиль ученика) — без него всё идёт в математику
+                await self._on_photo(chat_id, user_id, route.urls, route.subject)
                 return
             if route == "handled":
                 return
@@ -162,19 +243,22 @@ class Bot:
                 chat_id, user_id, update.callback.payload or "", update.callback.callback_id or ""
             )
 
-    async def _on_photo(self, chat_id: int, user_id: int | None, urls: list[str]) -> None:
+    async def _on_photo(
+        self, chat_id: int, user_id: int | None, urls: list[str], subject: str = "math"
+    ) -> None:
         dropped = max(0, len(urls) - MAX_PHOTOS)
         self._events.log(
             "homework_uploaded",
             user_id=user_id,
             user_initiated=True,
+            subject=subject,
             n_photos=len(urls),
             n_dropped=dropped,
         )
         hint = f" Фото больше {MAX_PHOTOS} — возьму первые {MAX_PHOTOS}." if dropped else ""
         await self._max.send_message(chat_id, CHECKING + hint)
         try:
-            await self._process_photos(chat_id, user_id, urls[:MAX_PHOTOS])
+            await self._process_photos(chat_id, user_id, urls[:MAX_PHOTOS], subject)
         except Exception as exc:
             # ребёнок не должен остаться наедине с «Проверяю...» и тишиной
             logger.exception("photo processing failed")
@@ -256,12 +340,26 @@ class Bot:
             raise RuntimeError("all photos failed")
         return results, paths
 
-    async def _process_photos(self, chat_id: int, user_id: int | None, urls: list[str]) -> None:
+    async def _process_photos(
+        self, chat_id: int, user_id: int | None, urls: list[str], subject: str = "math"
+    ) -> None:
         """Все фото сообщения: учебник даёт условия, тетрадь — решения.
 
         Проверяются только задания тетради; условия учебника запоминаются в
         состоянии чата (TTL), так что тетрадь может прийти и следующим сообщением.
         """
+        if subject != "math":
+            try:
+                module = self._module_for(subject)
+            except KeyError:
+                # предмет в профиле есть, а модуля в этом окружении нет: это ошибка настройки,
+                # но ребёнок не должен получить «что-то пошло не так» на каждое фото
+                logger.warning("предмет %r не настроен: проверка недоступна", subject)
+                self._events.log("subject_unavailable", user_id=user_id, subject=subject)
+                await self._max.send_message(chat_id, SUBJECT_UNAVAILABLE)
+                return
+            await self._process_language_photos(chat_id, user_id, urls, module)
+            return
         state = await self._store.get(chat_id)
         known = list(state.textbook_tasks) if textbook_is_fresh(state.textbook_saved_at) else []
         recognized, photo_paths = await self._recognize_all(user_id, urls)
@@ -298,6 +396,149 @@ class Bot:
         await self._send_review(chat_id, new_state)
         if plan:
             await self._ask_clarification(chat_id, user_id, new_state)
+
+    # --- языки (спецификация §6, §8): страницы приходят от модуля через SubjectPage ---
+
+    async def _process_language_photos(
+        self, chat_id: int, user_id: int | None, urls: list[str], module: SubjectModule
+    ) -> None:
+        """Учебник даёт упражнения (запоминаются на TTL), тетрадь — слова «как написано».
+
+        Упражнение и тетрадь сопоставляются по номеру, единственная пара — друг с другом
+        (это делает `module.check`); пересчёта здесь нет, поэтому `CheckedTask.grade` пуст.
+        """
+        subject = module.code
+        state = await self._store.get(chat_id)
+        # предмет состояния описывает то, что в нём лежит: у родителя двух детей прошлая
+        # домашка может быть по другому предмету — её упражнения этому модулю не подходят
+        same_subject = state.subject == subject
+        known = (
+            list(state.conditions)
+            if same_subject and textbook_is_fresh(state.textbook_saved_at)
+            else []
+        )
+        pages, photo_paths, kb_paths = await self._recognize_language_album(module, user_id, urls)
+        album = _split_language_album(pages, kb_paths, known)
+        if not album.notebook:
+            await self._album_without_notebook(chat_id, state, album, subject)
+            return
+        remembered = album.remembered
+        references = await module.resolve_reference(remembered, self._kb)
+        for reference in references:
+            self._events.log("reference_resolved", user_id=user_id, subject=subject,
+                             origin=reference.origin, trust=reference.trust)  # fmt: skip
+        results = await module.check(album.notebook, references)
+        checked = await self._to_checked_tasks(user_id, album, results, subject)
+        plan = plan_clarifications(checked)
+        new_state = ChatState(
+            phase="clarifying" if plan else "review", tasks=checked, subject=subject,
+            conditions=remembered, textbook_saved_at=time.time() if remembered else None,
+            clarifications=plan, photo_paths=photo_paths,
+        )  # fmt: skip
+        await self._store.set(chat_id, new_state)
+        await self._send_review(chat_id, new_state)
+        if album.ocr_failed:
+            # часть тетради осталась непрочитанной: сводка по остальным страницам верна,
+            # но молчать о пропущенной странице нельзя (ревью R7)
+            await self._max.send_message(chat_id, OCR_FAILED_PARTIAL)
+        if plan:
+            await self._ask_clarification(chat_id, user_id, new_state)
+
+    async def _to_checked_tasks(
+        self,
+        user_id: int | None,
+        album: _LanguageAlbum,
+        results: list[TaskResult],
+        subject: str,
+    ) -> list[CheckedTask]:
+        """Результаты модуля → задания сводки: номер из учебника, находки с местом в альбоме."""
+        checked = []
+        for task, result in zip(album.notebook, results, strict=True):
+            numbered = _numbered_by_condition(task, result.reference, album.conditions)
+            findings = [
+                f.model_copy(update={"task_index": result.task_index}) for f in result.findings
+            ]
+            await self._record_findings(user_id, numbered, findings, subject=subject)
+            # знаменатель отчёта по предмету: у языков вердикта нет, считаем силу находок
+            self._events.log("task_checked", user_id=user_id, component="validator",
+                             subject=subject, verdict=strength_of_task(findings),
+                             n_words=len(task.words),
+                             has_reference=result.reference is not None)  # fmt: skip
+            checked.append(CheckedTask(
+                task=to_vision_task(numbered), ref=None, subject_task=numbered, findings=findings,
+                reference=result.reference, payload=result.payload,
+            ))  # fmt: skip
+        return checked
+
+    async def _album_without_notebook(
+        self, chat_id: int, state: ChatState, album: _LanguageAlbum, subject: str
+    ) -> None:
+        """Тетради в альбоме нет: её не прочитали или пришёл только учебник — упражнения ждут."""
+        remembered = album.remembered
+        if album.ocr_failed:
+            await self._max.send_message(chat_id, OCR_FAILED)
+        elif album.saw_textbook and remembered:
+            numbers = describe_tasks([to_vision_task(t) for t in remembered])
+            await self._max.send_message(chat_id, TEXTBOOK_ONLY.format(numbers=numbers))
+        else:
+            await self._max.send_message(chat_id, UNREADABLE)
+        if not remembered:
+            return
+        # сводка другого предмета вместе с её кнопками «Разобрать» снимается: разбор по ней
+        # ушёл бы в чужой модуль
+        kept = state if state.subject == subject else ChatState()
+        await self._store.set(chat_id, kept.model_copy(update={
+            "conditions": remembered, "textbook_saved_at": time.time(), "subject": subject,
+        }))  # fmt: skip
+
+    async def _recognize_language_album(
+        self, module: SubjectModule, user_id: int | None, urls: list[str]
+    ) -> tuple[list[SubjectPage | None], list[str], list[str | None]]:
+        """Как `_recognize_all`: сбой одного фото не теряет остальные, индексы альбома сохраняются.
+
+        Третий список — страницы учебника в хранилище базы знаний (свой TTL): фото уже в руках,
+        второй раз его не скачиваем.
+        """
+        pages: list[SubjectPage | None] = []
+        paths: list[str] = []
+        kb_paths: list[str | None] = []
+        failed = 0
+        for url in urls:
+            photo: str | None = None
+            kb_photo: str | None = None
+            try:
+                image = await self._max.download(url)
+                photo = self._save_photo(user_id, image)
+                page = await module.recognize(image)
+                if page.role == "textbook":
+                    kb_photo = self._save_kb_photo(user_id, image)
+                self._events.log("page_recognized", user_id=user_id, subject=module.code,
+                                 role=page.role, n_tasks=len(page.tasks), calls=page.usage.calls,
+                                 tokens=page.usage.tokens, photo=photo)  # fmt: skip
+                if page.failure == "ocr_failed":
+                    self._events.log("ocr_failed", user_id=user_id, subject=module.code)
+                pages.append(page)
+            except Exception as exc:
+                failed += 1
+                pages.append(None)
+                logger.exception("photo failed: %s", url.split("?")[0])
+                self._events.log("photo_failed", user_id=user_id, error=type(exc).__name__,
+                                 photo=photo)  # fmt: skip
+            paths.append(photo or "")  # место в альбоме сохраняется: индексы не должны съезжать
+            kb_paths.append(kb_photo)
+        if urls and failed == len(urls):
+            raise RuntimeError("all photos failed")
+        return pages, paths, kb_paths
+
+    def _save_kb_photo(self, user_id: int | None, image: bytes) -> str | None:
+        """Страница учебника в базу знаний: сбой диска не должен ломать проверку."""
+        if self._kb_photos is None:
+            return None
+        try:
+            return self._kb_photos.save(anonymize(user_id), image)
+        except OSError:
+            logger.exception("kb photo save failed")
+            return None
 
     async def _check_task(self, user_id: int | None, task: VisionTask, index: int) -> CheckedTask:
         """`index` — номер задания в альбоме: модуль проверяет задания по одному и о своём
@@ -350,13 +591,18 @@ class Bot:
         )
 
     async def _record_findings(
-        self, user_id: int | None, task: SubjectTask, findings: list[Finding]
+        self,
+        user_id: int | None,
+        task: SubjectTask,
+        findings: list[Finding],
+        *,
+        subject: str = "math",
     ) -> None:
         for finding in findings:
             self._events.log(
                 "finding_created",
                 user_id=user_id,
-                subject=self._module.code,
+                subject=subject,
                 kind=finding.kind,
                 strength=finding.strength,
                 rule_code=finding.rule_code,
@@ -367,7 +613,7 @@ class Bot:
         records = [
             FindingRecord(
                 user_hash=user_hash,
-                subject=self._module.code,
+                subject=subject,
                 trace_id=current_trace_id(),
                 task_number=task.number,
                 kind=f.kind,
@@ -424,20 +670,24 @@ class Bot:
             "clarification_asked",
             user_id=user_id,
             kind=clarification.kind,
-            reason=item.grade.uncertain_reason,
+            reason=item.grade.uncertain_reason if item.grade is not None else None,
         )
         await self._max.send_message(chat_id, text, buttons=buttons)
 
     async def _skip_clarification(
         self, chat_id: int, user_id: int | None, state: ChatState, clarification: Clarification
     ) -> None:
-        """Вопрос без живой находки — снимается без сообщения ребёнку, переходим к следующему."""
+        """Вопрос без живой находки снимается: сводка обещала его ребёнку — молчать нельзя."""
+        item = state.tasks[clarification.task_index]
         rest = state.clarifications[1:]
         state = state.model_copy(
             update={"clarifications": rest, "phase": "clarifying" if rest else "review"}
         )
         await self._store.set(chat_id, state)
         self._events.log("clarification_skipped", user_id=user_id, kind=clarification.kind)
+        await self._max.send_message(
+            chat_id, f"{task_label(item.task)}: вопрос снят — оставлю «стоит перепроверить» 🤔"
+        )
         if rest:
             await self._ask_clarification(chat_id, user_id, state)
 
@@ -480,14 +730,16 @@ class Bot:
             text, buttons = retry_prompt(clarification)
             await self._max.send_message(chat_id, text, buttons=buttons)
             return
+        after = updated or before
         self._events.log(
             "clarification_answered",
             user_id=user_id,
             user_initiated=True,
             kind=clarification.kind,
             understood=updated is not None,
-            verdict_before=before.grade.verdict,
-            verdict_after=(updated or before).grade.verdict,
+            # у предмета без пересчёта вердикта нет — ответ виден в finding_confirmed
+            verdict_before=before.grade.verdict if before.grade is not None else None,
+            verdict_after=after.grade.verdict if after.grade is not None else None,
         )
         if updated is None:
             message = f"Хорошо, оставлю {_lower(task_label(before.task))} как есть 🤔"
@@ -503,19 +755,22 @@ class Bot:
                     "finding_confirmed",
                     user_id=user_id,
                     user_initiated=True,
-                    subject=self._module.code,
+                    subject=state.subject,
                     kind=confirmed_finding.kind,
                     answer="yes" if confirmed_finding.confirmed else "no",
                 )
-            # отдельное событие: задание уже учтено в task_checked, в отчёте не дублируем
-            self._events.log(
-                "task_clarified",
-                user_id=user_id,
-                component="validator",
-                kind=clarification.kind,
-                verdict=updated.grade.verdict,
-                reason=updated.grade.uncertain_reason,
-            )
+            # отдельное событие: задание уже учтено в task_checked, в отчёте не дублируем.
+            # У предмета без пересчёта (языки) вердикт от ответа не меняется — пересчитывать
+            # нечего, а сам ответ ребёнка уже записан в finding_confirmed
+            if updated.grade is not None:
+                self._events.log(
+                    "task_clarified",
+                    user_id=user_id,
+                    component="validator",
+                    kind=clarification.kind,
+                    verdict=updated.grade.verdict,
+                    reason=updated.grade.uncertain_reason,
+                )
             message, button = clarified_line(clarification.task_index, updated)
             buttons = [button] if button else None
         state = state.model_copy(
@@ -563,12 +818,24 @@ class Bot:
             callback_id, notification=f"Разбираем {_lower(task_label(item.task))}"
         )
         try:
-            session = await self._start_tutoring(user_id, index, item)
+            session = await self._start_tutoring(user_id, index, item, state.subject)
+        except NoTutorableFinding as exc:
+            # у языков разбирают подтверждённую ошибку: кнопка из старой сводки (находку сняли
+            # ответом «нет») — это не сбой бота, так ребёнку и скажем. Свой тип исключения:
+            # обычный ValueError модуля (в том числе ValidationError pydantic) — это сбой
+            logger.info("nothing to tutor: %s", exc)
+            await self._max.send_message(chat_id, NOTHING_TO_TUTOR)
+            return
+        except Exception:
+            logger.exception("tutoring start failed")
+            await self._max.send_message(chat_id, RETRY)
+            return
+        try:
             reply, session = await tutor_reply(
                 self._llm, session, "Помоги найти ошибку", model=self._settings.tutor_model
             )
         except Exception:
-            logger.exception("tutoring start failed")
+            logger.exception("tutor first reply failed")
             await self._max.send_message(chat_id, RETRY)
             return
         self._events.log(
@@ -587,16 +854,28 @@ class Bot:
         await self._max.send_message(chat_id, reply)
 
     async def _start_tutoring(
-        self, user_id: int | None, index: int, item: CheckedTask
+        self, user_id: int | None, index: int, item: CheckedTask, subject: str
     ) -> TutorSession:
+        module = self._module_for(subject)
         result = task_result_of(index, item)
-        session = await self._module.start_tutoring(result, to_subject_task(item.task), kb=None)
+        # subject_task: у языков в нём слова с координатами, у математики (и старых состояний
+        # Redis) его нет — собираем из подписи задания, как раньше
+        subject_task = item.subject_task or to_subject_task(item.task)
+        session = await module.start_tutoring(result, subject_task, kb=self._kb)
         if session.error is not None:
             self._events.log(
                 "error_classified",
                 user_id=user_id,
                 component="classifier",
                 error_type=session.error.error_type,
+            )
+        if session.word is not None:
+            # доля разборов без карточки правила — метрика классификатора орфограмм
+            self._events.log(
+                "orthogram_classified",
+                user_id=user_id,
+                subject=subject,
+                rule_code=session.word.rule_code,
             )
         return session
 
@@ -660,6 +939,19 @@ class Bot:
             await self._max.send_message(chat_id, reply)
 
 
+def _numbered_by_condition(
+    task: SubjectTask, reference: Reference | None, conditions: dict[str, SubjectTask]
+) -> SubjectTask:
+    """Напечатанный номер упражнения надёжнее рукописного (как `attach_conditions` у математики):
+    тетрадь без номера на странице подписывается номером своего упражнения из учебника."""
+    if task.number_on_page or reference is None:
+        return task
+    condition = conditions.get(reference.task_number)
+    if condition is None or not condition.number_on_page:
+        return task
+    return task.model_copy(update={"number": condition.number, "number_on_page": True})
+
+
 def task_result_of(index: int, item: CheckedTask) -> TaskResult:
     """`TaskResult` для тьютора из уже посчитанного `CheckedTask`.
 
@@ -667,6 +959,14 @@ def task_result_of(index: int, item: CheckedTask) -> TaskResult:
     `checked.ref` из `bot/check.py` бывает не пуст только когда солвер сам себя проверил
     (`ref_status == "ok"`), но это поле не должно тихо подменяться в других сценариях.
     """
+    if item.grade is None:
+        # предмет без пересчёта: находки и эталон уже посчитал модуль, выводить нечего
+        return TaskResult(
+            task_index=index,
+            findings=item.findings,
+            reference=item.reference,
+            payload=item.payload,
+        )
     subject_task = to_subject_task(item.task)
     trust: Trust = "verified" if item.ref_status == "ok" else "unverified"
     reference = (

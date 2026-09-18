@@ -8,6 +8,8 @@ tests
 docs
 !docs/legal
 assets
+!assets/hunspell
+!assets/kb
 .env
 .env.*
 !.env.example

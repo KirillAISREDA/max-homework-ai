@@ -19,6 +19,7 @@ __all__ = [
     "Box",
     "Finding",
     "KnowledgeBase",
+    "NoTutorableFinding",
     "Origin",
     "PageRole",
     "Reference",
@@ -33,6 +34,15 @@ __all__ = [
     "Word",
     "strength_of_task",
 ]
+
+
+class NoTutorableFinding(ValueError):
+    """Разбирать нечего: подтверждённой ошибки, по которой строится диалог, у задания нет.
+
+    Отдельный тип, чтобы бот отличал «нечего разбирать» от настоящего сбоя модуля (в том числе
+    от `ValidationError` pydantic, который тоже `ValueError`).
+    """
+
 
 Strength = Literal["verified", "candidate", "feedback"]
 Trust = Literal["verified", "unverified"]
@@ -70,6 +80,8 @@ class SubjectTask(BaseModel):
     answer: str | None = None
     words: list[Word] = Field(default_factory=list)  # для языков: слова с координатами
     confidence: float = 1.0
+    # путь фото учебника в var/kb_photos (проставляет бот): страница сохраняется в базе знаний
+    photo_path: str | None = None
 
 
 class Usage(BaseModel):
@@ -84,6 +96,8 @@ class SubjectPage(BaseModel):
     comment: str | None = None  # почему страница непригодна
     transcript: str | None = None  # сырая транскрипция — только для dev-логов и стенда
     usage: Usage = Field(default_factory=Usage)
+    # OCR-сервис недоступен/упал: бот пишет событие ocr_failed, проверка не падает (спецификация §8)
+    failure: Literal["ocr_failed"] | None = None
 
 
 class Reference(BaseModel):

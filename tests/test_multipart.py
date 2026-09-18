@@ -147,7 +147,7 @@ async def test_level_3_context_names_error_line_value() -> None:
 
 
 async def test_bot_sets_tutor_target_from_error_line() -> None:
-    # settings реальный: конструктор строит self._module через self._models (Task 8)
+    # settings реальный: модуль предмета собирается через self._models (Task 8)
     bot = Bot(None, None, None, None, Settings(_env_file=None))  # type: ignore[arg-type]
     steps = ["803 + 169 = 972", "972 - 100 = 862"]
     item = CheckedTask(
@@ -155,7 +155,7 @@ async def test_bot_sets_tutor_target_from_error_line() -> None:
         ref=None,
         grade=_validator_only_grade(steps),
     )
-    session = await bot._start_tutoring(None, 0, item)
+    session = await bot._start_tutoring(None, 0, item, "math")
     assert session.expected == "872"
 
 

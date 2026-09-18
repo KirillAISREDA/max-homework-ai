@@ -29,11 +29,15 @@ services:
     #   mkdir -p var .cache && chown -R 1000:1000 var .cache
     # иначе Docker создаст каталоги от root и бот не сможет писать marker/журнал/кэш
     volumes:
-      - ./var:/app/var          # events.jsonl (метрика/антифрод), max_marker.txt, photos/ (TTL 30 дней)
+      # events.jsonl (метрика/антифрод), max_marker.txt, photos/ (TTL 30 дней),
+      # kb_photos/ — страницы учебников базы знаний (TTL 365 дней, данных ребёнка нет)
+      - ./var:/app/var
       - ./.cache:/app/.cache    # кэш ответов солвера — не перегонять одни и те же задания
     deploy:
       resources:
         limits:
+          # +~170 МБ: словарь русского (spylls) грузится в память при старте, до polling —
+          # только когда русский доступен в каталоге предметов (`bot/subjects.py`)
           memory: 1g
     # marker пишется после каждого GET /updates (long poll ≤30 с); обработка альбома
     # из 4 фото может занять минуту-две — потому окно 5 минут
@@ -85,31 +89,31 @@ services:
       retries: 5
 
   # OCR-сервис для языков (посимвольное распознавание рукописи, спецификация каркаса §8):
-  # не стартует по умолчанию, только явно (docker compose --profile ocr up -d ocr); в этой стадии
-  # не запускается на VPS, только собирается
+  # не стартует по умолчанию, только явно (docker compose --profile ocr up -d ocr)
   ocr:
     build:
       context: .
-      dockerfile: ocr/Dockerfile
+      dockerfile: ocrsvc/Dockerfile
     image: max-homework-ai-ocr
     container_name: homework-ocr
-    # пока только сборка (docker compose --profile ocr build ocr); unless-stopped — при включении
-    # в этапе «русский», см. docs/deploy.md «OCR-сервис»
-    restart: "no"
+    # сбой загрузки весов/движка (нет файлов, битый конфиг, OOM) не должен крутить контейнер
+    # вечно на общем VPS — ~1,4 ГБ весов заново на каждую попытку; server.py падает ненулевым
+    # кодом при неудачной инициализации движка (см. main())
+    restart: on-failure:3
     profiles: ["ocr"]            # стартует только явно: docker compose --profile ocr up -d ocr
     environment:
-      OCR_ENGINE: ${OCR_ENGINE:-fake}
+      OCR_ENGINE: ${OCR_ENGINE:-readingpipeline}
     deploy:
       resources:
         limits:
-          # спайк docs/research/2026-09-17-readingpipeline-vps.md: пик ReadingPipeline ~3 ГБ на
-          # реальных фото — 1.5g из первоначального черновика недостижим
-          memory: 3g
+          # спайк памяти 17.09 (docs/research/2026-09-17-readingpipeline-memory.md): пик 1,46 ГБ
+          # на реальных фото (без torch, арена/mem-pattern onnxruntime выключены) + запас
+          memory: 2g
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
       interval: 30s
       timeout: 5s
-      start_period: 60s
+      start_period: 120s
     # без портов наружу: бот ходит по compose-сети как к http://ocr:8080
 
   # ежедневный pg_dump в var/backups, хранение 7 дней (спецификация онбординга §7)

@@ -46,6 +46,9 @@ docker compose up -d --build     # пересборка ~1 мин, зависи�
 docker compose logs --tail 50
 ```
 
+Если менялись карточки орфограмм (`assets/kb/rules_russian.json`) — после пересборки загрузить их в
+базу знаний, команда идемпотентна: см. «Проверка базы знаний» ниже (`kb load-rules`).
+
 ## PostgreSQL и ключи id (онбординг, этап 1)
 
 С этапа 1 онбординга compose требует `POSTGRES_PASSWORD` в `.env`, а бот хэширует id через `ID_HASH_KEY`
@@ -128,33 +131,93 @@ docker exec homework-redis redis-cli DEL 'onb:<хэш>'
 
 ## OCR-сервис
 
-Контейнер `homework-ocr` (посимвольное распознавание рукописи для языков, спецификация каркаса §8) —
-не стартует вместе с остальными по умолчанию, только явно, через профиль compose `ocr`. **На этой
-стадии контейнер на VPS только собирается, не запускается:**
+Контейнер `homework-ocr` — посимвольное распознавание рукописи для языков (спецификация каркаса §8),
+движок `ReadingPipelineEngine`. Код — пакет `ocrsvc/` (`ocrsvc/Dockerfile`; имя `ocr` занято апстримным
+пакетом ai-forever и затеняет его в `PYTHONPATH`, поэтому свой пакет называется иначе). Сервис compose —
+`ocr`, образ `max-homework-ai-ocr`, контейнер `homework-ocr`; не стартует вместе с остальными по
+умолчанию, только явно, через профиль `ocr`.
+
+Сборка (клоны ai-forever + веса 165 МБ, ~5–10 мин):
 
 ```bash
 docker compose --profile ocr build ocr
 ```
 
-Так образ готов к моменту подключения реального движка (`ReadingPipelineEngine`), но не занимает
-память на общем VPS раньше времени. Лимит памяти сервиса — `3 ГБ` (не `1,5 ГБ`, как в исходных
-ограничениях): по спайку `docs/research/2026-09-17-readingpipeline-vps.md` пайплайн ReadingPipeline
-на реальных фото стабильно занимает ~2,3–2,5 ГБ и пиково до ~3,06 ГБ, `1,5 ГБ` недостижим.
-
-Запуск (`docker compose --profile ocr up -d ocr`) и health-проверка —
+Запуск — только когда на VPS свободно достаточно памяти (лимит контейнера 2 ГБ + запас на пик и на
+соседние контейнеры):
 
 ```bash
-free -m                                    # свободная память до запуска — лимит контейнера 3 ГБ
+free -m                                    # available ≥ 2,5 ГБ
 docker compose --profile ocr up -d ocr
 docker exec homework-ocr python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/health').read())"
 ```
 
-— переносятся на этап «русский», после решения по размещению (этот VPS с апгрейдом до 16 ГБ или
-Cloud.ru с отдельным резервированием памяти, см. «Решения» в спайке): на общем VPS свободно сейчас
-~3,7–3,8 ГБ, а бот+Redis+PostgreSQL уже используют остальное — без этого решения запуск рискует
-уронить либо OCR, либо прод при первом же плотном фото. Движок по умолчанию — `OCR_ENGINE=fake`
-(переменная в `.env`), без портов наружу: бот ходит по compose-сети как к `http://ocr:8080`
-(`OCR_URL` в `environment` бота).
+Лимит памяти сервиса — **`2 ГБ`** (было `3 ГБ` до follow-up спайка 17.09 —
+`docs/research/2026-09-17-readingpipeline-memory.md`): пик на реальных фото — **1,46 ГБ**, без `torch`
+в образе и с выключенными `enable_cpu_mem_arena`/`enable_mem_pattern` у сессий onnxruntime. Cloud.ru или
+апгрейд VPS для этого больше не нужны. `restart: on-failure:3` — сбой инициализации движка (нет весов,
+битый конфиг, OOM) не должен крутить контейнер вечно на общем VPS: каждая попытка заново грузит
+~1,4 ГБ весов.
+
+Дымовой тест — реальное фото тетради из `var/photos` (то, что уже прошло через бота и пережато):
+
+```bash
+f=$(ls var/photos/*/*.webp | head -1)
+docker run --rm --network max-homework-ai_default -v $PWD/var/photos:/p:ro python:3.12-slim \
+  python -c "import urllib.request; r=urllib.request.Request('http://ocr:8080/recognize', data=open('/p/${f#var/photos/}','rb').read(), headers={'Content-Type':'image/webp'}); print(urllib.request.urlopen(r, timeout=90).read()[:600])"
+docker stats --no-stream homework-ocr        # ожидаемо ~1,3–1,5 ГБ
+```
+
+Ожидаемо: `words` непустой, `seconds` 5–15.
+
+Включение в боте — `OCR_URL=http://ocr:8080` в `.env` (сервис виден боту по имени в сети compose),
+затем пересоздать бота, чтобы он подхватил переменную окружения:
+
+```bash
+docker compose up -d --build bot
+```
+
+Откат — если OCR не тянет память на общем VPS или не поднимается: остановить сервис и очистить
+`OCR_URL`, бот тогда не падает, а отвечает ребёнку «не смог прочитать тетрадь» (событие `ocr_failed`
+в `var/events.jsonl`):
+
+```bash
+docker compose stop ocr
+sed -i 's/^OCR_URL=.*/OCR_URL=/' .env
+docker compose up -d --build bot
+```
+
+Как для любого рестарта прод-контейнеров общего VPS — сначала нет событий за 10 минут (`tail
+var/bot.log`, `tail var/events.jsonl`), Redis не трогать.
+
+### Стенд русского
+
+`hwcheck bench ru` (по эталонным кейсам `bench/golden_ru/`) нужно гонять против настоящего OCR, а не
+фейка. `--ocr-url http://127.0.0.1:8080` (дефолт команды для локального запуска) на VPS с хоста не
+достаёт: у `homework-ocr` нет портов наружу, только сеть compose. Практический способ — гонять стенд
+изнутри той же сети, из одноразового контейнера бота:
+
+```bash
+docker compose --profile ocr up -d ocr
+# фото кейсов — на VPS в /opt/max-homework-ai/data (скопировать заранее, каталог не в образе — .dockerignore)
+docker compose run --rm -v "$PWD/data:/app/data:ro" bot \
+  python -m hwcheck bench ru --ocr-url http://ocr:8080 --photos data \
+  --out var/bench-russian-$(date +%F).md
+```
+
+Эталонные кейсы (`bench/golden_ru/`) лежат в образе (`COPY bench ./bench` в `Dockerfile`), а отчёт
+пишется в `var/` — он смонтирован с хоста (как и `.cache/`): `--rm` уносит с собой всё, что
+контейнер записал в свою файловую систему, поэтому `--out bench/reports/…` внутри контейнера
+потерялся бы. Отчёт (`var/bench-russian-<дата>.md`) — точность и полнота кандидатов; на хосте его
+кладут в `bench/reports/<дата>-russian.md` и коммитят:
+
+```bash
+cp var/bench-russian-$(date +%F).md bench/reports/$(date +%F)-russian.md
+```
+
+Прогон сохраняется в `.cache/bench/runs/russian.jsonl` — там текст слов из тетрадей детей; этот файл
+**не должен уходить с VPS и не должен попадать в git** (уже в `.gitignore`/`.dockerignore` — не
+выносить).
 
 ## Диагностика
 
@@ -195,6 +258,9 @@ docker compose exec bot python -m hwcheck kb review --subject english --limit 10
 
 # Загрузить словарь из файла
 docker compose exec bot python -m hwcheck kb load-words --subject russian --source grade_list:2 /path/to/words.txt
+
+# Загрузить карточки орфограмм (после миграции; идемпотентно — ON CONFLICT (code) DO UPDATE)
+docker compose run --rm bot python -m hwcheck kb load-rules assets/kb/rules_russian.json
 ```
 
 `DATABASE_URL` команды не требуют: она берётся из окружения контейнера бота (задана в

@@ -9,7 +9,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from hwcheck.bench.cli import add_bench_parser, report_command, run_command
+from hwcheck.bench.cli import add_bench_parser, report_command, ru_command, run_command
 from hwcheck.bot.runner import run_polling
 from hwcheck.config import Settings, load_settings
 from hwcheck.crypto import new_user_id_key
@@ -17,7 +17,7 @@ from hwcheck.db.kb import PgKnowledgeBase
 from hwcheck.db.pool import create_pool
 from hwcheck.eval.offline import run_offline_eval
 from hwcheck.events import EventLog, read_events, summarize_events
-from hwcheck.kb_cli import load_words, review
+from hwcheck.kb_cli import load_rules_into, load_words, review
 from hwcheck.llm import ChatMessage, GigaChatClient
 from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.generator import generate_similar
@@ -93,6 +93,9 @@ def main(argv: list[str] | None = None) -> None:
     load_cmd.add_argument("--source", required=True, help="Источник словаря")
     load_cmd.add_argument("path", type=Path, help="Файл со словами (.txt или .json)")
 
+    load_rules_cmd = kb_commands.add_parser("load-rules", help="Загрузить карточки орфограмм")
+    load_rules_cmd.add_argument("path", type=Path, help="JSON-список карточек")
+
     args = parser.parse_args(argv)
     # консоль Windows в cp1251: «→», «·» в отчётах роняли печать — не валим команду из-за вывода
     reconfigure = getattr(sys.stdout, "reconfigure", None)
@@ -163,6 +166,8 @@ async def _run(args: argparse.Namespace) -> None:
             elif args.kb_command == "load-words":
                 count = await load_words(kb, args.subject, args.source, args.path)
                 print(f"Загружено {count} слов")
+            elif args.kb_command == "load-rules":
+                print(f"Загружено {await load_rules_into(kb, args.path)} правил")
         finally:
             await pool.close()
         return
@@ -171,7 +176,10 @@ async def _run(args: argparse.Namespace) -> None:
         raise SystemExit("Не задан GIGACHAT_CREDENTIALS (см. .env.example)")
 
     if args.command == "bench":
-        await run_command(args, settings)
+        if args.bench_command == "ru":
+            await ru_command(args, settings)
+        else:
+            await run_command(args, settings)
         return
 
     if args.command == "bot":

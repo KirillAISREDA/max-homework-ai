@@ -56,9 +56,16 @@ def plan_clarifications(tasks: list[CheckedTask]) -> list[Clarification]:
     return plan
 
 
+# о чём НЕ спрашиваем «здесь написано «X»?»: у лишнего слова «да» подтверждает не-ошибку (и
+# кнопка «Разобрать» упирается в «нечего разбирать»), у пропущенного слова спрашивать нечего —
+# ребёнок его не писал. Обе находки остаются в сводке как «стоит перепроверить» (ревью 17.09)
+NOT_ASKED_KINDS = {"extra_word", "missing_word"}
+
+
 def _is_word_candidate(finding: Finding) -> bool:
     return (
         finding.strength == "candidate"
+        and finding.kind not in NOT_ASKED_KINDS
         and finding.word is not None
         and finding.word.box is not None
         and finding.confirmed is None
@@ -66,7 +73,8 @@ def _is_word_candidate(finding: Finding) -> bool:
 
 
 def _clarification_for(index: int, item: CheckedTask) -> Clarification | None:
-    if item.grade.verdict != "uncertain":
+    # предмет без пересчёта (языки): вопросы к находкам ставит plan_clarifications, не этот шаг
+    if item.grade is None or item.grade.verdict != "uncertain":
         return None
     reason = item.grade.uncertain_reason
     # итоговый ответ спрашиваем только при хоть одной сошедшейся строке решения:
@@ -89,6 +97,8 @@ def _clarification_for(index: int, item: CheckedTask) -> Clarification | None:
 def question(item: CheckedTask, clarification: Clarification) -> tuple[str, Buttons | None]:
     label = task_label(item.task)
     if clarification.kind == "answer":
+        # вопрос про ответ ставится только при grade (`_clarification_for`) — до языков не доходит
+        assert item.grade is not None
         if item.grade.uncertain_reason == "no_answer":
             return f"{label}: не нашёл итоговый ответ. Какой ответ у тебя получился?", None
         return f"{label}: не разобрал ответ. Напиши его числом, как в тетради.", None
@@ -195,13 +205,9 @@ def regrade(item: CheckedTask, task: VisionTask, task_index: int) -> CheckedTask
     else:
         result = validator_only_grade(task.student_solution_steps, condition=task.task_text)
     findings = _merge_findings(item.findings, findings_from_grade(task_index, result))
-    return CheckedTask(
-        task=task,
-        ref=item.ref,
-        grade=result,
-        findings=findings,
-        ref_status=item.ref_status,  # эталон не пересчитывается — статус остаётся тем же
-    )
+    # model_copy, а не новый CheckedTask: эталон и его статус не пересчитываются, а предметные
+    # поля (subject_task, reference, payload) принадлежат модулю — их пересчёт не трогает
+    return item.model_copy(update={"task": task, "grade": result, "findings": findings})
 
 
 def _merge_findings(old: list[Finding], new_math: list[Finding]) -> list[Finding]:

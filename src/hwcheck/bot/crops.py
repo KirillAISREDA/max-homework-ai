@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import io
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from hwcheck.subjects.base import Box
 
 
 def crop_word(image: bytes, box: Box, *, margin: int = 12) -> bytes:
-    with Image.open(io.BytesIO(image)) as source:
+    """Координаты `box` — в кадре, развёрнутом по EXIF: так их отдаёт OCR (`ocrsvc/engine.py`
+    делает `exif_transpose` перед распознаванием). Кроп разворачивает фото так же, иначе у
+    снятого «лёжа» телефоном фото ребёнок видит не то слово, о котором спрашивают (ревью, I3)."""
+    with Image.open(io.BytesIO(image)) as opened:
+        source = ImageOps.exif_transpose(opened) or opened
         width, height = source.size
         area = (
             max(0, box.x0 - margin),

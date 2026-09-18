@@ -1,3 +1,0 @@
-# Движок — FakeEngine (стандартная библиотека, зависимостей не требует).
-# Зависимости ReadingPipeline (torch, onnxruntime, opencv и т.д.) — этап 3 по итогам спайка
-# docs/research/2026-09-17-readingpipeline-vps.md.

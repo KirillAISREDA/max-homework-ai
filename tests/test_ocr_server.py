@@ -1,6 +1,7 @@
 """OCR-сервис: HTTP-обёртка над движком; движок подменяется фейком."""
 
 import json
+import logging
 import socket
 import threading
 import urllib.error
@@ -9,8 +10,8 @@ from collections.abc import Iterator
 from http.server import ThreadingHTTPServer
 
 import pytest
-from ocr.engine import FakeEngine
-from ocr.server import make_handler
+from ocrsvc.engine import Engine, FakeEngine
+from ocrsvc.server import main, make_handler
 
 
 @pytest.fixture
@@ -112,3 +113,20 @@ def test_second_recognize_while_busy_is_503() -> None:
 def test_socket_timeout_is_set() -> None:
     """Без таймаута сокета молчащий клиент держит тред обработчика вечно."""
     assert make_handler(FakeEngine()).timeout == 30
+
+
+def test_engine_init_failure_exits_nonzero(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Сбой инициализации движка (нет весов, битый конфиг) не должен уйти в тихий бесконечный
+    restart-loop контейнера — main() логирует причину с трейсбеком и падает ненулевым кодом."""
+
+    def broken() -> Engine:
+        raise RuntimeError("/app/weights missing")
+
+    monkeypatch.setattr("ocrsvc.server.engine_from_env", broken)
+    with caplog.at_level(logging.ERROR, logger="ocr"), pytest.raises(SystemExit) as exc_info:
+        main()
+    assert exc_info.value.code == 1
+    assert "engine init failed" in caplog.text
+    assert "/app/weights missing" in caplog.text  # трейсбек попал в лог
