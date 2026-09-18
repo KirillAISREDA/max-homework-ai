@@ -1,5 +1,5 @@
 from hwcheck.subjects.base import Box, SubjectTask, Word
-from hwcheck.subjects.russian.check import MAX_DIFF_SHARE, check_words
+from hwcheck.subjects.russian.check import MAX_DIFF_SHARE, MIN_MATCH_SHARE, check_words
 from hwcheck.subjects.russian.gaps import DerivedText
 
 
@@ -39,7 +39,9 @@ def test_gap_findings_come_first_then_high_confidence() -> None:
 
 
 def test_missing_and_extra_words() -> None:
-    task = SubjectTask(number="1", words=_words("У", "гость", "был"))
+    # лишнее слово — внутри текста: о лишнем слове ПОСЛЕ текста не спрашиваем (см.
+    # test_extra_words_after_the_text_are_not_findings)
+    task = SubjectTask(number="1", words=_words("У", "был", "гость"))
     findings = check_words(0, task, _derived("У", "нас", "гость"))
     assert [(f.kind, f.actual, f.expected) for f in findings] == [
         ("missing_word", None, "нас"),
@@ -176,6 +178,64 @@ def test_unrecognised_furniture_before_the_text_is_dropped() -> None:
         number="1", number_on_page=False,
         words=_lines(["17.09.2026"], ["Наступила", "поздняя", "осень"]),
     )  # fmt: skip
+    assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
+
+
+def test_another_work_below_the_text_is_not_a_finding() -> None:
+    """Полуглобальная сверка (живой прогон 18.09, ru-4): на странице домашняя работа, а ниже —
+    «Классная работа» со списком из тридцати слов. Раньше 90 слов страницы против 33 слов
+    эталона давали долю расхождений > `MAX_DIFF_SHARE` и «не смог сверить» на верной работе."""
+    other = [f"слово{index}" for index in range(30)]
+    task = SubjectTask(
+        number="1",
+        words=_lines(
+            ["17", "сентября"],
+            ["Домашняя", "работа"],
+            ["Наступила", "позняя", "осень"],
+            ["Подул", "холодный", "ветер"],
+            ["Улетели", "птицы"],
+            ["Пожелтела", "трава"],
+            ["Скоро", "выпадет", "снег"],
+            ["Классная", "работа"],
+            other[:10],
+            other[10:20],
+            other[20:],
+        ),
+    )
+    derived = _derived(
+        "Наступила", "поздняя", "осень", "Подул", "холодный", "ветер", "Улетели", "птицы",
+        "Пожелтела", "трава", "Скоро", "выпадет", "снег",
+    )  # fmt: skip
+    [finding] = check_words(0, task, derived)
+    assert (finding.kind, finding.actual, finding.expected) == ("spelling", "позняя", "поздняя")
+
+
+def test_extra_words_after_the_text_are_not_findings() -> None:
+    """Цена полуглобальной сверки: лишнее слово сразу за текстом не отличить от начала другой
+    работы, поэтому о нём не спрашиваем — в отличие от лишнего слова внутри текста."""
+    task = SubjectTask(number="1", words=_words("Наступила", "поздняя", "осень", "уже", "потом"))
+    assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
+
+
+def test_page_without_the_reference_text_is_uncertain() -> None:
+    """Обрезка лишнего сверху и снизу не должна выдавать чужую страницу за верную работу: с
+    эталоном сошлось одно слово из шести — это не то упражнение, а случайное совпадение."""
+    task = SubjectTask(
+        number="1",
+        words=_lines(["Классная", "работа"], ["осень", "морковь", "капуста", "свёкла"]),
+    )
+    derived = _derived("Наступила", "поздняя", "осень", "уже", "в", "лесу")
+    [finding] = check_words(0, task, derived)
+    assert (finding.kind, finding.detail) == ("uncertain", "не смог сверить с упражнением")
+    assert MIN_MATCH_SHARE == 0.5
+
+
+def test_margin_marks_without_a_line_are_not_findings() -> None:
+    """Колонка цифр на поле тетради: OCR не отнёс их ни к одной строке — это пометки на полях,
+    а не слова упражнения (живой прогон 18.09, ru-1: шесть лишних слов из такой колонки)."""
+    words = _lines(["Наступила", "поздняя", "осень"])
+    margin = Word(text="5", box=Box(x0=900, y0=0, x1=910, y1=20), confidence=0.4, line=None)
+    task = SubjectTask(number="1", words=[words[0], margin, *words[1:]])
     assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
 
 
