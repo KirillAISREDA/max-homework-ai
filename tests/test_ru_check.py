@@ -1,5 +1,5 @@
 from hwcheck.subjects.base import Box, SubjectTask, Word
-from hwcheck.subjects.russian.check import MAX_DIFF_SHARE, check_words
+from hwcheck.subjects.russian.check import MAX_DIFF_SHARE, MIN_MATCH_SHARE, check_words
 from hwcheck.subjects.russian.gaps import DerivedText
 
 
@@ -30,6 +30,26 @@ def test_spelling_in_gap_is_candidate_with_word_and_expected() -> None:
     assert finding.detail == "проверь слово «позняя»"
 
 
+def test_punctuation_glued_to_the_word_stays_out_of_the_question() -> None:
+    """OCR приклеил к слову запятую («спасти,»): в вопрос и в находку идёт слово, а в `word`
+    остаётся прочитанное как есть — по нему кропается картинка (живой прогон 18.09, ru-1)."""
+    task = SubjectTask(number="1", words=_words("Он", "взял", "спасти,"))
+    [finding] = check_words(0, task, _derived("Он", "взял", "снасти"))
+    assert (finding.actual, finding.expected) == ("спасти", "снасти")
+    assert finding.detail == "проверь слово «спасти»"
+    assert finding.word is not None and finding.word.text == "спасти,"
+
+
+def test_extra_and_missing_word_details_are_cleaned_too() -> None:
+    task = SubjectTask(number="1", words=_words("Наступила", "вдруг,", "осень"))
+    [extra] = check_words(0, task, _derived("Наступила", "осень"))
+    assert (extra.actual, extra.detail) == ("вдруг", "лишнее слово «вдруг»?")
+
+    task = SubjectTask(number="1", words=_words("Наступила,"))
+    [missing] = check_words(0, task, _derived("Наступила", "осень"))
+    assert missing.detail == "кажется, пропущено слово после «Наступила»"
+
+
 def test_gap_findings_come_first_then_high_confidence() -> None:
     words = _words("Настипила", "позняя", "осинь")
     words[2] = words[2].model_copy(update={"confidence": 0.3})
@@ -39,7 +59,9 @@ def test_gap_findings_come_first_then_high_confidence() -> None:
 
 
 def test_missing_and_extra_words() -> None:
-    task = SubjectTask(number="1", words=_words("У", "гость", "был"))
+    # лишнее слово — внутри текста: о лишнем слове ПОСЛЕ текста не спрашиваем (см.
+    # test_extra_words_after_the_text_are_not_findings)
+    task = SubjectTask(number="1", words=_words("У", "был", "гость"))
     findings = check_words(0, task, _derived("У", "нас", "гость"))
     assert [(f.kind, f.actual, f.expected) for f in findings] == [
         ("missing_word", None, "нас"),
@@ -179,6 +201,64 @@ def test_unrecognised_furniture_before_the_text_is_dropped() -> None:
     assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
 
 
+def test_another_work_below_the_text_is_not_a_finding() -> None:
+    """Полуглобальная сверка (живой прогон 18.09, ru-4): на странице домашняя работа, а ниже —
+    «Классная работа» со списком из тридцати слов. Раньше 90 слов страницы против 33 слов
+    эталона давали долю расхождений > `MAX_DIFF_SHARE` и «не смог сверить» на верной работе."""
+    other = [f"слово{index}" for index in range(30)]
+    task = SubjectTask(
+        number="1",
+        words=_lines(
+            ["17", "сентября"],
+            ["Домашняя", "работа"],
+            ["Наступила", "позняя", "осень"],
+            ["Подул", "холодный", "ветер"],
+            ["Улетели", "птицы"],
+            ["Пожелтела", "трава"],
+            ["Скоро", "выпадет", "снег"],
+            ["Классная", "работа"],
+            other[:10],
+            other[10:20],
+            other[20:],
+        ),
+    )
+    derived = _derived(
+        "Наступила", "поздняя", "осень", "Подул", "холодный", "ветер", "Улетели", "птицы",
+        "Пожелтела", "трава", "Скоро", "выпадет", "снег",
+    )  # fmt: skip
+    [finding] = check_words(0, task, derived)
+    assert (finding.kind, finding.actual, finding.expected) == ("spelling", "позняя", "поздняя")
+
+
+def test_extra_words_after_the_text_are_not_findings() -> None:
+    """Цена полуглобальной сверки: лишнее слово сразу за текстом не отличить от начала другой
+    работы, поэтому о нём не спрашиваем — в отличие от лишнего слова внутри текста."""
+    task = SubjectTask(number="1", words=_words("Наступила", "поздняя", "осень", "уже", "потом"))
+    assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
+
+
+def test_page_without_the_reference_text_is_uncertain() -> None:
+    """Обрезка лишнего сверху и снизу не должна выдавать чужую страницу за верную работу: с
+    эталоном сошлось одно слово из шести — это не то упражнение, а случайное совпадение."""
+    task = SubjectTask(
+        number="1",
+        words=_lines(["Классная", "работа"], ["осень", "морковь", "капуста", "свёкла"]),
+    )
+    derived = _derived("Наступила", "поздняя", "осень", "уже", "в", "лесу")
+    [finding] = check_words(0, task, derived)
+    assert (finding.kind, finding.detail) == ("uncertain", "не смог сверить с упражнением")
+    assert MIN_MATCH_SHARE == 0.5
+
+
+def test_margin_marks_without_a_line_are_not_findings() -> None:
+    """Колонка цифр на поле тетради: OCR не отнёс их ни к одной строке — это пометки на полях,
+    а не слова упражнения (живой прогон 18.09, ru-1: шесть лишних слов из такой колонки)."""
+    words = _lines(["Наступила", "поздняя", "осень"])
+    margin = Word(text="5", box=Box(x0=900, y0=0, x1=910, y1=20), confidence=0.4, line=None)
+    task = SubjectTask(number="1", words=[words[0], margin, *words[1:]])
+    assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
+
+
 def test_too_many_near_miss_words_is_uncertain() -> None:
     task = SubjectTask(
         number="1",
@@ -204,6 +284,43 @@ def test_missing_word_at_start_has_generic_detail() -> None:
     task = SubjectTask(number="1", words=_words("были"))
     [finding] = check_words(0, task, _derived("Жили", "были"))
     assert finding.detail == "кажется, в начале пропущено слово"
+
+
+def test_hyphenated_word_split_by_line_break_is_not_a_finding() -> None:
+    """Перенос «сред-/них» — одно слово эталона, а не описка плюс лишнее слово."""
+    task = SubjectTask(number="1", words=_lines(["в", "сред-"], ["них", "классах"]))
+    assert check_words(0, task, _derived("в", "средних", "классах")) == []
+
+
+def test_childs_own_hyphenation_error_is_one_finding_with_the_left_crop() -> None:
+    """Ребёнок написал «сде-делал» через перенос: это одна описка, а не половинки. В вопросе —
+    слово с дефисом (так на странице), в `word` — левая половина, по ней и кроп (ревью ветки)."""
+    words = _lines(["Учитель", "сде-"], ["делал", "важные", "объявления"])
+    task = SubjectTask(number="1", words=words)
+    [finding] = check_words(0, task, _derived("Учитель", "сделал", "важные", "объявления"))
+    assert (finding.kind, finding.actual, finding.expected) == ("spelling", "сде-делал", "сделал")
+    assert finding.detail == "проверь слово «сде-делал»"
+    assert finding.word is not None and finding.word.box == words[1].box
+
+
+def test_punctuation_and_item_numbers_of_the_page_are_not_words() -> None:
+    """«!» и номер пункта «2)» словом не являются: в эталоне цифр и знаков нет (`tokenize`), с
+    ними нечего сверять, а в находках это шум (живой прогон 18.09: «лишнее слово «!»»)."""
+    task = SubjectTask(
+        number="1", words=_words("Наступила", "!", "поздняя", "2)", "осень")
+    )  # fmt: skip
+    assert check_words(0, task, _derived("Наступила", "поздняя", "осень")) == []
+
+
+def test_dash_at_the_end_of_a_line_keeps_both_words() -> None:
+    """«до дома — / уставшие»: обе половины есть в эталоне, а склеенного «домауставшие» нет —
+    слова остаются раздельными, и остальной текст сходится (живой прогон 18.09, ru-1)."""
+    task = SubjectTask(
+        number="1", words=_lines(["Мы", "шли", "до", "дома-"], ["уставшие", "и", "мокрые"])
+    )
+    # тире на краю слова снимает `normalize`, поэтому «дома-» сходится с «дома» без находки
+    derived = _derived("Мы", "шли", "до", "дома", "уставшие", "и", "мокрые")
+    assert check_words(0, task, derived) == []
 
 
 def test_two_consecutive_missing_words_reference_last_written_word() -> None:

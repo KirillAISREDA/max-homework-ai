@@ -14,6 +14,7 @@ from typing import Any
 
 from hwcheck.bot.check import CheckModels
 from hwcheck.ocr_client import OcrClient, OcrError
+from hwcheck.pipeline.normalize import normalize_image, rotate_image
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.tutor import TutorSession, WordTutoring
 from hwcheck.pipeline.vision import VisionAndChatClient
@@ -74,23 +75,21 @@ class RussianModule:
         self._dictionary = dictionary
 
     async def recognize(self, image: bytes) -> SubjectPage:
-        page, usage = await recognize_page(self._llm, image, model=self._models.vision)
+        page, usage, rotation = await recognize_page(self._llm, image, model=self._models.vision)
         if page.role == "textbook":
-            return SubjectPage(
-                subject=self.code, role="textbook", tasks=textbook_tasks(page, None), usage=usage
-            )
+            return SubjectPage(subject=self.code, role="textbook", usage=usage, rotation=rotation,
+                               tasks=textbook_tasks(page, None))  # fmt: skip
         if page.role != "notebook":
-            return SubjectPage(
-                subject=self.code, role="unknown", tasks=[], comment=page.comment, usage=usage
-            )
-        words = await self._ocr_words(image)
+            return SubjectPage(subject=self.code, role="unknown", tasks=[], comment=page.comment,
+                               usage=usage, rotation=rotation)  # fmt: skip
+        # OCR читает тот же кадр, в котором vision узнал тетрадь: страницу, снятую боком, он иначе
+        # читает как мусор, а координаты слов не совпали бы с сохранённым фото (живой прогон 18.09)
+        words = await self._ocr_words(_rotated(image, rotation))
         if words is None:
-            return SubjectPage(
-                subject=self.code, role="notebook", tasks=[], failure="ocr_failed", usage=usage
-            )
-        return SubjectPage(
-            subject=self.code, role="notebook", tasks=[notebook_task(words)], usage=usage
-        )
+            return SubjectPage(subject=self.code, role="notebook", tasks=[], failure="ocr_failed",
+                               usage=usage, rotation=rotation)  # fmt: skip
+        return SubjectPage(subject=self.code, role="notebook", tasks=[notebook_task(words)],
+                           usage=usage, rotation=rotation)  # fmt: skip
 
     async def _ocr_words(self, image: bytes) -> list[Word] | None:
         if self._ocr is None:
@@ -231,6 +230,13 @@ class RussianModule:
             expected=finding.expected,
             word=word,
         )
+
+
+def _rotated(image: bytes, degrees: int) -> bytes:
+    """Кадр, в котором vision узнал страницу (`recognize_page` вертит уже нормализованную)."""
+    if degrees == 0:
+        return image
+    return rotate_image(normalize_image(image), degrees)
 
 
 def _pair_by_words(task: SubjectTask, references: list[Reference]) -> Reference | None:

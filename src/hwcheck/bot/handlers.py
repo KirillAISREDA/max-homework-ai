@@ -50,6 +50,7 @@ from hwcheck.events import EventLog, anonymize, current_trace_id, trace
 from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.grade import GradeResult
+from hwcheck.pipeline.normalize import normalize_image, rotate_image
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import FileCache, RefSolution
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
@@ -119,6 +120,11 @@ class _LanguageAlbum:
     @property
     def remembered(self) -> list[SubjectTask]:
         return list(self.conditions.values())
+
+
+def _rotate(image: bytes, degrees: int) -> bytes:
+    """Тот же кадр, что распознал модуль (`russian.module._rotated`): нормализация и поворот."""
+    return rotate_image(normalize_image(image), degrees)
 
 
 def _split_language_album(
@@ -510,11 +516,21 @@ class Bot:
                 image = await self._max.download(url)
                 photo = self._save_photo(user_id, image)
                 page = await module.recognize(image)
+                if page.rotation:
+                    # модуль довернул фото, чтобы распознать страницу: координаты слов OCR
+                    # относятся к повёрнутому кадру — в хранилище едет он же, иначе кроп в
+                    # вопросе «здесь написано …?» покажет не то место (живой прогон 18.09, ru-2).
+                    # PIL блокирует поток — поворот в отдельном, цикл событий бота свободен
+                    image = await asyncio.to_thread(_rotate, image, page.rotation)
+                    # без запасного пути на исходный кадр: пустой путь — вопрос уйдёт текстом,
+                    # а кроп по координатам повёрнутого кадра с исходного фото — не то место
+                    photo = self._save_photo(user_id, image)
                 if page.role == "textbook":
                     kb_photo = self._save_kb_photo(user_id, image)
                 self._events.log("page_recognized", user_id=user_id, subject=module.code,
                                  role=page.role, n_tasks=len(page.tasks), calls=page.usage.calls,
-                                 tokens=page.usage.tokens, photo=photo)  # fmt: skip
+                                 tokens=page.usage.tokens, photo=photo,
+                                 rotation=page.rotation)  # fmt: skip
                 if page.failure == "ocr_failed":
                     self._events.log("ocr_failed", user_id=user_id, subject=module.code)
                 pages.append(page)

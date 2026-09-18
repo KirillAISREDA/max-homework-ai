@@ -10,9 +10,11 @@ from hwcheck.llm.base import ChatMessage, LLMResult
 from hwcheck.subjects.base import Box, Word
 from hwcheck.subjects.russian.recognize import (
     FILLED_BY_HAND_COMMENT,
+    ORIENTATIONS,
     RuExercise,
     RuPage,
     header_number,
+    merge_hyphenation,
     notebook_task,
     recognize_page,
     task_kind,
@@ -20,9 +22,9 @@ from hwcheck.subjects.russian.recognize import (
 )
 
 
-def _jpeg() -> bytes:
+def _jpeg(width: int = 8, height: int = 8) -> bytes:
     buffer = io.BytesIO()
-    Image.new("RGB", (8, 8), "white").save(buffer, format="JPEG")
+    Image.new("RGB", (width, height), "white").save(buffer, format="JPEG")
     return buffer.getvalue()
 
 
@@ -62,7 +64,7 @@ NOTEBOOK = json.dumps({"role": "notebook", "exercises": []})
 
 async def test_recognize_textbook_page() -> None:
     vision = FakeVision([TEXTBOOK])
-    page, usage = await recognize_page(vision, _jpeg(), model="v")
+    page, usage, _degrees = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "textbook" and page.exercises[0].number == "245"
     assert (usage.calls, usage.tokens) == (1, 10)
 
@@ -74,7 +76,7 @@ async def test_notebook_page_has_no_text_from_vision() -> None:
         ensure_ascii=False,
     )
     vision = FakeVision([handwritten])
-    page, _ = await recognize_page(vision, _jpeg(), model="v")
+    page, _usage, _degrees = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "notebook" and page.exercises == []
 
 
@@ -91,7 +93,7 @@ async def test_filled_in_workbook_is_not_a_reference() -> None:
         ensure_ascii=False,
     )
     vision = FakeVision([filled])
-    page, usage = await recognize_page(vision, _jpeg(), model="v")
+    page, usage, _degrees = await recognize_page(vision, _jpeg(), model="v")
     assert (page.role, page.exercises) == ("unknown", [])
     assert page.comment == FILLED_BY_HAND_COMMENT
     assert usage.calls == 1  # доворачивать заполненную страницу незачем
@@ -100,13 +102,23 @@ async def test_filled_in_workbook_is_not_a_reference() -> None:
 async def test_unknown_role_tries_next_orientation_then_gives_up() -> None:
     unknown = json.dumps({"role": "unknown", "exercises": [], "comment": "пусто"})
     vision = FakeVision([unknown, unknown, unknown])
-    page, usage = await recognize_page(vision, _jpeg(), model="v")
+    page, usage, degrees = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "unknown" and usage.calls == 3
+    assert degrees == 0  # страницу не узнали ни в одной ориентации — поворачивать нечего
+
+
+async def test_recognize_page_reports_the_orientation_it_recognised() -> None:
+    """Ориентацию, в которой vision узнал страницу, возвращаем наверх: OCR обязан читать тот же
+    кадр, иначе страница боком читается как мусор (живой прогон 18.09, ru-2: 184 слова)."""
+    unknown = json.dumps({"role": "unknown", "exercises": []})
+    vision = FakeVision([unknown, NOTEBOOK])
+    page, _usage, degrees = await recognize_page(vision, _jpeg(), model="v")
+    assert page.role == "notebook" and degrees == ORIENTATIONS[1] == 270
 
 
 async def test_invalid_json_counts_as_unknown() -> None:
     vision = FakeVision(["не json", NOTEBOOK])
-    page, _ = await recognize_page(vision, _jpeg(), model="v")
+    page, _usage, _degrees = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "notebook"
 
 
@@ -115,7 +127,7 @@ async def test_textbook_without_exercises_tries_next_orientation() -> None:
     # прочитать задания; следующая ориентация находит их
     empty_textbook = json.dumps({"role": "textbook", "exercises": []})
     vision = FakeVision([empty_textbook, TEXTBOOK])
-    page, usage = await recognize_page(vision, _jpeg(), model="v")
+    page, usage, _degrees = await recognize_page(vision, _jpeg(), model="v")
     assert page.role == "textbook" and page.exercises[0].number == "245"
     assert usage.calls == 2
 
@@ -192,6 +204,84 @@ def test_notebook_task_orders_words_by_line_then_x() -> None:
     assert task.lines == ["Наступила осень"]
 
 
+def _boxed(text: str, top: int, x: int, *, height: int = 20, line: int | None = 0) -> Word:
+    return Word(text=text, box=Box(x0=x, y0=top, x1=x + 30, y1=top + height), line=line)
+
+
+def test_notebook_task_joins_engine_lines_that_are_one_row() -> None:
+    """Порядок строк — свой, по рамкам (исследование 13.09). Движок на наклонной странице развёл
+    одну строку на две и перепутал их местами: «Белка спрятала» оказалась ПОСЛЕ «орехи в»
+    (живой прогон 18.09, ru-6)."""
+    words = [
+        _boxed("орехи", 630, 300, line=3),
+        _boxed("в", 632, 400, line=3),
+        _boxed("Белка", 628, 100, line=4),
+        _boxed("спрятала", 626, 180, line=4),
+        _boxed("дупло", 700, 100, line=5),
+    ]
+    task = notebook_task(words)
+    assert task.lines == ["Белка спрятала орехи в", "дупло"]
+    assert [(w.text, w.line) for w in task.words] == [
+        ("Белка", 0), ("спрятала", 0), ("орехи", 0), ("в", 0), ("дупло", 1),
+    ]  # fmt: skip
+
+
+def test_notebook_task_keeps_a_slanted_row_together() -> None:
+    """Строка «уезжает» вниз к правому краю: собранный движком кусок мы не рассыпаем — строки
+    склеиваем, но не делим (на живых фото наклон доходит до высоты строки, ru-1 и ru-3 18.09)."""
+    words = [
+        _boxed("Я", 90, 0), _boxed("учусь", 94, 40), _boxed("писать", 98, 100),
+        _boxed("ровно", 140, 0, line=1),
+    ]  # fmt: skip
+    task = notebook_task(words)
+    assert task.lines == ["Я учусь писать", "ровно"]
+
+
+def test_notebook_task_without_boxes_keeps_engine_lines() -> None:
+    words = [Word(text="осень", line=1), Word(text="Наступила", line=0)]
+    task = notebook_task(words)
+    assert task.lines == ["Наступила", "осень"]
+
+
+def test_notebook_task_does_not_join_two_rows_overlapping_in_x() -> None:
+    """Половинки разорванной строки стоят рядом (по горизонтали не пересекаются), а две настоящие
+    строки идут одна над другой и по горизонтали перекрываются — такие не склеиваем."""
+    halves = [
+        _boxed("правая", 620, 633, line=0), _boxed("половина", 622, 700, line=0),
+        _boxed("левая", 618, 226, line=1), _boxed("часть", 616, 400, line=1),
+    ]  # fmt: skip
+    assert notebook_task(halves).lines == ["левая часть правая половина"]
+
+    rows = [
+        _boxed("первая", 600, 2, line=0), _boxed("строка", 602, 400, line=0),
+        _boxed("вторая", 610, 3, line=1), _boxed("строка", 612, 420, line=1),
+    ]  # fmt: skip
+    assert notebook_task(rows).lines == ["первая строка", "вторая строка"]
+
+
+def test_notebook_task_uses_geometry_even_if_a_margin_mark_has_no_box() -> None:
+    """Пометка на полях без рамки не должна отключать свой порядок строк для всей страницы."""
+    words = [
+        _boxed("орехи", 630, 300, line=3),
+        _boxed("Белка", 628, 100, line=4),
+        Word(text="5", line=None),
+    ]
+    assert notebook_task(words).lines[0] == "5 Белка орехи"
+
+
+def test_notebook_task_keeps_words_without_a_line_out_of_rows() -> None:
+    """Слово, которое движок ни в одну строку не собрал, — пометка на полях: своей геометрией мы
+    его в строку тоже не вставляем (иначе цифра с поля вклинится в текст, ru-1 18.09)."""
+    words = [
+        _boxed("Наступила", 100, 0),
+        _boxed("осень", 104, 100),
+        _boxed("5", 102, 900, height=10, line=None),
+    ]
+    task = notebook_task(words)
+    assert [w.line for w in task.words if w.text == "5"] == [None]
+    assert "Наступила осень" in task.lines[0]
+
+
 def test_header_number_ignores_dates_and_page_numbers() -> None:
     assert header_number(["17 сентября 2026"]) is None
     assert header_number(["стр. 12"]) is None
@@ -201,3 +291,61 @@ def test_header_number_ignores_dates_and_page_numbers() -> None:
 
 def test_header_number_bare_line() -> None:
     assert header_number(["245."]) == "245"
+
+
+# --- переносы слов через дефис (живой прогон 18.09) ---
+
+
+def _hyphen_word(text: str, line: int, x: int, confidence: float = 0.9) -> Word:
+    return Word(
+        text=text,
+        box=Box(x0=x, y0=line * 20, x1=x + 30, y1=line * 20 + 15),
+        confidence=confidence,
+        line=line,
+    )
+
+
+def test_merge_hyphenation_joins_word_split_by_line_break() -> None:
+    """«сред-» в конце строки и «них» в начале следующей — одно слово «сред-них»: без склейки
+    обе половины уходили в находки (живой прогон 18.09, ru-1).
+
+    Дефис в склеенном слове остаётся: ребёнок именно так и написал, и вопрос «здесь написано
+    «сде-делал»?» называет то, что на странице. Рамка — левой половины: объединение растянуло бы
+    кроп на две строки целиком (ревью ветки)."""
+    words = [
+        _hyphen_word("в", 0, 0),
+        _hyphen_word("сред-", 0, 40, confidence=0.4),
+        _hyphen_word("них", 1, 0, confidence=0.8),
+        _hyphen_word("классах", 1, 40),
+    ]
+    merged = merge_hyphenation(words)
+    assert [w.text for w in merged] == ["в", "сред-них", "классах"]
+    joined = merged[1]
+    assert joined.box == words[1].box  # кроп покажет «сред-», а не две строки
+    assert joined.confidence == 0.4 and joined.line == 0
+
+
+def test_hyphen_not_at_the_end_of_a_line_is_not_a_hyphenation() -> None:
+    words = [_hyphen_word("сред-", 0, 0), _hyphen_word("них", 0, 40)]
+    assert [w.text for w in merge_hyphenation(words)] == ["сред-", "них"]
+
+
+def test_single_letter_before_the_hyphen_is_a_dash_not_a_hyphenation() -> None:
+    """«а -» в конце строки — тире, а не перенос: слово переносят минимум с двух букв."""
+    words = [_hyphen_word("а-", 0, 0), _hyphen_word("Потом", 1, 0)]
+    assert [w.text for w in merge_hyphenation(words)] == ["а-", "Потом"]
+
+
+def test_dash_between_two_reference_words_is_not_merged() -> None:
+    """«до дома — уставшие»: склеенного «домауставшие» в эталоне нет, а обе половины есть —
+    это тире на конце строки, склеивать нельзя (живой прогон 18.09, ru-1)."""
+    words = [_hyphen_word("дома-", 0, 0), _hyphen_word("уставшие", 1, 0)]
+    reference = {"дома", "уставшие", "до"}
+    assert [w.text for w in merge_hyphenation(words, reference)] == ["дома-", "уставшие"]
+    # склеенное слово есть в эталоне — это перенос, а не тире
+    assert [w.text for w in merge_hyphenation(words, {"домауставшие"})] == ["дома-уставшие"]
+
+
+def test_merge_hyphenation_without_reference_prefers_merging() -> None:
+    words = [_hyphen_word("круп-", 0, 0), _hyphen_word("ным", 1, 0)]
+    assert [w.text for w in merge_hyphenation(words, set())] == ["круп-ным"]

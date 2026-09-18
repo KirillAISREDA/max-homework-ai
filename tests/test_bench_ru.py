@@ -94,6 +94,7 @@ class _FakeRuModule:
     references: list[Reference] = field(default_factory=list)
     results: list[TaskResult] = field(default_factory=list)
     check_error: Exception | None = None
+    seen_conditions: list[SubjectTask] = field(default_factory=list)
 
     async def recognize(self, image: bytes) -> SubjectPage:
         return self.pages[image]
@@ -101,6 +102,7 @@ class _FakeRuModule:
     async def resolve_reference(
         self, tasks: list[SubjectTask], kb: object | None
     ) -> list[Reference]:
+        self.seen_conditions = list(tasks)
         return self.references
 
     async def check(
@@ -157,6 +159,62 @@ async def test_run_ru_case_happy_path(tmp_path: Path) -> None:
     assert run.error is None
     assert run.reference_trust == "verified"
     assert [f["actual"] for f in run.findings] == ["позняя"]
+
+
+def _notebook_only_case(
+    tmp_path: Path, notebook: bytes, **exercise: object
+) -> tuple[RuGoldenCase, dict[str, Path]]:
+    path = tmp_path / "notebook.jpg"
+    path.write_bytes(notebook)
+    digest = hashlib.sha256(notebook).hexdigest()
+    case = _case(photos=[{"sha256": digest, "role": "notebook"}], exercise=exercise)
+    return case, {digest: path}
+
+
+def _notebook_module(notebook: bytes) -> _FakeRuModule:
+    reference = Reference(task_number="245", origin="derived", trust="verified", payload={})
+    finding = Finding(
+        task_index=0, kind="spelling", strength="candidate", expected="поздняя", actual="позняя"
+    )
+    return _FakeRuModule(
+        pages={
+            notebook: SubjectPage(
+                subject="russian", role="notebook", tasks=[SubjectTask(number="245")]
+            )
+        },
+        references=[reference],
+        results=[TaskResult(task_index=0, findings=[finding], reference=reference)],
+    )
+
+
+async def test_run_ru_case_without_a_textbook_photo_uses_the_typed_exercise(
+    tmp_path: Path,
+) -> None:
+    """Живые кейсы приходят фотографиями тетради и набранным эталоном — страницы учебника нет.
+    Условие берём из разметки (`exercise.text`), иначе кейс падал с `no_reference`."""
+    notebook = _jpeg("black")
+    case, index = _notebook_only_case(
+        tmp_path, notebook, number="245", text="Наступила п_здняя ос_нь."
+    )
+    module = _notebook_module(notebook)
+
+    run = await run_ru_case(module, None, case, index)  # type: ignore[arg-type]
+
+    assert run.error is None and [f["actual"] for f in run.findings] == ["позняя"]
+    [condition] = module.seen_conditions
+    assert (condition.number, condition.number_on_page) == ("245", True)
+    assert condition.condition == "Наступила п_здняя ос_нь."
+
+
+async def test_run_ru_case_without_a_textbook_photo_and_without_a_number(tmp_path: Path) -> None:
+    notebook = _jpeg("black")
+    case, index = _notebook_only_case(tmp_path, notebook, number=None, text="Наступила осень.")
+    module = _notebook_module(notebook)
+
+    await run_ru_case(module, None, case, index)  # type: ignore[arg-type]
+
+    [condition] = module.seen_conditions
+    assert (condition.number, condition.number_on_page) == ("1", False)
 
 
 async def test_run_ru_case_reports_ocr_failed(tmp_path: Path) -> None:

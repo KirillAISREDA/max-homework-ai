@@ -1,8 +1,10 @@
 """Русский через контракт SubjectModule: фейки vision, OCR и базы знаний."""
 
+import io
 import json
 
 import pytest
+from PIL import Image
 
 from hwcheck.bot.check import CheckModels
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
@@ -28,8 +30,10 @@ MODELS = CheckModels(vision="v", structure="s", solver="m")
 class FakeOcr:
     def __init__(self, words: list[Word] | None) -> None:
         self._words = words
+        self.images: list[bytes] = []  # кадры, которые дошли до OCR: их сверяет тест поворота
 
     async def recognize(self, image: bytes) -> list[Word]:
+        self.images.append(image)
         if self._words is None:
             raise OcrError("ocr: ConnectError")
         return self._words
@@ -48,6 +52,33 @@ async def test_recognize_textbook_and_notebook() -> None:
     notebook = await module.recognize(_jpeg())
     assert notebook.role == "notebook" and notebook.tasks[0].words[0].text == "осень"
     assert notebook.usage.calls == 1  # vision один раз; OCR не считается вызовом LLM
+
+
+async def test_recognize_rotates_the_photo_for_ocr() -> None:
+    """Фото боком: vision узнал тетрадь только в повёрнутой ориентации, а OCR получал исходные
+    байты — страница превращалась в мусор (живой прогон 18.09, ru-2: 184 слова)."""
+    unknown = json.dumps({"role": "unknown", "exercises": []})
+    image = _jpeg(40, 20)
+    ocr = FakeOcr([_w("осень", 0)])
+    module = RussianModule(FakeVision([unknown, NOTEBOOK]), MODELS, ocr=ocr, dictionary=WORDS)
+
+    page = await module.recognize(image)
+
+    assert page.role == "notebook" and page.rotation == 270
+    [sent] = ocr.images
+    assert sent != image
+    with Image.open(io.BytesIO(sent)) as rotated:
+        assert rotated.size == (20, 40)  # кадр повёрнут, а не просто пережат
+
+
+async def test_recognize_without_rotation_gives_ocr_the_original_photo() -> None:
+    image = _jpeg(40, 20)
+    ocr = FakeOcr([_w("осень", 0)])
+    module = RussianModule(FakeVision([NOTEBOOK]), MODELS, ocr=ocr, dictionary=WORDS)
+
+    page = await module.recognize(image)
+
+    assert page.rotation == 0 and ocr.images == [image]
 
 
 async def test_recognize_notebook_when_ocr_fails() -> None:
