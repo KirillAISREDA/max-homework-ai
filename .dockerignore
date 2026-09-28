@@ -10,6 +10,7 @@ docs
 assets
 !assets/hunspell
 !assets/kb
+!assets/pricing
 .env
 .env.*
 !.env.example
