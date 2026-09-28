@@ -63,3 +63,16 @@ def test_runner_picks_store_by_settings(tmp_path: Path) -> None:
 def test_runner_photo_store_disabled_by_zero_ttl(tmp_path: Path) -> None:
     assert _make_photo_store(Settings(_env_file=None, photos_ttl_days=0)) is None
     assert _make_photo_store(Settings(_env_file=None, photos_dir=str(tmp_path))) is not None
+
+
+async def test_state_saved_before_homework_id_is_readable() -> None:
+    """Состояние, записанное до выката учёта проверок: поля `homework_id` в нём нет."""
+    client = fakeredis.FakeAsyncRedis()
+    old = sample_state().model_dump_json(exclude={"homework_id"})
+    assert "homework_id" not in old
+    await client.set(f"fsm:{anonymize(7)}", old)
+    restored = await RedisStateStore(client).get(7)
+    assert restored == sample_state() and restored.homework_id is None
+
+    await RedisStateStore(client).set(7, restored.model_copy(update={"homework_id": 12}))
+    assert (await RedisStateStore(client).get(7)).homework_id == 12
