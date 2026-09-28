@@ -362,6 +362,23 @@ def test_contest_requests_are_component_events_apart_from_user_actions() -> None
     assert contest.component_events_without_summaries == 11
 
 
+def test_solver_answer_from_cache_is_a_request_of_its_own() -> None:
+    """Ответ солвера из кэша — обращение к компоненту без вызова модели: `llm_call` у него нет,
+    дублировать нечего. Событие солвера с вызовом модели повторяет свой `llm_call`."""
+    where: dict[str, Any] = {"trace": "t1", "user": "u1", "ts": DAY1}
+    rows = [
+        *one_check(),  # 2 llm + валидатор в зачёт, сводное событие распознавания — нет
+        call("solver", MAX, 1_000, 200, **where),
+        event("solver_call", component="solver", from_cache=False, tokens=1_200, **where),
+        event("solver_call", component="solver", from_cache=True, tokens=0, **where),
+    ]
+    contest = cost_report(rows, PRICING).contest
+    assert contest.component_events == 7
+    assert contest.step_summary_events == 2  # распознавание и солвер с вызовом модели
+    assert contest.component_events_without_summaries == 5
+    assert contest.per_check == pytest.approx(5.0)
+
+
 # --- вывод ---
 
 

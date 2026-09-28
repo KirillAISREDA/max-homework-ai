@@ -355,8 +355,8 @@ def _contest(window: Sequence[Row], check_traces: set[str]) -> ContestRequests:
     components = [row for row in window if row.get("component") is not None]
     actions = [row for row in window if row.get("user_initiated") is True]
     by_component = Counter(str(row["component"]) for row in components)
-    summaries = sum(by_component[name] for name in STEP_SUMMARY_COMPONENTS)
-    counted = [row for row in components if row["component"] not in STEP_SUMMARY_COMPONENTS]
+    counted = [row for row in components if not _repeats_llm_call(row)]
+    summaries = len(components) - len(counted)
     user_days = {
         (row["user"], datetime.fromtimestamp(row["ts"], MSK).date())
         for row in window
@@ -383,6 +383,12 @@ def _contest(window: Sequence[Row], check_traces: set[str]) -> ContestRequests:
         user_initiated_per_check=in_checks(actions) / n_checks if n_checks else None,
         user_initiated_per_user_day=of_users(actions) / n_days if n_days else None,
     )
+
+
+def _repeats_llm_call(row: Row) -> bool:
+    """Сводное событие шага, у которого есть свой `llm_call`. Ответ солвера из кэша — не оно:
+    модель не вызывалась, и это событие — единственная запись об обращении к солверу."""
+    return row["component"] in STEP_SUMMARY_COMPONENTS and row.get("from_cache") is not True
 
 
 def _moscow(ts: float) -> str:
