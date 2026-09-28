@@ -10,6 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from hwcheck.llm.base import ChatMessage, LLMClient, StructuredOutputError, chat_structured
+from hwcheck.llm.journal import llm_step
 from hwcheck.prompts import load_prompt
 from hwcheck.subjects.kb_models import KbRule
 
@@ -57,7 +58,8 @@ async def classify_orthogram(
         ),
     ]
     try:
-        answer, _ = await chat_structured(llm, messages, _Orthogram, model=model)
+        with llm_step("ru_orthogram", version):
+            answer, _ = await chat_structured(llm, messages, _Orthogram, model=model)
     except StructuredOutputError:
         return None
     if answer.rule_code not in RULE_CODES or answer.confidence < MIN_CONFIDENCE:

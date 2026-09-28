@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from hwcheck.llm.base import VisionClient, extract_json
+from hwcheck.llm.journal import llm_step
 from hwcheck.pipeline.normalize import normalize_image, rotate_image
 from hwcheck.prompts import load_prompt
 from hwcheck.subjects.base import SubjectTask, Usage, Word
@@ -81,7 +82,10 @@ async def recognize_page(
     # так и не найдём упражнений ни в одной ориентации, вернём её, а не "unknown" последней попытки
     for degrees in ORIENTATIONS:
         data = normalized if degrees == 0 else rotate_image(normalized, degrees)
-        result = await client.analyze_image(data, prompt=prompt, model=model, filename="page.jpg")
+        with llm_step("ru_page", prompt_version):
+            result = await client.analyze_image(
+                data, prompt=prompt, model=model, filename="page.jpg"
+            )
         usage.calls += 1
         usage.tokens += result.tokens_in + result.tokens_out
         try:

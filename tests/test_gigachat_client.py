@@ -23,8 +23,8 @@ def fake_response(content: str) -> SimpleNamespace:
 async def test_chat_maps_payload_and_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     # свои часы: мгновенный ответ мока на Windows укладывается в один тик таймера (latency 0.0)
     ticks = iter([10.0, 10.5])
-    # подменяем имя time в модуле клиента, а не time.monotonic: им же живёт цикл asyncio
-    clock = SimpleNamespace(monotonic=lambda: next(ticks))
+    # подменяем имя time в модуле клиента, а не сами часы: ими же живёт цикл asyncio
+    clock = SimpleNamespace(perf_counter=lambda: next(ticks))
     monkeypatch.setattr("hwcheck.llm.gigachat_client.time", clock)
     client = make_client()
     achat = AsyncMock(return_value=fake_response("привет"))

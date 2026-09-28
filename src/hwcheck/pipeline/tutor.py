@@ -15,6 +15,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from hwcheck.llm.base import ChatMessage, LLMClient, StructuredOutputError, chat_structured
+from hwcheck.llm.journal import llm_step
 from hwcheck.pipeline.classifier import ErrorAnalysis
 from hwcheck.pipeline.mathparse import parse_line, parse_value
 from hwcheck.pipeline.solver import RefSolution
@@ -78,10 +79,11 @@ async def tutor_reply(
     prompt_version: str = "v1",
 ) -> tuple[str, TutorSession]:
     if session.word is not None:
-        return await _word_reply(
-            client, session, session.word, student_message,
-            model=model, prompt_version=prompt_version,
-        )  # fmt: skip
+        with llm_step("ru_tutor", prompt_version):
+            return await _word_reply(
+                client, session, session.word, student_message,
+                model=model, prompt_version=prompt_version,
+            )  # fmt: skip
     # compare_answers: True → решено; False и None (реплика — не ответ, «не знаю» /
     # непарсящийся текст) одинаково тратят уровень — любая реплика без верного
     # ответа считается запросом следующей подсказки
@@ -99,14 +101,16 @@ async def tutor_reply(
         *session.history,
         ChatMessage(role="user", content=student_message),
     ]
-    try:
-        turn, _ = await chat_structured(client, messages, TutorTurn, model=model)
-        reply = turn.reply
-    except StructuredOutputError:
-        reply = SAFE_RETRY  # сбой формата не должен ронять диалог с ребёнком
+    # перегенерация при утечке ответа — тот же шаг и тот же промпт, отдельный вызов в журнале
+    with llm_step("tutor", prompt_version):
+        try:
+            turn, _ = await chat_structured(client, messages, TutorTurn, model=model)
+            reply = turn.reply
+        except StructuredOutputError:
+            reply = SAFE_RETRY  # сбой формата не должен ронять диалог с ребёнком
 
-    if not solved_now and session.hint_level < MAX_HINT_LEVEL:
-        reply = await _guard_leak(client, session, messages, reply, model=model)
+        if not solved_now and session.hint_level < MAX_HINT_LEVEL:
+            reply = await _guard_leak(client, session, messages, reply, model=model)
 
     session = session.model_copy(
         update={

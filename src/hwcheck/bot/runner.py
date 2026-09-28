@@ -43,6 +43,7 @@ from hwcheck.db.pool import create_pool
 from hwcheck.db.repo import PgProfileRepository
 from hwcheck.events import EventLog, set_id_hash_key
 from hwcheck.llm.gigachat_client import GigaChatClient
+from hwcheck.llm.journal import JournaledLLM
 from hwcheck.ocr_client import OcrClient
 from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.solver import FileCache
@@ -263,7 +264,9 @@ async def run_polling(settings: Settings) -> None:
         max_client = await resources.enter_async_context(
             MaxClient(settings.max_token, settings.max_base_url, ca_bundle=settings.max_ca_bundle)
         )
-        llm = await resources.enter_async_context(GigaChatClient(settings))
+        # каждый вызов модели — событие llm_call в том же журнале: стоимость проверки и
+        # конкурсный учёт обращений считаются по вызовам, а не по шагам
+        llm = JournaledLLM(await resources.enter_async_context(GigaChatClient(settings)), events)
         me = await max_client.me()
         logger.info("bot started: %s", me.get("name") or me)
         print(f"Бот запущен: {me.get('name', me)}. Ctrl+C — остановка.")
