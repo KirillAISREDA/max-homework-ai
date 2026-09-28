@@ -158,6 +158,15 @@ def test_split_message_by_paragraphs_and_limit() -> None:
     assert split_message("в" * 35, limit=15) == ["в" * 15, "в" * 15, "в" * 5]
 
 
+def test_policy_names_operator_and_has_no_unfilled_fields() -> None:
+    """Родитель соглашается с текстом, в котором оператор назван: пустых полей быть не может."""
+    text = "\n".join(policy_messages())
+    assert "[" not in text and "]" not in text
+    assert "Черновик" not in text
+    assert "ИНН 614301207979" in text and "ОГРНИП 317619600013236" in text
+    assert "Связь с оператором: oooprestige@yandex.ru" in text
+
+
 def test_policy_fits_max_messages() -> None:
     messages = policy_messages()
     assert messages and all(0 < len(m) <= MAX_MESSAGE_LEN for m in messages)
