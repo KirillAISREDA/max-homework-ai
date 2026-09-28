@@ -392,6 +392,41 @@ def test_praise_event_repeats_its_model_call() -> None:
     assert contest.component_events_without_summaries == 4
 
 
+def test_traffic_sources_count_users_by_first_start() -> None:
+    rows = [
+        event("bot_started", trace="s1", user="u1", source="kanal-1", user_initiated=True),
+        event("bot_started", trace="s2", user="u1", source="direct", user_initiated=True),
+        event("bot_started", trace="s3", user="u2", source="kanal-1", user_initiated=True),
+        event("bot_started", trace="s4", user="u3", source="invite", user_initiated=True),
+        event("bot_started", trace="s5", user="u4", user_initiated=True),  # запись до меток
+        *one_check("t1", user="u1"),
+        *one_check("t2", user="u3"),
+        *one_check("t3", user="u5"),  # бот запущен до начала журнала
+    ]
+    sources = cost_report(rows, PRICING).sources
+    assert [(s.source, s.users, s.users_checked) for s in sources] == [
+        ("kanal-1", 2, 1),
+        ("invite", 1, 1),
+        ("не записан", 2, 1),
+    ]
+    text = render_cost_report(cost_report(rows, PRICING))
+    assert "Источники трафика" in text and "kanal-1" in text
+
+
+def test_source_of_user_survives_report_period() -> None:
+    """Отчёт за период: человек пришёл из канала до начала периода, проверку сделал в нём —
+    источник остаётся его, а не «не записан» (ревью 28.09). Кто в периоде не появлялся — не
+    считается."""
+    rows = [
+        event("bot_started", trace="s1", user="u1", source="kanal-1", ts=DAY1),
+        event("bot_started", trace="s2", user="u2", source="kanal-2", ts=DAY1),
+        *one_check("t1", user="u1", ts=DAY2),
+    ]
+    since = datetime.fromtimestamp(DAY2, UTC).date()
+    sources = cost_report(rows, PRICING, since=since).sources
+    assert [(s.source, s.users, s.users_checked) for s in sources] == [("kanal-1", 1, 1)]
+
+
 # --- вывод ---
 
 

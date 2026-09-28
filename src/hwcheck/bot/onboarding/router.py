@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from hwcheck.bot.invites import parse_code, parse_start_payload
+from hwcheck.bot.invites import parse_code, parse_source, parse_start_payload
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.notifier import ParentNotifier
 from hwcheck.bot.onboarding import texts
@@ -170,7 +170,9 @@ class Onboarding:
 
     async def _on_start(self, actor: Actor, position: Position, payload: str | None) -> Route:
         invite = parse_start_payload(payload)
-        self._ctx.log("bot_started", actor, invite=invite is not None)
+        self._ctx.log(
+            "bot_started", actor, invite=invite is not None, source=_source(payload, invite)
+        )
         if invite is None:
             await self._show(actor, position)
         else:
@@ -331,6 +333,16 @@ class Onboarding:
             return None
         await self.notifier.switch(actor, account, enabled=arg == "on")
         return "handled"
+
+
+def _source(payload: str | None, invite: object | None) -> str:
+    """Источник трафика для журнала. Чужую метку дословно не пишем: её текст задаёт тот, кто
+    собрал ссылку."""
+    if invite is not None:
+        return "invite"
+    if not payload:
+        return "direct"
+    return parse_source(payload) or "unknown"
 
 
 def _parent_side(position: Position) -> bool:

@@ -26,6 +26,8 @@ DEFAULT_PRICING = Path(__file__).resolve().parents[2] / "assets" / "pricing" / "
 MSK = timezone(timedelta(hours=3))
 CHECK_EVENT = "homework_uploaded"
 LLM_EVENT = "llm_call"
+START_EVENT = "bot_started"
+NO_SOURCE = "не записан"
 # события шагов с component, которые суммируют вызовы модели: те же обращения, что и llm_call
 STEP_SUMMARY_COMPONENTS = frozenset({"vision_two_stage", "solver", "classifier", "tutor", "praise"})
 
@@ -108,6 +110,14 @@ class UserCost(BaseModel):
     unpriced_calls: int = 0
 
 
+class TrafficSource(BaseModel):
+    """Откуда пришли пользователи (Положение, Прил. 2 п. 5): по первому запуску бота."""
+
+    source: str
+    users: int = 0
+    users_checked: int = 0  # из них хотя бы с одной проверкой
+
+
 class ContestRequests(BaseModel):
     """Обращения по Положению (Прил. 2 п. 2.2): вызов любого компонента решения.
 
@@ -148,6 +158,7 @@ class CostReport(BaseModel):
     tutoring: TutoringCost = TutoringCost()
     users: UserCost = UserCost()
     contest: ContestRequests = ContestRequests()
+    sources: list[TrafficSource] = Field(default_factory=list)
 
 
 def cost_report(
@@ -158,7 +169,10 @@ def cost_report(
     since: date | None = None,
 ) -> CostReport:
     """Отчёт по среде `env` (None — все среды) с даты `since` (день по московскому времени)."""
+    rows = list(rows)
     selected, skipped = _select(rows, env, since)
+    # источник пользователя — из всей истории среды: он мог прийти до начала периода
+    history = selected if since is None else _select(rows, env, None)[0]
     calls = [row for row in selected if row.get("type") == LLM_EVENT]
     start = _data_start(selected, calls)
     # без llm_call оценивать нечего, но обращения по событиям компонентов посчитать можно
@@ -187,6 +201,7 @@ def cost_report(
         tutoring=_tutoring_cost(priced, check_traces, checks.n),
         users=_user_cost(priced, window),
         contest=_contest(window, check_traces),
+        sources=_sources(history, selected),
     )
 
 
@@ -385,6 +400,30 @@ def _contest(window: Sequence[Row], check_traces: set[str]) -> ContestRequests:
     )
 
 
+def _sources(history: Sequence[Row], rows: Sequence[Row]) -> list[TrafficSource]:
+    """Пользователи периода (`rows`) по источнику первого запуска. Источник ищется во всей
+    истории среды (`history`): человек мог прийти до начала периода и до первого `llm_call`.
+    Без записи об источнике — «не записан»."""
+    active = {row["user"] for row in rows if row.get("user") is not None}
+    first: dict[str, str] = {}
+    for row in sorted(history, key=lambda row: row["ts"]):
+        user = row.get("user")
+        if not isinstance(user, str) or user not in active:
+            continue
+        known = first.setdefault(user, NO_SOURCE)
+        if row.get("type") == START_EVENT and known == NO_SOURCE:
+            first[user] = str(row.get("source") or NO_SOURCE)
+    checked = {row["user"] for row in rows if row.get("type") == CHECK_EVENT and row.get("user")}
+    found = Counter(first.values())
+    with_check = Counter(source for user, source in first.items() if user in checked)
+    named = sorted((s for s in found if s != NO_SOURCE), key=lambda s: (-found[s], s))
+    order = [*named, *([NO_SOURCE] if NO_SOURCE in found else [])]
+    return [
+        TrafficSource(source=source, users=found[source], users_checked=with_check[source])
+        for source in order
+    ]
+
+
 def _repeats_llm_call(row: Row) -> bool:
     """Сводное событие шага, у которого есть свой `llm_call`. Ответ солвера из кэша — не оно:
     модель не вызывалась, и это событие — единственная запись об обращении к солверу."""
@@ -402,11 +441,11 @@ def _moscow(ts: float) -> str:
 def render_cost_report(report: CostReport) -> str:
     lines = [f"Стоимость вызовов модели — среда: {report.env}", *_header(report)]
     if report.data_from is None:
-        lines += ["", *_contest_lines(report.contest)]
+        lines += ["", *_contest_lines(report.contest), "", *_source_lines(report.sources)]
         return "\n".join(lines)
     lines += ["", "По шагам и моделям", *_step_table(report)]
     lines += ["", *_check_lines(report), "", *_tutoring_lines(report), "", *_user_lines(report)]
-    lines += ["", *_contest_lines(report.contest)]
+    lines += ["", *_contest_lines(report.contest), "", *_source_lines(report.sources)]
     return "\n".join(lines)
 
 
@@ -529,6 +568,18 @@ def _contest_lines(contest: ContestRequests) -> list[str]:
         f"  действий пользователя (user_initiated): {_num(contest.user_initiated)}; "
         f"на проверку: {_decimal(contest.user_initiated_per_check)}; "
         f"на пользователя в день: {_decimal(contest.user_initiated_per_user_day)}",
+    ]
+
+
+def _source_lines(sources: Sequence[TrafficSource]) -> list[str]:
+    lines = ["Источники трафика (по первому запуску бота; метка в ссылке — ?start=s_<метка>)"]
+    if not sources:
+        return [*lines, "  пользователей нет"]
+    width = max(len(item.source) for item in sources)
+    return lines + [
+        f"  {item.source.ljust(width)}  пользователей: {_num(item.users)}; "
+        f"из них с проверкой: {_num(item.users_checked)}"
+        for item in sources
     ]
 
 
