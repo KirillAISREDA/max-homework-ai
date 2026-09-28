@@ -170,6 +170,22 @@ def test_model_without_tariff_is_reported_not_priced() -> None:
     assert "тариф не задан" in text and LITE in text
 
 
+def test_total_is_unknown_when_no_call_has_a_tariff() -> None:
+    """Ноль рублей — это утверждение «бесплатно»; когда тарифа нет ни у одного вызова, суммы нет."""
+    report = cost_report([upload(), call("tutor", LITE, 5_000, 500)], PRICING)
+    assert report.total.cost is None and report.total.unpriced_calls == 1
+    assert report.by_step[0].cost is None
+    assert report.outside_traces.cost == 0.0  # вызовов вне трасс не было: ноль настоящий
+
+
+def test_whole_float_token_count_is_read_as_number() -> None:
+    row = {**call("solver", MAX, 0, 0), "tokens_in": 1_000.0, "tokens_out": 1_000.0}
+    report = cost_report([upload(), row], PRICING)
+    assert (report.total.tokens_in, report.total.tokens_out) == (1_000, 1_000)
+    assert report.malformed_calls == 0
+    assert report.total.cost == pytest.approx(1.2)
+
+
 # --- стоимость одной проверки ---
 
 

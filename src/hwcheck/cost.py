@@ -207,11 +207,14 @@ class _PricedCall:
 
 
 def _is_int(value: object) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
+    """Целое число токенов; 1000.0 — тоже: так число может записать другой сериализатор."""
+    if isinstance(value, bool):
+        return False
+    return isinstance(value, int) or (isinstance(value, float) and value.is_integer())
 
 
 def _int(value: object) -> int:
-    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+    return int(value) if _is_int(value) and isinstance(value, int | float) else 0
 
 
 def _unpriced(calls: Iterable["_PricedCall"]) -> int:
@@ -273,6 +276,8 @@ def _usage(calls: Iterable[_PricedCall]) -> Usage:
             usage.unpriced_calls += 1
         else:
             usage.cost = (usage.cost or 0.0) + call.cost
+    if usage.calls and usage.unpriced_calls == usage.calls:
+        usage.cost = None  # тарифа нет ни у одного вызова: «0 руб.» означало бы «бесплатно»
     return usage
 
 
@@ -282,12 +287,8 @@ def _by_step(calls: Iterable[_PricedCall]) -> list[StepUsage]:
         groups[call.step, call.model].append(call)
     rows = []
     for (step, model), group in groups.items():
-        usage = _usage(group)
         # тариф задан на модель: у пары «шаг, модель» цена есть у всех вызовов или ни у одного
-        cost = None if usage.unpriced_calls else usage.cost
-        rows.append(
-            StepUsage(step=step, model=model, **usage.model_dump(exclude={"cost"}), cost=cost)
-        )
+        rows.append(StepUsage(step=step, model=model, **_usage(group).model_dump()))
     # самое дорогое — сверху; строки без тарифа — в конце
     return sorted(rows, key=lambda r: (r.cost is None, -(r.cost or 0.0), r.step, r.model))
 
