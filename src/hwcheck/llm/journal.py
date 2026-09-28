@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 UNKNOWN_STEP = "unknown"
+# столько несохранённых событий подряд — уже не случайный сбой: журнал молчит, а по нему
+# считаются стоимость и обращения конкурса, и тихий день в отчёте от поломки не отличить
+ESCALATE_AFTER = 10
 CallKind = Literal["chat", "vision"]
 
 _step: ContextVar[tuple[str, str | None]] = ContextVar("llm_step", default=(UNKNOWN_STEP, None))
@@ -50,6 +53,7 @@ class JournaledLLM:
     def __init__(self, inner: "VisionAndChatClient", events: EventLog) -> None:
         self._inner = inner
         self._events = events
+        self._failed_in_row = 0
 
     async def chat(
         self,
@@ -120,3 +124,13 @@ class JournaledLLM:
         except Exception as exc:
             # полный диск не должен стоить ребёнку проверки: ответ модели важнее записи о нём
             logger.warning("llm_call не записан в журнал: %s (step=%s)", type(exc).__name__, step)
+            self._failed_in_row += 1
+            if self._failed_in_row == ESCALATE_AFTER:
+                logger.error(
+                    "llm_call не записан %d раз подряд (%s): журнал вызовов модели не ведётся, "
+                    "отчёт о стоимости и обращениях будет занижен",
+                    ESCALATE_AFTER,
+                    type(exc).__name__,
+                )
+        else:
+            self._failed_in_row = 0

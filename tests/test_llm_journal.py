@@ -11,7 +11,7 @@ import pytest
 from conftest import Answer
 from hwcheck.events import EventLog, anonymize, trace
 from hwcheck.llm.base import ChatMessage, LLMResult, StructuredOutputError, chat_structured
-from hwcheck.llm.journal import JournaledLLM, llm_step
+from hwcheck.llm.journal import ESCALATE_AFTER, JournaledLLM, llm_step
 from hwcheck.pipeline.solver import FileCache, solve_task
 
 SECRET_PROMPT = "Маша решила пример 2+2=5"
@@ -232,3 +232,34 @@ async def test_journal_write_failure_does_not_hide_the_model_error(tmp_path: Pat
         await client.chat(user_message(), model="m")
 
     assert raised.value is failure
+
+
+async def test_lasting_journal_failure_is_escalated_once(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Журнал не пишется подряд много раз — это уже не случайность: error, а не поток warning."""
+    client = JournaledLLM(FakeInner(["a"] * (ESCALATE_AFTER + 3)), EventLog(tmp_path, "prod"))
+
+    with caplog.at_level(logging.WARNING, logger="hwcheck.llm.journal"):
+        for _ in range(ESCALATE_AFTER + 3):
+            await client.chat(user_message(), model="m")
+
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(errors) == 1 and str(ESCALATE_AFTER) in errors[0].getMessage()
+
+
+async def test_journal_recovery_resets_failure_streak(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "events.jsonl"
+    log = EventLog(path, "prod")
+    client = JournaledLLM(FakeInner(["a"] * (2 * ESCALATE_AFTER)), log)
+
+    with caplog.at_level(logging.WARNING, logger="hwcheck.llm.journal"):
+        for number in range(2 * ESCALATE_AFTER):
+            # каждая запись перед порогом удаётся — подряд порог не набирается ни разу
+            log._path = path if number % ESCALATE_AFTER == ESCALATE_AFTER - 1 else tmp_path
+            await client.chat(user_message(), model="m")
+
+    assert not [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(llm_calls(path)) == 2

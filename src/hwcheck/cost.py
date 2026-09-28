@@ -89,6 +89,7 @@ class CheckCost(BaseModel):
     cost: Stats = Stats()
     calls: Stats = Stats()
     tokens: Stats = Stats()
+    unpriced_calls: int = 0  # вызовы моделей без тарифа: суммы по проверкам без них
 
 
 class TutoringCost(BaseModel):
@@ -98,11 +99,13 @@ class TutoringCost(BaseModel):
     cost: float = 0.0
     per_user: float | None = None  # на пользователя, у которого был разбор
     per_check: float | None = None  # на одну проверку с вызовами модели
+    unpriced_calls: int = 0
 
 
 class UserCost(BaseModel):
     n: int = 0  # пользователи хотя бы с одной проверкой
     cost: Stats = Stats()
+    unpriced_calls: int = 0
 
 
 class ContestRequests(BaseModel):
@@ -131,6 +134,8 @@ class CostReport(BaseModel):
     data_from: str | None = None  # первый llm_call в журнале (МСК); None — таких событий нет
     data_to: str | None = None
     checks_before_data: int = 0  # проверки до появления llm_call — не оценены
+    skipped_rows: int = 0  # строки журнала без времени (любой среды) — в отчёт не вошли
+    malformed_calls: int = 0  # llm_call, у которых токены не число: посчитаны как 0 токенов
     by_step: list[StepUsage] = Field(default_factory=list)
     total: Usage = Usage()
     outside_traces: Usage = Usage()
@@ -149,7 +154,7 @@ def cost_report(
     since: date | None = None,
 ) -> CostReport:
     """Отчёт по среде `env` (None — все среды) с даты `since` (день по московскому времени)."""
-    selected = _select(rows, env, since)
+    selected, skipped = _select(rows, env, since)
     calls = [row for row in selected if row.get("type") == LLM_EVENT]
     start = _data_start(selected, calls)
     # без llm_call оценивать нечего, но обращения по событиям компонентов посчитать можно
@@ -168,6 +173,8 @@ def cost_report(
         data_from=_moscow(min(row["ts"] for row in calls)) if calls else None,
         data_to=_moscow(max(row["ts"] for row in calls)) if calls else None,
         checks_before_data=_count_checks(before if calls else selected),
+        skipped_rows=skipped,
+        malformed_calls=sum(1 for c in priced if c.malformed),
         by_step=_by_step(priced),
         total=_usage(priced),
         outside_traces=_usage([c for c in priced if c.trace is None]),
@@ -190,6 +197,8 @@ class _PricedCall:
         self.failed = row.get("status") == "error"
         self.tokens_in = _int(row.get("tokens_in"))
         self.tokens_out = _int(row.get("tokens_out"))
+        # нечисловые токены считаются нулём, но вызов не должен сойти за бесплатный молча
+        self.malformed = not (_is_int(row.get("tokens_in")) and _is_int(row.get("tokens_out")))
         self.cost = pricing.cost(self.model, self.tokens_in, self.tokens_out)
 
     @property
@@ -197,25 +206,36 @@ class _PricedCall:
         return self.tokens_in + self.tokens_out
 
 
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _int(value: object) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
-def _select(rows: Iterable[Row], env: str | None, since: date | None) -> list[Row]:
+def _unpriced(calls: Iterable["_PricedCall"]) -> int:
+    return sum(1 for call in calls if call.cost is None)
+
+
+def _select(rows: Iterable[Row], env: str | None, since: date | None) -> tuple[list[Row], int]:
+    """Строки среды и периода и число строк без времени (у них не узнать ни дня, ни порядка)."""
     since_ts = (
         datetime(since.year, since.month, since.day, tzinfo=MSK).timestamp() if since else None
     )
     selected = []
+    skipped = 0
     for row in rows:
         ts = row.get("ts")
         if isinstance(ts, bool) or not isinstance(ts, int | float):
-            continue  # строка без времени — не событие журнала
+            skipped += 1
+            continue
         if env is not None and row.get("env") != env:
             continue
         if since_ts is not None and ts < since_ts:
             continue
         selected.append(row)
-    return selected
+    return selected, skipped
 
 
 def _data_start(selected: Sequence[Row], calls: Sequence[Row]) -> float | None:
@@ -285,6 +305,7 @@ def _check_cost(calls: Iterable[_PricedCall], check_traces: set[str]) -> CheckCo
             by_trace[call.trace].append(call)
     groups = list(by_trace.values())
     return CheckCost(
+        unpriced_calls=sum(_unpriced(group) for group in groups),
         n=len(groups),
         without_calls=len(check_traces) - len(groups),
         cost=_stats([sum(c.cost or 0.0 for c in group) for group in groups]),
@@ -306,6 +327,7 @@ def _tutoring_cost(
         cost=cost,
         per_user=cost / len(users) if users else None,
         per_check=cost / n_checks if n_checks else None,
+        unpriced_calls=_unpriced(tutoring),
     )
 
 
@@ -316,10 +338,12 @@ def _user_cost(calls: Iterable[_PricedCall], window: Iterable[Row]) -> UserCost:
         if row.get("type") == CHECK_EVENT and row.get("user") is not None
     }
     spent: dict[str, float] = dict.fromkeys(users, 0.0)
+    unpriced = 0
     for call in calls:
         if call.user in spent and call.user is not None:
             spent[call.user] += call.cost or 0.0
-    return UserCost(n=len(users), cost=_stats(list(spent.values())))
+            unpriced += call.cost is None
+    return UserCost(n=len(users), cost=_stats(list(spent.values())), unpriced_calls=unpriced)
 
 
 def _contest(window: Sequence[Row], check_traces: set[str]) -> ContestRequests:
@@ -399,6 +423,15 @@ def _header(report: CostReport) -> list[str]:
             f"ВНИМАНИЕ: {NO_TARIFF} для моделей: {', '.join(report.unpriced_models)} — "
             f"{report.total.unpriced_calls} вызовов в суммы не вошли, итоги занижены."
         )
+    if report.malformed_calls:
+        lines.append(
+            f"ВНИМАНИЕ: токены не прочитаны у {report.malformed_calls} событий llm_call — "
+            "посчитаны как 0 токенов, суммы занижены."
+        )
+    if report.skipped_rows:
+        lines.append(
+            f"ВНИМАНИЕ: строк журнала без времени: {report.skipped_rows} — в отчёт не вошли."
+        )
     return lines
 
 
@@ -438,7 +471,7 @@ def _check_lines(report: CostReport) -> list[str]:
         f"Стоимость одной проверки (трассы с {CHECK_EVENT})",
         f"  проверок с вызовами модели: {checks.n}; без вызовов модели (в среднее не входят): "
         f"{checks.without_calls}",
-        f"  сумма:          {_stats_line(checks.cost, _money)}",
+        f"  сумма:          {_stats_line(checks.cost, _money)}{_gap(checks.unpriced_calls)}",
         f"  вызовов модели: {_stats_line(checks.calls, _decimal, _rounded)}",
         f"  токенов:        {_stats_line(checks.tokens, _rounded)}",
     ]
@@ -449,7 +482,7 @@ def _tutoring_lines(report: CostReport) -> list[str]:
     lines = [
         f"Разбор с тьютором (трассы с вызовами модели без {CHECK_EVENT})",
         f"  трасс: {tutoring.traces}; пользователей: {tutoring.users}; вызовов модели: "
-        f"{tutoring.calls}; всего: {_money(tutoring.cost)}",
+        f"{tutoring.calls}; всего: {_money(tutoring.cost)}{_gap(tutoring.unpriced_calls)}",
         f"  на пользователя с разбором: {_money(tutoring.per_user)}; "
         f"на одну проверку: {_money(tutoring.per_check)}",
     ]
@@ -465,7 +498,8 @@ def _user_lines(report: CostReport) -> list[str]:
     return [
         "На пользователя (все его вызовы модели; пользователи хотя бы с одной проверкой)",
         f"  пользователей: {report.users.n}",
-        f"  сумма:         {_stats_line(report.users.cost, _money)}",
+        f"  сумма:         {_stats_line(report.users.cost, _money)}"
+        f"{_gap(report.users.unpriced_calls)}",
     ]
 
 
@@ -494,6 +528,11 @@ def _stats_line(
     """`fmt_max` — когда максимум целый по природе (число вызовов), а среднее дробное."""
     largest = (fmt_max or fmt)(stats.max)
     return f"среднее {fmt(stats.mean)} · медиана {fmt(stats.median)} · максимум {largest}"
+
+
+def _gap(unpriced_calls: int) -> str:
+    """Пометка рядом с суммой: без неё заниженная цена выглядит как полная."""
+    return f" (без {unpriced_calls} вызовов без тарифа)" if unpriced_calls else ""
 
 
 def _currency(code: str) -> str:

@@ -281,9 +281,38 @@ def test_journal_without_llm_calls_says_so() -> None:
     assert "нет событий llm_call" in render_cost_report(report)
 
 
-def test_broken_rows_are_skipped() -> None:
+def test_broken_rows_are_skipped_and_counted() -> None:
+    """Пропуск строк виден читателю: иначе сбой записи журнала выглядит как тихий день."""
     rows = [*one_check(), {"type": "llm_call"}, {"ts": "вчера", "env": "prod", "type": "llm_call"}]
-    assert cost_report(rows, PRICING).total.calls == 2
+    report = cost_report(rows, PRICING)
+    assert report.total.calls == 2
+    assert report.skipped_rows == 2
+    assert "без времени" in render_cost_report(report)
+    assert "без времени" not in render_cost_report(cost_report(one_check(), PRICING))
+
+
+def test_call_with_broken_token_count_is_counted_not_hidden_as_free() -> None:
+    broken = {**call("solver", MAX, 0, 200), "tokens_in": "много"}
+    report = cost_report([*one_check(), broken], PRICING)
+    assert report.malformed_calls == 1
+    assert report.total.calls == 3  # вызов состоялся, но его токены входа неизвестны
+    assert "токены не прочитаны" in render_cost_report(report)
+
+
+def test_unpriced_calls_are_visible_in_every_total() -> None:
+    """Модель без тарифа занижает и цену проверки, и цену разбора — это видно рядом с суммой."""
+    rows = [
+        *one_check("t1", user="u1"),
+        call("solver", LITE, 5_000, 500, trace="t1", user="u1"),
+        call("tutor", LITE, 5_000, 500, trace="t2", user="u1"),
+        call("tutor", PRO, 1_000, 1_000, trace="t2", user="u1"),
+    ]
+    report = cost_report(rows, PRICING)
+    assert (report.checks.unpriced_calls, report.checks.cost.mean) == (1, pytest.approx(7.0))
+    assert (report.tutoring.unpriced_calls, report.tutoring.cost) == (1, pytest.approx(1.0))
+    assert report.users.unpriced_calls == 2
+    text = render_cost_report(report)
+    assert text.count("без тарифа") >= 3
 
 
 # --- обращения по методике конкурса ---
