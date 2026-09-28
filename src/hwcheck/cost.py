@@ -169,7 +169,10 @@ def cost_report(
     since: date | None = None,
 ) -> CostReport:
     """Отчёт по среде `env` (None — все среды) с даты `since` (день по московскому времени)."""
+    rows = list(rows)
     selected, skipped = _select(rows, env, since)
+    # источник пользователя — из всей истории среды: он мог прийти до начала периода
+    history = selected if since is None else _select(rows, env, None)[0]
     calls = [row for row in selected if row.get("type") == LLM_EVENT]
     start = _data_start(selected, calls)
     # без llm_call оценивать нечего, но обращения по событиям компонентов посчитать можно
@@ -198,7 +201,7 @@ def cost_report(
         tutoring=_tutoring_cost(priced, check_traces, checks.n),
         users=_user_cost(priced, window),
         contest=_contest(window, check_traces),
-        sources=_sources(selected),
+        sources=_sources(history, selected),
     )
 
 
@@ -397,13 +400,15 @@ def _contest(window: Sequence[Row], check_traces: set[str]) -> ContestRequests:
     )
 
 
-def _sources(rows: Sequence[Row]) -> list[TrafficSource]:
-    """Пользователи по источнику первого запуска; считаются по всему журналу среды, а не с
-    первого `llm_call`: человек мог прийти раньше. Без записи об источнике — «не записан»."""
+def _sources(history: Sequence[Row], rows: Sequence[Row]) -> list[TrafficSource]:
+    """Пользователи периода (`rows`) по источнику первого запуска. Источник ищется во всей
+    истории среды (`history`): человек мог прийти до начала периода и до первого `llm_call`.
+    Без записи об источнике — «не записан»."""
+    active = {row["user"] for row in rows if row.get("user") is not None}
     first: dict[str, str] = {}
-    for row in sorted(rows, key=lambda row: row["ts"]):
+    for row in sorted(history, key=lambda row: row["ts"]):
         user = row.get("user")
-        if user is None:
+        if not isinstance(user, str) or user not in active:
             continue
         known = first.setdefault(user, NO_SOURCE)
         if row.get("type") == START_EVENT and known == NO_SOURCE:

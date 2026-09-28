@@ -29,7 +29,9 @@ _TOKEN = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 _CODE = re.compile(rf"^([{CODE_ALPHABET}]{{4}})-?([{CODE_ALPHABET}]{{4}})$")
 _SOURCE_PREFIX = "s"
 # короткая латинская метка: в журнал идёт только она, а не произвольный текст из ссылки
-_SOURCE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
+_SOURCE = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
+# служебные значения поля source в журнале: метка канала с таким именем слилась бы с ними
+RESERVED_SOURCES = frozenset({"invite", "direct", "unknown"})
 # кириллица, похожая на латиницу кода: ребёнок набирает код в русской раскладке
 _LOOKALIKES = str.maketrans("АВЕКМНРСТХ", "ABEKMHPCTX")
 
@@ -78,15 +80,24 @@ def parse_source(payload: str | None) -> str | None:
     """Метка источника из `bot_started`: «s_kanal-1» → «kanal-1»; не метка — None."""
     prefix, separator, tag = (payload or "").partition("_")
     tag = tag.lower()
-    if prefix != _SOURCE_PREFIX or not separator or not _SOURCE.match(tag):
+    if prefix != _SOURCE_PREFIX or not separator or not _is_source(tag):
         return None
     return tag
 
 
+def _is_source(tag: str) -> bool:
+    """Целиком по шаблону (`fullmatch`: `$` пропустил бы перевод строки в конце) и не служебное
+    слово журнала."""
+    return _SOURCE.fullmatch(tag) is not None and tag not in RESERVED_SOURCES
+
+
 def source_link(bot_username: str, tag: str) -> str:
     """Ссылка на бота для канала или поста; негодная метка — ошибка, а не ссылка без учёта."""
-    if not _SOURCE.match(tag):
-        raise ValueError(f"метка источника — латиница, цифры и дефис, до 32 знаков: {tag!r}")
+    if not _is_source(tag):
+        reserved = ", ".join(sorted(RESERVED_SOURCES))
+        raise ValueError(
+            f"метка источника — латиница, цифры и дефис, до 32 знаков, кроме {reserved}: {tag!r}"
+        )
     return f"https://max.ru/{bot_username}?start={_SOURCE_PREFIX}_{tag}"
 
 

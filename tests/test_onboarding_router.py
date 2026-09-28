@@ -439,7 +439,10 @@ async def test_start_writes_traffic_source(tmp_path: Path) -> None:
     await ob.route(start(2))
     await ob.route(start(3, "что-то <чужое>"))
     await ob.route(start(4, "p_" + "x" * 22))
+    await ob.route(start(5, "s_invite"))  # метка под видом служебного значения
     started = kit.events("bot_started")
-    assert [e["source"] for e in started] == ["kanal-1", "direct", "unknown", "invite"]
-    assert [e["invite"] for e in started] == [False, False, False, True]
+    assert [e["source"] for e in started] == [
+        "kanal-1", "direct", "unknown", "invite", "unknown"
+    ]  # fmt: skip
+    assert [e["invite"] for e in started] == [False, False, False, True, False]
     assert "чужое" not in kit.ctx.events._path.read_text(encoding="utf-8")

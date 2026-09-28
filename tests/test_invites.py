@@ -96,7 +96,25 @@ def test_source_tag_of_start_link(payload: str, source: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "payload", [None, "", "s_", "s_-kanal", "s_канал", "s_a b", "s_" + "a" * 33, "kanal", "p_kanal"]
+    "payload",
+    [
+        None,
+        "",
+        "s_",
+        "s_-kanal",
+        "s_канал",
+        "s_a b",
+        "s_" + "a" * 33,
+        "kanal",
+        "p_kanal",
+        # перевод строки в конце: `$` его пропускает, метка разорвала бы строку отчёта
+        "s_kanal-1\n",
+        # служебные значения журнала: трафик канала слился бы с приглашениями и прямыми заходами
+        "s_invite",
+        "s_direct",
+        "s_unknown",
+        "s_INVITE",
+    ],  # fmt: skip
 )
 def test_broken_source_tag_is_not_a_source(payload: str | None) -> None:
     assert invites.parse_source(payload) is None
@@ -106,5 +124,6 @@ def test_source_link_is_ordinary_start_link() -> None:
     assert invites.source_link("domashka_bot", "kanal-1") == (
         "https://max.ru/domashka_bot?start=s_kanal-1"
     )
-    with pytest.raises(ValueError, match="метка"):
-        invites.source_link("domashka_bot", "Канал 1")
+    for tag in ("Канал 1", "kanal-1\n", "invite", "direct", "unknown"):
+        with pytest.raises(ValueError, match="метка"):
+            invites.source_link("domashka_bot", tag)

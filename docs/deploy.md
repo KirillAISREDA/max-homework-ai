@@ -312,7 +312,8 @@ docker exec homework-bot python -m hwcheck report cost var/events.jsonl --json >
 https://max.ru/<имя бота>?start=s_<метка>
 ```
 
-Метка — латиница, цифры и дефис, до 32 знаков: `s_kanal-1`, `s_chat-3b`, `s_znakomye`. Имя бота —
+Метка — латиница, цифры и дефис, до 32 знаков: `s_kanal-1`, `s_chat-3b`, `s_znakomye`. Слова
+`invite`, `direct` и `unknown` меткой быть не могут: это служебные значения журнала. Имя бота —
 из `GET /me` (строка `bot started` в `var/bot.log`). Ссылку без метки не раздаём: такой заход
 попадёт в `direct` и от случайного не отличится.
 
