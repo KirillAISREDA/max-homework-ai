@@ -249,3 +249,18 @@ def test_code_texts_address_parent_and_child() -> None:
     assert "Проверь " in texts.code_invalid(formal=False)
     assert "Попробуйте" in texts.code_rate_limited(formal=True)
     assert "Попробуй " in texts.code_rate_limited(formal=False)
+
+
+def test_summaries_are_promised_only_to_parent_of_older_child() -> None:
+    """Фраза об итогах — только там, где это правда: у ребёнка 5–9 класса со своим MAX."""
+    promise = (
+        "После каждой проверки пришлю вам короткий итог; отключить можно кнопкой под сообщением."
+    )
+    assert promise == texts.NOTIFY_PROMISE
+    assert texts.consent_thanks(notify=True) == f"{texts.CONSENT_THANKS}\n\n{promise}"
+    assert texts.consent_thanks(notify=False) == texts.CONSENT_THANKS
+    forward = texts.forward_to_child(notify=True)
+    assert forward.startswith("Спасибо!") and promise in forward
+    assert forward.endswith("Перешлите ребёнку сообщение ниже 👇")  # ссылка — следующим сообщением
+    assert texts.forward_to_child(notify=False) == texts.FORWARD_TO_CHILD
+    assert promise not in texts.INSTRUCTION_PARENT

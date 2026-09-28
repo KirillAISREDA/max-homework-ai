@@ -56,6 +56,7 @@ async def test_migrations_create_schema_once(schema: str) -> None:
     try:
         assert await apply_migrations(conn) == [
             "001_onboarding.sql", "002_children.sql", "003_knowledge_base.sql",
+            "004_notify_instant.sql",
         ]  # fmt: skip
         assert await apply_migrations(conn) == []
         rows = await conn.fetch(
@@ -161,9 +162,58 @@ async def test_create_pool_applies_migrations(schema: str) -> None:
     pool = await create_pool(database_url(), server_settings={"search_path": schema})
     try:
         async with pool.acquire() as conn:
-            assert await conn.fetchval("SELECT count(*) FROM schema_migrations") == 3
+            assert await conn.fetchval("SELECT count(*) FROM schema_migrations") == 4
     finally:
         await pool.close()
+
+
+async def test_notify_mode_becomes_instant(schema: str, tmp_path: Path) -> None:
+    """004: сводки по расписанию ещё нет — родитель с режимом «сводка» остался бы без итогов
+    молча. Выбор «не присылать» не трогаем; значение `digest` схема по-прежнему принимает."""
+    names = sorted(path.name for path in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"))
+    before, migration = names[:3], "004_notify_instant.sql"
+    assert names[3] == migration
+    for name in before:
+        (tmp_path / name).write_text(
+            (MIGRATIONS_DIR / name).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    parent = (
+        "INSERT INTO users (max_user_hash, max_user_id_enc, role) "
+        "VALUES ($1, 'x', 'parent') RETURNING id"
+    )
+    modes = (
+        "SELECT u.max_user_hash, s.notify_mode FROM parent_settings s "
+        "JOIN users u ON u.id = s.user_id"
+    )
+    conn = await connect(schema)
+    try:
+        assert await apply_migrations(conn, tmp_path) == before
+        digest, off, instant = [await conn.fetchval(parent, name) for name in ("p1", "p2", "p3")]
+        await conn.execute("INSERT INTO parent_settings (user_id) VALUES ($1)", digest)
+        chosen = "INSERT INTO parent_settings (user_id, notify_mode) VALUES ($1, $2)"
+        await conn.execute(chosen, off, "off")
+        await conn.execute(chosen, instant, "instant")
+        assert await conn.fetchval(
+            "SELECT notify_mode FROM parent_settings WHERE user_id = $1", digest
+        ) == "digest"  # fmt: skip
+
+        (tmp_path / migration).write_text(
+            (MIGRATIONS_DIR / migration).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        assert await apply_migrations(conn, tmp_path) == [migration]
+        rows = {row["max_user_hash"]: row["notify_mode"] for row in await conn.fetch(modes)}
+        assert rows == {"p1": "instant", "p2": "off", "p3": "instant"}
+
+        newcomer = await conn.fetchval(parent, "p4")
+        await conn.execute("INSERT INTO parent_settings (user_id) VALUES ($1)", newcomer)
+        rows = {row["max_user_hash"]: row["notify_mode"] for row in await conn.fetch(modes)}
+        assert rows["p4"] == "instant"
+        change = "UPDATE parent_settings SET notify_mode = $2 WHERE user_id = $1"
+        await conn.execute(change, newcomer, "digest")  # сводка появится позже
+        with pytest.raises(asyncpg.CheckViolationError):
+            await conn.execute(change, newcomer, "weekly")
+    finally:
+        await conn.close()
 
 
 async def test_knowledge_base_constraints(schema: str) -> None:

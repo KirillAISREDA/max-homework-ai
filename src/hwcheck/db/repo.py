@@ -1,4 +1,5 @@
-"""Профили детей, согласия и приглашения (спецификация онбординга §4, §6, §7).
+"""Профили детей, согласия, приглашения, учёт проверок и режим уведомлений родителя
+(спецификация онбординга §4, §6, §7, §9).
 
 `ProfileRepository` — всё, что онбордингу нужно от хранилища. `PgProfileRepository` — PostgreSQL;
 `InMemoryProfileRepository` (db/memory.py) — для сценарных тестов. Обе реализации проходят одни
@@ -22,6 +23,9 @@ if TYPE_CHECKING:
 Role = Literal["student", "parent"]
 # исход открытия приглашения — поле result события invite_opened (§12)
 InviteResult = Literal["ok", "expired", "used", "invalid", "role_mismatch", "has_parent"]
+# `digest` — сводка по расписанию (§9.2): схема значение принимает, но сводки пока нет
+NotifyMode = Literal["instant", "digest", "off"]
+DEFAULT_NOTIFY_MODE: NotifyMode = "instant"  # у родителя без строки настроек
 
 
 @dataclass(frozen=True)
@@ -67,6 +71,26 @@ class LinkOutcome:
     notify: bytes | None = None
 
 
+@dataclass(frozen=True)
+class HomeworkCounts:
+    """Итог проверки по заданиям на момент сводки. Задания без оценки («разобрал, оценки нет»)
+    своей колонки не имеют — это остаток от `total`."""
+
+    total: int
+    correct: int
+    wrong: int
+    uncertain: int  # «стоит перепроверить»: ошибкой не считается
+
+
+@dataclass(frozen=True)
+class Homework:
+    id: int
+    student_id: int  # профиль ребёнка, не аккаунт MAX
+    subject: str
+    counts: HomeworkCounts
+    errors_resolved: int  # разборов, дошедших до верного ответа
+
+
 class ProfileRepository(Protocol):
     async def get_account(self, user_hash: str) -> Account | None: ...
 
@@ -83,6 +107,10 @@ class ProfileRepository(Protocol):
         ...
 
     async def own_profile(self, user_id: int) -> StudentProfile | None: ...
+
+    async def get_profile(self, profile_id: int) -> StudentProfile | None: ...
+
+    async def account_by_id(self, account_id: int) -> Account | None: ...
 
     async def children(self, parent_user_id: int) -> list[StudentProfile]:
         """Дети родителя в порядке добавления: и со своим MAX, и 1–4 класса."""
@@ -152,6 +180,22 @@ class ProfileRepository(Protocol):
         """Учитывает попытку ввода кода; False — лимит за окно исчерпан, попытка не записана."""
         ...
 
+    async def add_homework(
+        self, student_id: int, subject: str, counts: HomeworkCounts
+    ) -> Homework | None:
+        """Проверенная домашка ребёнка; профиля уже нет (данные удалены) — None."""
+        ...
+
+    async def resolve_error(self, homework_id: int) -> Homework | None:
+        """Ещё одна ошибка домашки разобрана до верного ответа; записи нет — None."""
+        ...
+
+    async def notify_mode(self, parent_user_id: int) -> NotifyMode:
+        """Режим уведомлений родителя; настройку ещё не трогал — `DEFAULT_NOTIFY_MODE`."""
+        ...
+
+    async def set_notify_mode(self, parent_user_id: int, mode: NotifyMode) -> None: ...
+
 
 _PROFILE = (
     "SELECT p.id, p.user_id, p.parent_user_id, p.grade, p.grade_year, p.subject, "
@@ -167,6 +211,11 @@ _INVITE = (
 _CONSENT = (
     "INSERT INTO consents (parent_hash, student_profile_id, student_hash, policy_version, "
     "given_at) VALUES ($1, $2, $3, $4, $5)"
+)
+
+_HOMEWORK = (
+    "id, student_id, subject, tasks_total, tasks_correct, tasks_wrong, tasks_uncertain, "
+    "errors_resolved"
 )
 
 # type-выражение ленивое: PoolConnectionProxy не параметризуется во время выполнения
@@ -191,6 +240,22 @@ def _profile(row: asyncpg.Record) -> StudentProfile:
         grade_year=row["grade_year"],
         subject=row["subject"],
         has_consent=row["has_consent"],
+    )
+
+
+def _homework(row: asyncpg.Record) -> Homework:
+    counts = HomeworkCounts(
+        total=row["tasks_total"],
+        correct=row["tasks_correct"],
+        wrong=row["tasks_wrong"],
+        uncertain=row["tasks_uncertain"],
+    )
+    return Homework(
+        id=row["id"],
+        student_id=row["student_id"],
+        subject=row["subject"],
+        counts=counts,
+        errors_resolved=row["errors_resolved"],
     )
 
 
@@ -278,6 +343,14 @@ class PgProfileRepository:
     async def own_profile(self, user_id: int) -> StudentProfile | None:
         row = await self._pool.fetchrow(f"{_PROFILE} WHERE p.user_id = $1", user_id)
         return _profile(row) if row is not None else None
+
+    async def get_profile(self, profile_id: int) -> StudentProfile | None:
+        row = await self._pool.fetchrow(f"{_PROFILE} WHERE p.id = $1", profile_id)
+        return _profile(row) if row is not None else None
+
+    async def account_by_id(self, account_id: int) -> Account | None:
+        row = await self._pool.fetchrow("SELECT * FROM users WHERE id = $1", account_id)
+        return _account(row) if row is not None else None
 
     async def children(self, parent_user_id: int) -> list[StudentProfile]:
         rows = await self._pool.fetch(
@@ -533,3 +606,46 @@ class PgProfileRepository:
                 now,
             )
             return True
+
+    async def add_homework(
+        self, student_id: int, subject: str, counts: HomeworkCounts
+    ) -> Homework | None:
+        try:
+            row = await self._pool.fetchrow(
+                "INSERT INTO homeworks (student_id, subject, tasks_total, tasks_correct, "
+                "tasks_wrong, tasks_uncertain) VALUES ($1, $2, $3, $4, $5, $6) "
+                f"RETURNING {_HOMEWORK}",
+                student_id,
+                subject,
+                counts.total,
+                counts.correct,
+                counts.wrong,
+                counts.uncertain,
+            )
+        except asyncpg.ForeignKeyViolationError:
+            # профиль удалили, пока шла проверка: учитывать домашку некому
+            return None
+        assert row is not None
+        return _homework(row)
+
+    async def resolve_error(self, homework_id: int) -> Homework | None:
+        row = await self._pool.fetchrow(
+            "UPDATE homeworks SET errors_resolved = errors_resolved + 1 WHERE id = $1 "
+            f"RETURNING {_HOMEWORK}",
+            homework_id,
+        )
+        return _homework(row) if row is not None else None
+
+    async def notify_mode(self, parent_user_id: int) -> NotifyMode:
+        mode: NotifyMode | None = await self._pool.fetchval(
+            "SELECT notify_mode FROM parent_settings WHERE user_id = $1", parent_user_id
+        )
+        return mode if mode is not None else DEFAULT_NOTIFY_MODE
+
+    async def set_notify_mode(self, parent_user_id: int, mode: NotifyMode) -> None:
+        await self._pool.execute(
+            "INSERT INTO parent_settings (user_id, notify_mode) VALUES ($1, $2) "
+            "ON CONFLICT (user_id) DO UPDATE SET notify_mode = EXCLUDED.notify_mode",
+            parent_user_id,
+            mode,
+        )

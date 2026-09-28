@@ -72,6 +72,10 @@ class ChatState(BaseModel):
     clarifications: list[Clarification] = Field(default_factory=list)  # очередь вопросов
     # относительные пути PhotoStore фото альбома по порядку (Word.photo_index — индекс сюда)
     photo_paths: list[str] = Field(default_factory=list)
+    # запись `homeworks` этой проверки (bot/notifier.py): закрытый разбор увеличивает в ней
+    # `errors_resolved`. None — учёта нет: онбординг выключен, запись не удалась или состояние
+    # записано до выката учёта (старые записи Redis)
+    homework_id: int | None = None
 
 
 class StateStore(Protocol):

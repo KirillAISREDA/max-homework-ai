@@ -147,7 +147,8 @@ class Linking:
             return
         ctx.log("consent_given", actor, policy_version=POLICY_VERSION, scenario="child_link")
         ctx.log("child_linked", actor, grade=profile.grade)
-        await ctx.reply(actor, texts.CONSENT_THANKS)
+        notify = profile.parent_user_id is not None and await ctx.notifies(profile.parent_user_id)
+        await ctx.reply(actor, texts.consent_thanks(notify=notify))
         allowed = f"{texts.PARENT_ALLOWED}\n\n{texts.INSTRUCTION_STUDENT}"
         await ctx.notify(actor, child, allowed, kind="consent_given")
 
