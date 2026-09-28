@@ -10,6 +10,7 @@ from hwcheck.config import Settings
 from hwcheck.events import (
     EventLog,
     anonymize,
+    current_user_id,
     keyed_digest,
     legacy_anonymize,
     set_id_hash_key,
@@ -86,3 +87,26 @@ def test_tester_listed_by_legacy_hash_is_still_test(tmp_path: Path) -> None:
     events = read_events(path)
     assert [e["env"] for e in events] == ["test", "prod"]
     assert events[0]["user"] == anonymize(42)  # в журнал пишется уже новый хэш
+
+
+def test_trace_binds_user_for_components_that_do_not_know_him() -> None:
+    """Обёртка над клиентом модели пользователя не знает — берёт его из контекста апдейта."""
+    assert current_user_id() is None
+    with trace(user_id=42):
+        assert current_user_id() == 42
+    assert current_user_id() is None
+
+
+def test_trace_without_user_keeps_context_empty() -> None:
+    with trace():
+        assert current_user_id() is None
+
+
+def test_explicit_user_of_event_is_not_replaced_by_context(tmp_path: Path) -> None:
+    """Прежние события не меняются: пользователь события — тот, что передан явно (или никто)."""
+    path = tmp_path / "events.jsonl"
+    log = EventLog(path, "prod")
+    with trace(user_id=42):
+        log.log("notify_sent", user_id=43)
+        log.log("bot_started")
+    assert [e["user"] for e in read_events(path)] == [anonymize(43), None]
