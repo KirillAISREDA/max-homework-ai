@@ -109,7 +109,11 @@ class UserCost(BaseModel):
 
 
 class ContestRequests(BaseModel):
-    """Обращения по Положению (Прил. 2 п. 2.2): вызов любого компонента решения."""
+    """Обращения по Положению (Прил. 2 п. 2.2): вызов любого компонента решения.
+
+    Сводное событие шага и `llm_call` описывают один и тот же вызов модели. В зачёт идёт счёт
+    без сводных событий: двойной счёт завышал бы метрику (Положение, п. 5.4).
+    """
 
     component_events: int = 0
     by_component: dict[str, int] = Field(default_factory=dict)
@@ -352,6 +356,7 @@ def _contest(window: Sequence[Row], check_traces: set[str]) -> ContestRequests:
     actions = [row for row in window if row.get("user_initiated") is True]
     by_component = Counter(str(row["component"]) for row in components)
     summaries = sum(by_component[name] for name in STEP_SUMMARY_COMPONENTS)
+    counted = [row for row in components if row["component"] not in STEP_SUMMARY_COMPONENTS]
     user_days = {
         (row["user"], datetime.fromtimestamp(row["ts"], MSK).date())
         for row in window
@@ -373,8 +378,8 @@ def _contest(window: Sequence[Row], check_traces: set[str]) -> ContestRequests:
         user_initiated=len(actions),
         checks=n_checks,
         user_days=n_days,
-        per_check=in_checks(components) / n_checks if n_checks else None,
-        per_user_day=of_users(components) / n_days if n_days else None,
+        per_check=in_checks(counted) / n_checks if n_checks else None,
+        per_user_day=of_users(counted) / n_days if n_days else None,
         user_initiated_per_check=in_checks(actions) / n_checks if n_checks else None,
         user_initiated_per_user_day=of_users(actions) / n_days if n_days else None,
     )
@@ -508,10 +513,10 @@ def _contest_lines(contest: ContestRequests) -> list[str]:
     by_component = ", ".join(f"{name} {count}" for name, count in contest.by_component.items())
     return [
         "Обращения по методике конкурса (события с component) — отдельно от действий пользователя",
-        f"  обращений: {_num(contest.component_events)} ({by_component or 'нет'})",
-        f"  из них сводных событий шагов (те же вызовы модели, что и llm_call): "
-        f"{_num(contest.step_summary_events)}; без них: "
-        f"{_num(contest.component_events_without_summaries)}",
+        f"  обращений: {_num(contest.component_events_without_summaries)} — без сводных "
+        f"событий шагов: они описывают те же вызовы модели, что и llm_call "
+        f"({_num(contest.step_summary_events)} шт., в зачёт не идут)",
+        f"  событий с component всего: {_num(contest.component_events)} ({by_component or 'нет'})",
         f"  проверок: {contest.checks}; пользователе-дней: {contest.user_days}",
         f"  обращений на проверку: {_decimal(contest.per_check)}; "
         f"на пользователя в день: {_decimal(contest.per_user_day)}",

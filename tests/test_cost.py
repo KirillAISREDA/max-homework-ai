@@ -351,9 +351,10 @@ def test_contest_requests_are_component_events_apart_from_user_actions() -> None
     }  # fmt: skip
     assert contest.user_initiated == 4
     assert contest.checks == 3
-    assert contest.per_check == pytest.approx(13 / 3)  # события трасс с загрузкой домашки
+    # в зачёт — без сводных событий шагов: они повторяют llm_call того же вызова модели
+    assert contest.per_check == pytest.approx(10 / 3)  # события трасс с загрузкой домашки
     assert contest.user_days == 4  # u1 два дня, u2 и u3 по одному
-    assert contest.per_user_day == pytest.approx(15 / 4)
+    assert contest.per_user_day == pytest.approx(11 / 4)
     assert contest.user_initiated_per_check == pytest.approx(1.0)
     assert contest.user_initiated_per_user_day == pytest.approx(1.0)
     # сводные события шагов описывают те же вызовы модели, что и llm_call
