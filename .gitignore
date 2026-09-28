@@ -40,3 +40,6 @@ build/
 
 # runtime: журнал событий, marker long polling
 var/
+
+# рабочие копии агентов Claude Code
+.claude/worktrees/
