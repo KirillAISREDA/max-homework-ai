@@ -95,3 +95,29 @@ async def test_all_models_on_gateway_need_no_gigachat_credentials() -> None:
     )
     async with make_llm(config) as router:
         assert router.has_gateway and not router.has_gigachat
+
+
+@pytest.mark.parametrize(
+    "model", ["GW:gigachat-2-max", " gw:gigachat-2-max ", "Gw: gigachat-2-max"]
+)
+async def test_prefix_survives_case_and_spaces_of_env_file(model: str) -> None:
+    """Опечатка в регистре не должна молча увести модель шлюза в GigaChat API."""
+    gigachat, gateway = Recorder("gigachat"), Recorder("gateway")
+    router = ModelRouter(gigachat=gigachat, gateway=gateway)
+    await router.chat(MESSAGES, model=model)
+    assert gateway.calls == [("chat", "gigachat-2-max")] and gigachat.calls == []
+
+
+@pytest.mark.parametrize("model", ["gw:", "gw:  ", "", "   "])
+def test_empty_model_name_is_refused(model: str) -> None:
+    router = ModelRouter(gigachat=Recorder("gigachat"), gateway=Recorder("gateway"))
+    with pytest.raises(ProviderNotConfigured, match="имя модели"):
+        router.require(model)
+
+
+def test_models_outside_settings_are_checked_before_the_run() -> None:
+    """Модели стенда заданы его конфигурацией, а не настройками: проверяются до первого вызова."""
+    router = ModelRouter(gigachat=Recorder("gigachat"), gateway=None)
+    router.require("GigaChat-2-Max")
+    with pytest.raises(ProviderNotConfigured, match="LLM_GATEWAY"):
+        router.require("gw:gemini-2.5-flash")

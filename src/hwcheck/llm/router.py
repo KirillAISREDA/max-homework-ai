@@ -62,22 +62,33 @@ class ModelRouter:
         result = await client.analyze_image(image, prompt=prompt, model=name, filename=filename)
         return result.model_copy(update={"model": model})
 
+    def require(self, model: str) -> None:
+        """Модель достижима, иначе `ProviderNotConfigured`. Для моделей не из настроек
+        (конфигурация стенда): проверить до первого вызова."""
+        self._route(model)
+
     def check(self, settings: Settings) -> None:
         """Каждая модель из настроек достижима; иначе упала бы первая же проверка ребёнка."""
         for field in MODEL_SETTINGS:
             try:
-                self._route(getattr(settings, field))
+                self.require(getattr(settings, field))
             except ProviderNotConfigured as exc:
                 raise ProviderNotConfigured(f"{field.upper()}: {exc}") from exc
 
     def _route(self, model: str) -> tuple[VisionAndChatClient, str]:
-        if model.startswith(GATEWAY_PREFIX):
+        # значение из .env: регистр префикса и пробелы не должны увести модель шлюза в GigaChat API
+        model = model.strip()
+        via_gateway = model[: len(GATEWAY_PREFIX)].lower() == GATEWAY_PREFIX
+        name = model[len(GATEWAY_PREFIX) :].strip() if via_gateway else model
+        if not name:
+            raise ProviderNotConfigured(f"имя модели не задано: {model!r}")
+        if via_gateway:
             if self._gateway is None:
                 raise ProviderNotConfigured(
                     f"модель {model} идёт через шлюз, а он не настроен "
                     "(LLM_GATEWAY_URL, LLM_GATEWAY_KEY)"
                 )
-            return self._gateway, model.removeprefix(GATEWAY_PREFIX)
+            return self._gateway, name
         if self._gigachat is None:
             raise ProviderNotConfigured(
                 f"модель {model} идёт в GigaChat API, а он не настроен (GIGACHAT_CREDENTIALS); "

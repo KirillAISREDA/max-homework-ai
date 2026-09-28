@@ -82,6 +82,9 @@ async def run_command(args: argparse.Namespace, settings: Settings) -> None:
         raise SystemExit(f"Нет фото для кейсов: {missing}")
     out = args.out or Path(".cache/bench/runs") / f"{config.name}.jsonl"
     async with make_llm(settings) as llm:
+        # модели стенда заданы его конфигурацией, а не настройками: проверяем до первого вызова
+        for model in (config.vision_model, config.structure_model, config.solver_model):
+            llm.require(model)
         client = BenchClient(llm, args.cache, max_calls=args.max_calls)
         runs = await run_bench(client, cases, index, config, out)
     print(render_report([(config, summarize(cases, runs))]))

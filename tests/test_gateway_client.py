@@ -156,3 +156,56 @@ def test_client_needs_address_and_key() -> None:
         GatewayClient("", "sk-test")
     with pytest.raises(ValueError, match="LLM_GATEWAY_KEY"):
         GatewayClient(BASE, "")
+
+
+@pytest.mark.parametrize("failure", [httpx.ReadTimeout("долго"), httpx.WriteTimeout("долго")])
+async def test_timeout_after_sending_is_not_retried(failure: httpx.HTTPError) -> None:
+    """Запрос ушёл, ответа не дождались: шлюз мог вызвать модель и списать деньги. Повтор стоил бы
+    второго списания, которого в журнале не видно (ревью 28.09)."""
+    gateway = Gateway(failure, answer("второй вызов"))
+    async with make_client(gateway) as client:
+        with pytest.raises(GatewayError, match="не дождались ответа") as caught:
+            await client.chat(MESSAGES, model="m")
+    assert caught.value.status_code is None
+    assert len(gateway.requests) == 1
+
+
+@pytest.mark.parametrize("raw", ["nan", "inf", "-inf", "-5", "0", "expensive", ""])
+async def test_cost_that_is_not_a_price_is_dropped(raw: str) -> None:
+    """Заголовок недоверенный: NaN ломает JSON журнала, минус и бесконечность — сумму отчёта."""
+    async with make_client(Gateway(answer(cost=raw))) as client:
+        assert (await client.chat(MESSAGES, model="m")).cost is None
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "<html>502 Bad Gateway</html>",
+        '{"choices": {"message": {"content": "x"}}}',
+        '{"choices": [{"message": null}]}',
+        '{"choices": [null]}',
+        '{"choices": [{"message": {"content": "x"}}], "usage": {"prompt_tokens": "unknown"}}',
+        "[1, 2, 3]",
+    ],
+)
+async def test_unexpected_answer_is_a_gateway_error(body: str) -> None:
+    """Любой странный ответ — ошибка шлюза с его именем в журнале, а не KeyError из глубины."""
+    strange = httpx.Response(200, text=body)
+    async with make_client(Gateway(strange)) as client:
+        with pytest.raises(GatewayError) as caught:
+            await client.chat(MESSAGES, model="m")
+    assert caught.value.status_code == 200
+
+
+async def test_answer_in_parts_is_joined() -> None:
+    parts = {
+        "choices": [
+            {
+                "message": {
+                    "content": [{"type": "text", "text": "803 + "}, {"type": "text", "text": "169"}]
+                }
+            }
+        ]
+    }
+    async with make_client(Gateway(httpx.Response(200, json=parts))) as client:
+        assert (await client.chat(MESSAGES, model="m")).content == "803 + 169"

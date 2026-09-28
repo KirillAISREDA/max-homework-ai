@@ -8,6 +8,7 @@
 import asyncio
 import base64
 import logging
+import math
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from types import TracebackType
@@ -104,16 +105,18 @@ class GatewayClient:
         started = time.perf_counter()
         response = await self._post(payload)
         latency = time.perf_counter() - started  # с повторами: столько ждал ребёнок
-        data = response.json()
-        choices = data.get("choices") if isinstance(data, dict) else None
-        if not choices:
-            raise GatewayError(f"шлюз ответил без ответа модели (model={model})", 200)
-        usage = data.get("usage") or {}
+        try:
+            content, tokens_in, tokens_out = _answer(response.json())
+        except (ValueError, TypeError, AttributeError, KeyError, IndexError) as exc:
+            # в журнал идёт имя исключения: странный ответ — ошибка шлюза, а не KeyError из глубины
+            raise GatewayError(
+                f"шлюз ответил без ответа модели (model={model}): {type(exc).__name__}", 200
+            ) from exc
         return LLMResult(
-            content=choices[0].get("message", {}).get("content") or "",
+            content=content,
             model=model,
-            tokens_in=int(usage.get("prompt_tokens") or 0),
-            tokens_out=int(usage.get("completion_tokens") or 0),
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
             latency_s=latency,
             cost=_cost(response),
         )
@@ -125,6 +128,10 @@ class GatewayClient:
             try:
                 async with self._semaphore:
                     response = await self._http.post("chat/completions", json=payload)
+            except (httpx.ReadTimeout, httpx.WriteTimeout) as exc:
+                # запрос ушёл: шлюз мог вызвать модель и списать деньги — повтор стоил бы второго
+                # списания, которого в журнале не видно
+                raise GatewayError(f"не дождались ответа шлюза: {type(exc).__name__}") from exc
             except httpx.HTTPError as exc:
                 if last:
                     raise GatewayError(f"нет связи со шлюзом: {type(exc).__name__}") from exc
@@ -150,12 +157,32 @@ class GatewayClient:
         return f"шлюз ответил HTTP {response.status_code}: {text}"
 
 
+def _answer(data: Any) -> tuple[str, int, int]:
+    """Текст ответа и токены; неожиданная структура — исключение, вызывающий назовёт его."""
+    message = data["choices"][0]["message"]
+    content = message.get("content") or ""
+    if isinstance(content, list):
+        # у части моделей ответ приходит частями: [{"type": "text", "text": "…"}, …]
+        content = "".join(part.get("text") or "" for part in content)
+    if not isinstance(content, str):
+        raise TypeError("content")
+    usage = data.get("usage") or {}
+    return content, int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+
+
 def _cost(response: httpx.Response) -> float | None:
+    """Стоимость вызова в рублях: так шлюз организаторов считает бюджет ключа (проба 28.09 —
+    0,0176 за 31 токен gigachat-2-max, то есть около 570 за миллион, как рублёвый тариф).
+
+    Заголовок недоверенный: NaN ломает JSON журнала, минус и бесконечность — сумму отчёта.
+    Ноль — «цена неизвестна», а не «бесплатно»: отчёт возьмёт тариф.
+    """
     raw = response.headers.get(COST_HEADER)
     try:
-        return float(raw) if raw is not None else None
+        value = float(raw) if raw is not None else None
     except ValueError:
         return None
+    return value if value is not None and math.isfinite(value) and value > 0 else None
 
 
 def _mime_type(filename: str) -> str:
