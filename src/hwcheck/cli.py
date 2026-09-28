@@ -207,7 +207,11 @@ async def _run(args: argparse.Namespace) -> None:
                 else:
                     prompt = load_prompt("vision", args.prompt_version)
                     rec = await recognize_page(
-                        client, args.image.read_bytes(), prompt=prompt, model=settings.vision_model
+                        client,
+                        args.image.read_bytes(),
+                        prompt=prompt,
+                        model=settings.vision_model,
+                        prompt_version=args.prompt_version,
                     )
             except ImageDecodeError as exc:
                 raise SystemExit(f"{args.image}: {exc}") from exc

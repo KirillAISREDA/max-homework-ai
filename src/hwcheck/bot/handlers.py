@@ -47,13 +47,13 @@ from hwcheck.bot.summary import remaining_buttons as _remaining_buttons
 from hwcheck.config import Settings
 from hwcheck.db.findings import FindingRecord, FindingsRepository
 from hwcheck.events import EventLog, anonymize, current_trace_id, trace
-from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.normalize import normalize_image, rotate_image
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.solver import FileCache, RefSolution
 from hwcheck.pipeline.tutor import TutorSession, tutor_reply
+from hwcheck.pipeline.vision import VisionAndChatClient
 from hwcheck.subjects.base import (
     Finding,
     NoTutorableFinding,
@@ -156,7 +156,7 @@ class Bot:
     def __init__(
         self,
         max_client: MaxClient,
-        llm: GigaChatClient,
+        llm: VisionAndChatClient,
         store: StateStore,
         events: EventLog,
         settings: Settings,
@@ -199,8 +199,9 @@ class Bot:
         return models_for(self._settings)
 
     async def handle_update(self, update: MaxUpdate) -> None:
-        # один trace_id на все вызовы компонентов по апдейту (антифрод, Прил. 2 п. 5)
-        with trace():
+        # один trace_id на все вызовы компонентов по апдейту (антифрод, Прил. 2 п. 5);
+        # пользователь — для журнала вызовов модели: клиент модели автора апдейта не знает
+        with trace(user_id=update.effective_user_id):
             try:
                 await self._dispatch(update)
             except Exception as exc:

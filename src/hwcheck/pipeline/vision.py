@@ -19,6 +19,7 @@ from hwcheck.llm.base import (
     chat_structured,
     extract_json,
 )
+from hwcheck.llm.journal import llm_step
 from hwcheck.pipeline.normalize import normalize_image, rotate_image
 from hwcheck.pipeline.schemas import VisionPage
 from hwcheck.prompts import load_prompt
@@ -44,7 +45,9 @@ async def recognize_page(
     *,
     prompt: str,
     model: str,
+    prompt_version: str | None = None,
 ) -> RecognizedPage:
+    """`prompt_version` — только для журнала вызовов: сюда приходит уже текст промпта."""
     normalized = normalize_image(image)
     tokens_in = tokens_out = 0
     latency = 0.0
@@ -55,7 +58,10 @@ async def recognize_page(
         data = normalized if degrees == 0 else rotate_image(normalized, degrees)
         # после нормализации байты всегда JPEG — исходное имя (.png и т.п.)
         # дало бы неверный Content-Type при загрузке
-        result = await client.analyze_image(data, prompt=prompt, model=model, filename="page.jpg")
+        with llm_step("vision", prompt_version):
+            result = await client.analyze_image(
+                data, prompt=prompt, model=model, filename="page.jpg"
+            )
         tokens_in += result.tokens_in
         tokens_out += result.tokens_out
         latency += result.latency_s
@@ -130,9 +136,10 @@ async def recognize_page_two_stage(
 
     for attempts, degrees in enumerate(ORIENTATIONS, start=1):
         data = normalized if degrees == 0 else rotate_image(normalized, degrees)
-        result = await client.analyze_image(
-            data, prompt=transcribe_prompt, model=vision_model, filename="page.jpg"
-        )
+        with llm_step("vision", transcribe_version):
+            result = await client.analyze_image(
+                data, prompt=transcribe_prompt, model=vision_model, filename="page.jpg"
+            )
         tokens_in += result.tokens_in
         tokens_out += result.tokens_out
         latency += result.latency_s
@@ -145,9 +152,10 @@ async def recognize_page_two_stage(
             ChatMessage(role="user", content=result.content),
         ]
         try:
-            page, structure_result = await chat_structured(
-                client, messages, VisionPage, model=structure_model
-            )
+            with llm_step("vision_structure", structure_version):
+                page, structure_result = await chat_structured(
+                    client, messages, VisionPage, model=structure_model
+                )
         except StructuredOutputError as exc:
             if exc.result is not None:  # расход неудачных попыток тоже считаем
                 tokens_in += exc.result.tokens_in

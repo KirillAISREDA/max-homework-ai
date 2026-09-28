@@ -18,6 +18,7 @@ from hwcheck.llm.base import (
     StructuredOutputError,
     chat_structured,
 )
+from hwcheck.llm.journal import llm_step
 from hwcheck.pipeline.validator import check_steps
 from hwcheck.prompts import load_prompt
 
@@ -89,7 +90,8 @@ async def solve_task(
         ChatMessage(role="system", content=system_prompt),
         ChatMessage(role="user", content=task_text),
     ]
-    solution, llm_result = await chat_structured(client, messages, RefSolution, model=model)
+    with llm_step("solver", prompt_version):
+        solution, llm_result = await chat_structured(client, messages, RefSolution, model=model)
     solved = _solved(solution, model=model, prompt_version=prompt_version, from_cache=False)
     if cache is not None and solved.ref_ok:  # невалидный эталон не кэшируем
         cache.put(key, solution.model_dump())
