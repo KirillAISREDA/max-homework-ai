@@ -6,11 +6,22 @@ tests/test_profile_repo.py, которые гоняют обе реализац�
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from hwcheck.bot.invites import InviteKind, NewInvite
-from hwcheck.db.repo import Account, Invite, InviteResult, LinkOutcome, Role, StudentProfile
+from hwcheck.db.repo import (
+    DEFAULT_NOTIFY_MODE,
+    Account,
+    Homework,
+    HomeworkCounts,
+    Invite,
+    InviteResult,
+    LinkOutcome,
+    NotifyMode,
+    Role,
+    StudentProfile,
+)
 
 
 @dataclass
@@ -55,6 +66,8 @@ class InMemoryProfileRepository:
         self._last_id = 0
         self.consents: list[_Consent] = []
         self.waitlist: set[tuple[str, str]] = set()
+        self.homeworks: dict[int, Homework] = {}
+        self.notify_modes: dict[int, NotifyMode] = {}
 
     def _next_id(self) -> int:
         self._last_id += 1
@@ -103,6 +116,13 @@ class InMemoryProfileRepository:
     async def own_profile(self, user_id: int) -> StudentProfile | None:
         profile = self._own(user_id)
         return self._view(profile) if profile is not None else None
+
+    async def get_profile(self, profile_id: int) -> StudentProfile | None:
+        profile = self._profiles.get(profile_id)
+        return self._view(profile) if profile is not None else None
+
+    async def account_by_id(self, account_id: int) -> Account | None:
+        return next((a for a in self._accounts.values() if a.id == account_id), None)
 
     async def children(self, parent_user_id: int) -> list[StudentProfile]:
         ordered = sorted(self._profiles.values(), key=lambda p: p.id)
@@ -275,3 +295,26 @@ class InMemoryProfileRepository:
             return False
         self._attempts[user_hash] = [*recent, now]
         return True
+
+    async def add_homework(
+        self, student_id: int, subject: str, counts: HomeworkCounts
+    ) -> Homework | None:
+        if student_id not in self._profiles:
+            return None
+        homework = Homework(self._next_id(), student_id, subject, counts, errors_resolved=0)
+        self.homeworks[homework.id] = homework
+        return homework
+
+    async def resolve_error(self, homework_id: int) -> Homework | None:
+        homework = self.homeworks.get(homework_id)
+        if homework is None:
+            return None
+        resolved = replace(homework, errors_resolved=homework.errors_resolved + 1)
+        self.homeworks[homework_id] = resolved
+        return resolved
+
+    async def notify_mode(self, parent_user_id: int) -> NotifyMode:
+        return self.notify_modes.get(parent_user_id, DEFAULT_NOTIFY_MODE)
+
+    async def set_notify_mode(self, parent_user_id: int, mode: NotifyMode) -> None:
+        self.notify_modes[parent_user_id] = mode

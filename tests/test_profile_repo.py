@@ -17,7 +17,12 @@ import pytest
 from hwcheck.bot.invites import new_invite
 from hwcheck.db.memory import InMemoryProfileRepository
 from hwcheck.db.pool import create_pool
-from hwcheck.db.repo import PgProfileRepository, ProfileRepository, StudentProfile
+from hwcheck.db.repo import (
+    HomeworkCounts,
+    PgProfileRepository,
+    ProfileRepository,
+    StudentProfile,
+)
 
 NOW = datetime(2026, 9, 16, 12, 0, tzinfo=UTC)
 WEEK = timedelta(days=7)
@@ -216,3 +221,55 @@ async def test_code_attempts_limited_per_window(repo: ProfileRepository) -> None
     assert results == [True] * 5 + [False]
     assert await repo.code_attempt("u2", NOW, limit=5, window=window)
     assert await repo.code_attempt("u1", NOW + window, limit=5, window=window)
+
+
+async def test_profile_and_account_found_by_id(repo: ProfileRepository) -> None:
+    """Уведомление идёт от профиля ребёнка к аккаунту родителя — оба ищутся по id."""
+    profile = await student(repo)
+    assert await repo.get_profile(profile.id) == profile
+    assert await repo.get_profile(profile.id + 100) is None
+    assert profile.user_id is not None
+    account = await repo.account_by_id(profile.user_id)
+    assert account is not None
+    assert (account.role, account.user_hash, account.user_id_enc) == ("student", "s1", b"s1")
+    assert await repo.account_by_id(profile.user_id + 100) is None
+
+
+async def test_homework_keeps_counts_and_resolved_errors(repo: ProfileRepository) -> None:
+    profile = await student(repo)
+    counts = HomeworkCounts(total=5, correct=2, wrong=2, uncertain=1)
+    homework = await repo.add_homework(profile.id, "math", counts)
+    assert homework is not None
+    assert (homework.student_id, homework.subject) == (profile.id, "math")
+    assert (homework.counts, homework.errors_resolved) == (counts, 0)
+    other = await repo.add_homework(profile.id, "russian", HomeworkCounts(1, 1, 0, 0))
+    assert other is not None and other.id != homework.id
+
+    first = await repo.resolve_error(homework.id)
+    second = await repo.resolve_error(homework.id)
+    assert first is not None and second is not None
+    assert (first.errors_resolved, second.errors_resolved) == (1, 2)
+    assert (second.id, second.student_id, second.counts) == (homework.id, profile.id, counts)
+    untouched = await repo.resolve_error(other.id)
+    assert untouched is not None and untouched.errors_resolved == 1  # у каждой домашки свой счёт
+    assert await repo.resolve_error(other.id + 100) is None
+
+
+async def test_homework_of_missing_profile_is_not_saved(repo: ProfileRepository) -> None:
+    """Профиль удалили, пока шла проверка: записи нет, сбоя тоже."""
+    profile = await student(repo)
+    counts = HomeworkCounts(total=1, correct=1, wrong=0, uncertain=0)
+    assert await repo.add_homework(profile.id + 100, "math", counts) is None
+
+
+async def test_notify_mode_is_instant_until_parent_switches(repo: ProfileRepository) -> None:
+    """Нет строки настроек — «сразу»: сводки по расписанию пока нет (миграция 004)."""
+    parent = await repo.get_or_create_account("p1", b"p", "parent")
+    other = await repo.get_or_create_account("p2", b"p", "parent")
+    assert await repo.notify_mode(parent.id) == "instant"
+    await repo.set_notify_mode(parent.id, "off")
+    assert await repo.notify_mode(parent.id) == "off"
+    assert await repo.notify_mode(other.id) == "instant"  # настройка — своя у каждого родителя
+    await repo.set_notify_mode(parent.id, "instant")
+    await repo.set_notify_mode(parent.id, "instant")  # повторное нажатие кнопки
+    assert await repo.notify_mode(parent.id) == "instant"
