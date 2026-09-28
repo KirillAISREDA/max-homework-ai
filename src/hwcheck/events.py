@@ -22,22 +22,35 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
+_user_id: ContextVar[int | None] = ContextVar("user_id", default=None)
 
 
 @contextmanager
-def trace() -> Iterator[str]:
-    """Все события внутри блока получают один trace_id (один апдейт MAX)."""
+def trace(user_id: int | None = None) -> Iterator[str]:
+    """Все события внутри блока получают один trace_id (один апдейт MAX).
+
+    `user_id` — автор апдейта для компонентов, которые пользователя не знают (журнал вызовов
+    модели): без него их события шли бы без обезличенного id и с env=prod даже у тестера.
+    В сами события пользователь из контекста не подставляется — только через `current_user_id`.
+    """
     trace_id = uuid.uuid4().hex[:16]
     token = _trace_id.set(trace_id)
+    user_token = _user_id.set(user_id)
     try:
         yield trace_id
     finally:
+        _user_id.reset(user_token)
         _trace_id.reset(token)
 
 
 def current_trace_id() -> str | None:
     """trace_id текущего апдейта вне EventLog.log — например, для записи находок в базу."""
     return _trace_id.get()
+
+
+def current_user_id() -> int | None:
+    """Автор текущего апдейта (необезличенный id — наружу только через `EventLog.log`)."""
+    return _user_id.get()
 
 
 class EventLog:

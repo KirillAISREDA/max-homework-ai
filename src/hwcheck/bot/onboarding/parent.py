@@ -31,7 +31,12 @@ class ParentSteps:
             actor.user_hash, self._ctx.encrypted_id(actor), "parent"
         )
 
+    async def welcome(self, actor: Actor) -> None:
+        """Выбрана роль «родитель»: вводное ветки и вопрос о классе одним сообщением."""
+        await self._ctx.reply(actor, texts.PARENT_WELCOME, texts.grade_keyboard("pgrade"))
+
     async def ask_grade(self, actor: Actor) -> None:
+        """Только вопрос: «Добавить ребёнка» и родитель без детей — вводное они уже видели."""
         await self._ctx.reply(actor, texts.PARENT_GRADE, texts.grade_keyboard("pgrade"))
 
     async def choose_grade(self, actor: Actor, account: Account | None, grade: int) -> None:

@@ -19,6 +19,7 @@ from typing import Protocol
 from pydantic import BaseModel, Field
 
 from hwcheck.llm.base import ChatMessage, LLMClient, StructuredOutputError, chat_structured
+from hwcheck.llm.journal import llm_step
 from hwcheck.prompts import load_prompt
 from hwcheck.subjects.base import Trust
 
@@ -208,7 +209,8 @@ async def _ask_llm(
         ChatMessage(role="user", content=f"Текст: {' '.join(words)}\n\nПропуски:\n{listing}"),
     ]
     try:
-        answer, _ = await chat_structured(llm, messages, _Choices, model=model)
+        with llm_step("ru_gaps", version):
+            answer, _ = await chat_structured(llm, messages, _Choices, model=model)
     except StructuredOutputError:
         return {}
     allowed = {g.index: set(g.candidates) for g in gaps}

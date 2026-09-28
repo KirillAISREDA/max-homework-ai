@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from hwcheck.llm.base import ChatMessage, LLMClient, chat_structured
+from hwcheck.llm.journal import llm_step
 from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.prompts import load_prompt
@@ -51,7 +52,8 @@ async def classify_error(
         ChatMessage(role="system", content=system_prompt),
         ChatMessage(role="user", content=facts),
     ]
-    analysis, _ = await chat_structured(client, messages, ErrorAnalysis, model=model)
+    with llm_step("classifier", prompt_version):
+        analysis, _ = await chat_structured(client, messages, ErrorAnalysis, model=model)
     if analysis.confidence < MIN_CONFIDENCE:
         analysis = analysis.model_copy(update={"error_type": "unclear"})
     return analysis

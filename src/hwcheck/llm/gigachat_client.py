@@ -65,7 +65,7 @@ class GigaChatClient:
         model: str,
         filename: str = "image.jpg",
     ) -> LLMResult:
-        t0 = time.monotonic()
+        t0 = time.perf_counter()
         async with self._semaphore:
             uploaded = await self._client.aupload_file((filename, image, _mime_type(filename)))
         payload: dict[str, Any] = {
@@ -81,14 +81,15 @@ class GigaChatClient:
             with contextlib.suppress(Exception):
                 async with self._semaphore:
                     await self._client.adelete_file(uploaded.id_)
-        result.latency_s = time.monotonic() - t0  # включая upload файла
+        result.latency_s = time.perf_counter() - t0  # включая upload файла
         return result
 
     async def _call(self, payload: dict[str, Any], *, model: str) -> LLMResult:
-        t0 = time.monotonic()
+        # perf_counter, не monotonic: у monotonic на Windows шаг ~16 мс, быстрый ответ давал 0
+        t0 = time.perf_counter()
         async with self._semaphore:
             response = await self._client.achat(payload)
-        latency = time.monotonic() - t0
+        latency = time.perf_counter() - t0
         usage = response.usage
         return LLMResult(
             content=response.choices[0].message.content or "",

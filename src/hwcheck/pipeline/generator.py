@@ -7,6 +7,7 @@
 from pydantic import BaseModel, Field
 
 from hwcheck.llm.base import ChatMessage, LLMClient, StructuredOutputError, chat_structured
+from hwcheck.llm.journal import llm_step
 from hwcheck.pipeline.classifier import ErrorAnalysis
 from hwcheck.pipeline.validator import check_steps
 from hwcheck.prompts import load_prompt
@@ -44,7 +45,10 @@ async def generate_similar(
     ]
     for _ in range(MAX_ATTEMPTS):
         try:
-            exercise, _ = await chat_structured(client, messages, GeneratedExercise, model=model)
+            with llm_step("generator", prompt_version):
+                exercise, _ = await chat_structured(
+                    client, messages, GeneratedExercise, model=model
+                )
         except StructuredOutputError:
             continue
         if _valid(exercise):

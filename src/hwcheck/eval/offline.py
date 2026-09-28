@@ -68,7 +68,11 @@ async def run_offline_eval(
                     )
                 else:
                     rec = await recognize_page(
-                        client, path.read_bytes(), prompt=prompt, model=model
+                        client,
+                        path.read_bytes(),
+                        prompt=prompt,
+                        model=model,
+                        prompt_version=prompt_version,
                     )
                 result = ImageEvalResult(
                     image=path.name,
