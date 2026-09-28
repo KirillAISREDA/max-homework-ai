@@ -87,13 +87,19 @@ async def generate_praise(
         return await chat_structured(client, messages, PraiseOutput, model=model)
 
 
+def _shown(task: PraiseTask) -> tuple[str, list[str]]:
+    """Условие и шаги в том виде, в каком их видит модель; по ним же проверяется её ответ."""
+    return task.condition.strip()[:MAX_CONDITION_CHARS], task.steps[:MAX_STEPS]
+
+
 def _facts(data: PraiseInput) -> str:
     parts = [f"Класс ученика: {data.grade}"] if data.grade is not None else []
     for task in data.tasks:
-        steps = "\n".join(task.steps[:MAX_STEPS])
+        condition, shown_steps = _shown(task)
+        steps = "\n".join(shown_steps)
         lines = [f"Задание index={task.index}"]
-        if task.condition.strip():
-            lines.append(f"Условие: {task.condition.strip()[:MAX_CONDITION_CHARS]}")
+        if condition:
+            lines.append(f"Условие: {condition}")
         lines.append(f"Решение ученика:\n{steps}")
         if (task.answer or "").strip():
             lines.append(f"Ответ ученика: {task.answer}")
@@ -162,7 +168,7 @@ def is_safe(text: str, task: PraiseTask) -> bool:
 def _without_step_count(text: str, task: PraiseTask) -> str:
     """Текст без верно названного числа действий: счёт строк решения виден в записи ребёнка,
     хотя самого числа в ней может не быть. Неверный счёт остаётся и проверку не пройдёт."""
-    count = sum(1 for step in task.steps if step.strip())
+    count = sum(1 for step in _shown(task)[1] if step.strip())
 
     def drop(match: re.Match[str]) -> str:
         token = match.group(1)
@@ -178,8 +184,10 @@ def _all_known(text: str, known: set[Any]) -> bool:
 
 
 def _known_numbers(task: PraiseTask) -> set[Any]:
-    """Числа, которые ребёнок видит в своём задании: условие, его шаги, его ответ."""
-    written = "\n".join([task.condition, *task.steps, task.answer or ""])
+    """Числа задания, которые видела модель: условие, шаги ученика, его ответ. Число из
+    непоказанного хвоста длинного решения она могла только выдумать."""
+    condition, steps = _shown(task)
+    written = "\n".join([condition, *steps, task.answer or ""])
     tokens: list[str] = []
     for reading in (written, _join_thousands(written)):
         for pattern in (_NUMBER, _NUMBER_PART, _DIGITS):

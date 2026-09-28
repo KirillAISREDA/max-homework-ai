@@ -118,10 +118,31 @@ def test_repair_splits_glued_objects_only_inside_lists() -> None:
     # повтор ключа вне списка делить не на что: остаётся обычное правило «последний побеждает»
     assert json.loads(repair_json('{"a": 1, "a": 2}')) == {"a": 2}
     nested = '{"pages": [{"tasks": [{"n": 1, "n": 2}], "role": "x", "role": "y"}]}'
+    # внутренний список расклеен; у внешнего объекта куски с разными полями — не трогаем
     assert json.loads(repair_json(nested)) == {
-        "pages": [{"tasks": [{"n": 1}, {"n": 2}], "role": "x"}, {"role": "y"}]
+        "pages": [{"tasks": [{"n": 1}, {"n": 2}], "role": "y"}]
     }
 
 
 def test_repair_does_not_touch_what_is_not_json() -> None:
     assert repair_json("не json") == "не json"
+
+
+def test_glued_objects_with_different_fields_are_not_split() -> None:
+    """Куски с разным набором полей — не потерянное «}, {», а перестановка: расклейка приписала
+    бы ответ одного задания другому (ревью 28.09). Такой ответ остаётся как был."""
+    stolen = (
+        '{"tasks": [{"number": 1, "text": "2+2", "answer": "6", "number": 2, "text": "3+3"}], '
+        '"ok": true}'
+    )
+    assert repair_json(stolen) == stolen
+    assert json.loads(repair_json(stolen)) == {
+        "tasks": [{"number": 2, "text": "3+3", "answer": "6"}],
+        "ok": True,
+    }
+
+
+def test_repair_survives_hopelessly_nested_answer() -> None:
+    # модель зациклилась на скобках: починка не должна падать раньше обычной проверки схемы
+    nested = "[" * 5000 + "1" + "]" * 5000
+    assert repair_json(nested) == nested

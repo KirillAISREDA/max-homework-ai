@@ -109,7 +109,14 @@ def _object(pairs: list[tuple[str, Any]]) -> dict[str, Any] | _Glued:
         if key in parts[-1]:
             parts.append({})
         parts[-1][key] = value
-    return parts[0] if len(parts) == 1 else _Glued(parts)
+    if len(parts) == 1:
+        return parts[0]
+    if any(part.keys() != parts[0].keys() for part in parts):
+        # наборы полей разные — модель ещё и переставила или пропустила поля: где граница
+        # объектов, неизвестно, и расклейка приписала бы значение чужому объекту (ревью 28.09).
+        # Остаётся обычное правило JSON, как до починки
+        return dict(pairs)
+    return _Glued(parts)
 
 
 def _unglue(value: Any) -> tuple[Any, bool]:
@@ -142,12 +149,13 @@ def repair_json(raw: str) -> str:
 
     Сбоев два (живая проба 28.09): потеряны закрывающие скобки в конце и потеряно «}, {» между
     объектами списка. Второй обычный разбор не замечает: ключи повторяются, побеждает последний,
-    и от списка остаётся один объект.
+    и от списка остаётся один объект. Расклеиваются только объекты с одинаковым набором полей.
     """
     closed = close_brackets(raw)
     try:
         value, glued = _unglue(json.loads(closed, object_pairs_hook=_object))
-    except ValueError:
+    except (ValueError, RecursionError):
+        # не JSON или бесконечная вложенность (модель зациклилась): решает проверка по схеме
         return closed
     return json.dumps(value, ensure_ascii=False) if glued else closed
 

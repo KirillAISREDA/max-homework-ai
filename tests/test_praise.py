@@ -11,6 +11,7 @@ from hwcheck.llm.base import StructuredOutputError
 from hwcheck.pipeline.grade import grade
 from hwcheck.pipeline.praise import (
     MAX_PRAISE_CHARS,
+    MAX_STEPS,
     PraiseInput,
     PraiseItem,
     PraiseOutput,
@@ -256,3 +257,12 @@ def test_describable_needs_clean_steps() -> None:
     # описка в шаге при верном ответе: модель повторила бы неверную строку
     slip_steps = ["220 + 180 = 410", "700 - 400 = 300"]
     assert not describable(grade(slip_steps, "300", ref), slip_steps)
+
+
+def test_numbers_beyond_what_the_model_saw_are_not_known() -> None:
+    """Модель видит первые строки решения: число из непоказанного хвоста она могла только
+    выдумать, даже если оно совпало с записью ученика (ревью 28.09)."""
+    steps = [f"{n} + 1 = {n + 1}" for n in range(100, 100 + MAX_STEPS)] + ["900 + 1 = 901"]
+    long_task = PraiseTask(index=0, steps=steps)
+    assert accepted("Ты верно прибавил единицу к 100.", task=long_task) != {}
+    assert accepted("Ты верно прибавил единицу к 900.", task=long_task) == {}
