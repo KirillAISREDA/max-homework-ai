@@ -223,10 +223,11 @@ class Onboarding:
         if position.step != "role" or arg not in ("student", "parent"):
             return None
         self._ctx.log("onboarding_role_chosen", actor, role=arg)
+        # вводное ветки и вопрос о классе — одним сообщением: человек видит, куда попал
         if arg == "student":
-            await self._ctx.reply(actor, texts.STUDENT_GRADE, texts.grade_keyboard("grade"))
+            await self._ctx.reply(actor, texts.STUDENT_WELCOME, texts.grade_keyboard("grade"))
         else:
-            await self._parents.ask_grade(actor)
+            await self._parents.welcome(actor)
         return "handled"
 
     async def _grade(self, actor: Actor, position: Position, arg: str) -> Route | None:
