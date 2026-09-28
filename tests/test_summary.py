@@ -1,8 +1,16 @@
 """Сводка ученику из находок: тексты те же, что были у математики (test_bot.py), плюс новые силы."""
 
 from hwcheck.bot.check import validator_only_grade
-from hwcheck.bot.fsm import ChatState, CheckedTask
-from hwcheck.bot.summary import remaining_buttons, review_header, task_findings, task_line
+from hwcheck.bot.fsm import ChatState, CheckedTask, Clarification
+from hwcheck.bot.summary import (
+    MAX_MESSAGE_CHARS,
+    message_length,
+    remaining_buttons,
+    review_header,
+    review_message,
+    task_findings,
+    task_line,
+)
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.subjects.base import Box, Finding, SubjectTask, Word
 from hwcheck.subjects.math.module import to_vision_task
@@ -67,3 +75,68 @@ def test_header_and_remaining_buttons() -> None:
     )
     assert review_header(state) == "Проверил! 1 из 3 верно.\n"
     assert [b[0]["payload"] for b in remaining_buttons(state)] == ["tutor:2"]
+
+
+# --- объяснение к верному заданию ---
+
+PRAISE = "Ты правильно сложил единицы и не забыл перенести десяток: 803 + 169 = 972."
+
+
+def praised(number: int, steps: list[str], praise: str = PRAISE) -> CheckedTask:
+    return checked(number, steps).model_copy(update={"praise": praise})
+
+
+def test_correct_line_carries_the_explanation() -> None:
+    line, button = task_line(0, praised(17, ["803 + 169 = 972"]))
+    assert line == f"№17 — верно ✅ {PRAISE}" and button is None
+
+
+def test_explanation_is_shown_only_for_correct_task() -> None:
+    """Текст остался от прошлого вердикта, а задание уже с ошибкой: хвалить нельзя."""
+    line, _button = task_line(0, praised(7, ["2 + 2 = 5"]))
+    assert line == "№7 — есть ошибка (строка 1) ❌"
+    line, _button = task_line(0, praised(9, ["<неразборчиво>"]))
+    assert line == "№9 — часть записи неразборчива 🤔"
+
+
+def test_review_message_joins_lines_and_buttons() -> None:
+    state = ChatState(
+        phase="clarifying",
+        tasks=[
+            praised(17, ["803 + 169 = 972"]),
+            checked(18, ["2 + 2 = 5"]),
+            checked(19, ["15 <неразборчиво> 10 = 150"]),
+        ],
+        clarifications=[Clarification(task_index=2, kind="sign", line_index=0)],
+    )
+    text, buttons = review_message(state)
+    assert text == (
+        "Проверил! 1 из 3 верно.\n"
+        f"№17 — верно ✅ {PRAISE}\n"
+        "№18 — есть ошибка (строка 1) ❌\n"
+        "№19 — уточню у тебя одну деталь ✍️"
+    )
+    assert [row[0]["payload"] for row in buttons] == ["tutor:1"]
+
+
+def test_long_review_drops_explanations_from_the_end_but_keeps_verdicts() -> None:
+    """Лимит сообщения MAX: без объяснения ребёнок проживёт, без вердикта — нет."""
+    praise = "Ты правильно сложил единицы и десятки. " * 5
+    tasks = [praised(n, ["2 + 2 = 4"], praise.strip()) for n in range(1, 31)]
+    text, _buttons = review_message(ChatState(phase="review", tasks=tasks))
+
+    lines = text.splitlines()
+    assert message_length(text) <= MAX_MESSAGE_CHARS
+    assert lines[0] == "Проверил! 30 из 30 верно."
+    assert [line.split(" — ")[0] for line in lines[1:]] == [f"№{n}" for n in range(1, 31)]
+    assert all(line.startswith(f"№{n} — верно ✅") for n, line in enumerate(lines[1:], start=1))
+    explained = [praise.strip() in line for line in lines[1:]]
+    kept = sum(explained)
+    assert 0 < kept < 30
+    assert explained == [True] * kept + [False] * (30 - kept)  # опущены с конца
+    assert lines[-1] == "№30 — верно ✅"
+
+
+def test_message_length_counts_utf16_units() -> None:
+    # 🤔 — два элемента UTF-16: считаем с запасом, чтобы сообщение точно прошло лимит
+    assert message_length("№9 🤔") == 5
