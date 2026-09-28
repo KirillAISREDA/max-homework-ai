@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from hwcheck.llm.base import ChatMessage, LLMClient, LLMResult, chat_structured
 from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.mathparse import parse_value
+from hwcheck.pipeline.numerals import word_numbers
 from hwcheck.prompts import load_prompt
 
 PROMPT_VERSION = "v1"
@@ -29,12 +30,17 @@ _NUMBER = re.compile(r"\d+\s+\d+\s*/\s*\d+|\d+\s*/\s*\d+|\d+[.,]\d+|\d+")
 # части записи «7 1/8»: ребёнку можно назвать и дробь «1/8», и числитель «1»
 _NUMBER_PART = re.compile(r"\d+\s*/\s*\d+|\d+[.,]\d+|\d+")
 _DIGITS = re.compile(r"\d+")
+# «1 000», «12 500»: разряды через пробел (в том числе неразрывный) — одно число
+_THOUSANDS = re.compile(r"(?<!\d)\d{1,3}(?:[    ]\d{3})+(?!\d)")
 # похвала за верное решение не говорит об ошибках; «но» — только отдельным словом:
-# на «но» кончаются «правильно» и «верно»
+# на «но» кончаются «правильно» и «верно». «Не верно» раздельно — та же мысль (ревью)
 _ERROR_MARKER = re.compile(
-    r"ошиб|неверн|неправильн|исправ|однако|(?<![а-яё])(?:но|зато|хотя)(?![а-яё])",
+    r"ошиб|не\s*верн|не\s*правильн|не\s*точн|исправ|однако"
+    r"|(?<![а-яё])(?:но|зато|хотя)(?![а-яё])",
     re.IGNORECASE,
 )
+# запись ребёнка уходит в промпт как есть: её текст не должен вернуться ребёнку ссылкой
+_LINK = re.compile(r"https?://|www\.|@", re.IGNORECASE)
 _SPACES = re.compile(r"\s+")
 
 FALLBACK_ANSWER = "Ответ сошёлся с моим пересчётом."
@@ -122,9 +128,18 @@ def praise_text(item: PraiseItem) -> str | None:
 
 
 def is_safe(text: str, task: PraiseTask) -> bool:
-    if len(text) > MAX_PRAISE_CHARS or _ERROR_MARKER.search(text):
+    if len(text) > MAX_PRAISE_CHARS or _ERROR_MARKER.search(text) or _LINK.search(text):
         return False
     known = _known_numbers(task)
+    # число словами — то же число: текст без единой цифры проверку не обходит
+    named = [parse_value(str(number)) for number in word_numbers(text)]
+    if not all(value in known for value in named):
+        return False
+    # «1 000» читаем и как есть, и одним числом: как записал ученик, модель не знает
+    return any(_all_known(reading, known) for reading in (text, _join_thousands(text)))
+
+
+def _all_known(text: str, known: set[Any]) -> bool:
     mentioned = [parse_value(token) for token in _NUMBER.findall(text)]
     return all(value is not None and value in known for value in mentioned)
 
@@ -132,9 +147,16 @@ def is_safe(text: str, task: PraiseTask) -> bool:
 def _known_numbers(task: PraiseTask) -> set[Any]:
     """Числа, которые ребёнок видит в своём задании: условие, его шаги, его ответ."""
     written = "\n".join([task.condition, *task.steps, task.answer or ""])
-    tokens = [*_NUMBER.findall(written), *_NUMBER_PART.findall(written), *_DIGITS.findall(written)]
+    tokens: list[str] = []
+    for reading in (written, _join_thousands(written)):
+        for pattern in (_NUMBER, _NUMBER_PART, _DIGITS):
+            tokens.extend(pattern.findall(reading))
     values = {parse_value(token) for token in tokens}
     return values - {None}
+
+
+def _join_thousands(text: str) -> str:
+    return _THOUSANDS.sub(lambda match: _SPACES.sub("", match.group()), text)
 
 
 def describable(grade: GradeResult, steps: list[str]) -> bool:

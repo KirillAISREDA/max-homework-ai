@@ -115,10 +115,51 @@ def test_numbers_are_compared_by_value_with_this_task_only() -> None:
         "Ты сложил неправильно, потом поправил.",
         "Тебе стоит исправить запись.",
         "Хотя запись неаккуратная, всё сложено.",
+        # ревью: раздельное написание — та же мысль, что «неверно»
+        "Способ записан не верно, а итог сошёлся.",
+        "Ты записал не правильно, а сложил хорошо.",
+        "Но сложил ты хорошо.",
     ],
 )
 def test_error_markers_are_rejected(why: str) -> None:
     assert accepted(why) == {}
+
+
+@pytest.mark.parametrize(
+    "why",
+    [
+        "Ты быстро получил пятьсот, всё сложено.",
+        "У тебя вышло девятьсот семьдесят три, всё сложено.",
+        "Ты сложил числа в четыре действия.",
+        "Ты получил две тысячи, всё сложено.",
+    ],
+)
+def test_number_written_in_words_is_checked_like_digits(why: str) -> None:
+    """Ревью: текст без единой цифры проходил проверку чисел целиком — «пятьсот» то же число."""
+    assert accepted(why) == {}
+
+
+def test_known_number_in_words_and_place_value_words_pass() -> None:
+    # 972 есть в решении; «десяток», «единицы», «сотни» — разряды, не числа
+    assert 0 in accepted("Ты получил девятьсот семьдесят два, сложив единицы, десятки и сотни.")
+    assert 0 in accepted("Ты сначала сложил единицы, потом перенёс десяток.")
+    small = PraiseTask(index=0, steps=["2 + 3 = 5"])
+    assert 0 in accepted("Ты верно сложил два и три.", task=small)
+
+
+def test_thousands_written_with_a_space_are_one_number() -> None:
+    """Ревью: «1 000» читалось как два числа, и верная похвала уходила в запасной текст."""
+    shared = PraiseTask(index=0, condition="Всего 1000 рублей", steps=["1000 : 4 = 250"])
+    assert 0 in accepted("Ты верно разделил 1 000 на 4 и получил 250.", task=shared)
+    written = PraiseTask(index=0, steps=["12 500 + 500 = 13 000"])
+    assert 0 in accepted("Ты верно сложил 12500 и 500, получилось 13 000.", task=written)
+    assert accepted("Ты верно разделил 2 000 на 4.", task=shared) == {}
+
+
+def test_links_are_not_shown_to_the_child() -> None:
+    # запись ребёнка уходит в промпт как есть: текст из неё не должен вернуться ссылкой
+    assert accepted("Ты верно сложил числа, подробнее на https://example.com.") == {}
+    assert accepted("Ты верно сложил числа, пиши на www.example.com.") == {}
 
 
 def test_words_ending_with_no_are_not_error_markers() -> None:
