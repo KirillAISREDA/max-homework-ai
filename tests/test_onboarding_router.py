@@ -35,7 +35,7 @@ async def test_student_journey_until_parent_consents(tmp_path: Path) -> None:
     assert await ob.route(start(1)) == "handled"
     assert kit.last(1) == (texts.HELLO, texts.role_keyboard())
     await ob.route(press(1, "ob:role:student"))
-    assert kit.last(1) == (texts.STUDENT_GRADE, texts.grade_keyboard("grade"))
+    assert kit.last(1) == (texts.STUDENT_WELCOME, texts.grade_keyboard("grade"))
     await ob.route(press(1, "ob:grade:7"))
     await ob.route(press(1, "ob:subject:history"))
     await ob.route(press(1, "ob:subject:math"))
@@ -80,6 +80,37 @@ async def test_student_journey_until_parent_consents(tmp_path: Path) -> None:
         "child_linked",
         "notify_sent",
     ]
+
+
+async def test_each_role_gets_intro_of_its_branch_with_grade_question(tmp_path: Path) -> None:
+    """После выбора роли — вводное ветки и вопрос о классе одним сообщением (§4, вводные)."""
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    await ob.route(start(1))
+    await ob.route(press(1, "ob:role:student"))
+    assert kit.texts(1) == [texts.HELLO, texts.STUDENT_WELCOME]
+    assert kit.last(1)[1] == texts.grade_keyboard("grade")
+    assert texts.STUDENT_INTRO in kit.last(1)[0] and kit.last(1)[0].endswith(texts.STUDENT_GRADE)
+
+    await ob.route(start(2))
+    await ob.route(press(2, "ob:role:parent"))
+    assert kit.texts(2) == [texts.HELLO, texts.PARENT_WELCOME]
+    assert kit.last(2)[1] == texts.grade_keyboard("pgrade")
+    assert texts.PARENT_INTRO in kit.last(2)[0] and kit.last(2)[0].endswith(texts.PARENT_GRADE)
+    # роль не хранится: до выбора класса в базе никого нет
+    assert await kit.repo.get_account(actor(1).user_hash) is None
+    assert await kit.repo.get_account(actor(2).user_hash) is None
+
+
+async def test_intro_is_not_repeated_when_parent_adds_child(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    for payload in ("ob:role:parent", "ob:pgrade:2", "ob:subject:math", "ob:consent"):
+        await ob.route(press(2, payload))
+    assert kit.texts(2)[0] == texts.PARENT_WELCOME
+    await ob.route(press(2, "ob:addchild"))
+    assert kit.last(2) == (texts.PARENT_GRADE, texts.grade_keyboard("pgrade"))
+    assert kit.texts(2).count(texts.PARENT_WELCOME) == 1
 
 
 async def test_young_student_and_foreign_buttons(tmp_path: Path) -> None:

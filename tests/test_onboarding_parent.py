@@ -30,6 +30,16 @@ async def young_child(kit: Kit, grade: int, user_id: int = 2) -> tuple[Account, 
     return account, consented
 
 
+async def test_new_parent_is_welcomed_and_later_asked_only_for_grade(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    await parents(kit).welcome(actor(2))
+    assert kit.texts(2) == [texts.PARENT_WELCOME]
+    assert kit.last(2)[1] == texts.grade_keyboard("pgrade")
+    await parents(kit).ask_grade(actor(2))  # «Добавить ребёнка»: вводное уже было
+    assert kit.last(2) == (texts.PARENT_GRADE, texts.grade_keyboard("pgrade"))
+    assert await kit.repo.get_account(actor(2).user_hash) is None
+
+
 async def test_parent_of_young_child_sends_photos_himself(tmp_path: Path) -> None:
     kit = make_kit(tmp_path)
     me = actor(2)
