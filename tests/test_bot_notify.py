@@ -271,7 +271,9 @@ async def test_database_failure_does_not_take_back_the_summary(
     assert RETRY not in kit.texts(CHILD)
     [failed] = kit.events("homework_save_failed")
     assert (failed["error"], failed["component"]) == ("ConnectionError", "notifier")
-    assert [r.levelno for r in caplog.records] == [logging.WARNING]
+    # только журнал уведомлений: у шага похвалы в этом боте нет модели, и он пишет своё
+    notifier_log = [r for r in caplog.records if r.name == "hwcheck.bot.notifier"]
+    assert [r.levelno for r in notifier_log] == [logging.WARNING]
     assert "update_failed" not in event_types(kit)
     assert (await kit.ctx.dialogs.get(chat(CHILD))).homework_id is None
     assert [message for _, message, _ in kit.max.to_users] == [CHECKED]  # итог родителю ушёл
