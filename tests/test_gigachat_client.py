@@ -20,7 +20,12 @@ def fake_response(content: str) -> SimpleNamespace:
     )
 
 
-async def test_chat_maps_payload_and_usage() -> None:
+async def test_chat_maps_payload_and_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    # свои часы: мгновенный ответ мока на Windows укладывается в один тик таймера (latency 0.0)
+    ticks = iter([10.0, 10.5])
+    # подменяем имя time в модуле клиента, а не time.monotonic: им же живёт цикл asyncio
+    clock = SimpleNamespace(monotonic=lambda: next(ticks))
+    monkeypatch.setattr("hwcheck.llm.gigachat_client.time", clock)
     client = make_client()
     achat = AsyncMock(return_value=fake_response("привет"))
     client._client.achat = achat  # type: ignore[method-assign]
@@ -35,7 +40,7 @@ async def test_chat_maps_payload_and_usage() -> None:
     assert payload["temperature"] == 0.3
     assert result.content == "привет"
     assert (result.tokens_in, result.tokens_out) == (100, 50)
-    assert result.latency_s > 0
+    assert result.latency_s == 0.5
 
 
 async def test_analyze_image_uploads_attaches_and_cleans_up() -> None:
