@@ -27,7 +27,7 @@ MSK = timezone(timedelta(hours=3))
 CHECK_EVENT = "homework_uploaded"
 LLM_EVENT = "llm_call"
 # события шагов с component, которые суммируют вызовы модели: те же обращения, что и llm_call
-STEP_SUMMARY_COMPONENTS = frozenset({"vision_two_stage", "solver", "classifier", "tutor"})
+STEP_SUMMARY_COMPONENTS = frozenset({"vision_two_stage", "solver", "classifier", "tutor", "praise"})
 
 NO_TARIFF = "тариф не задан"
 

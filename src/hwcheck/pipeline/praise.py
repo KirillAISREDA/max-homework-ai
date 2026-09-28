@@ -14,6 +14,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from hwcheck.llm.base import ChatMessage, LLMClient, LLMResult, chat_structured
+from hwcheck.llm.journal import llm_step
 from hwcheck.pipeline.grade import GradeResult
 from hwcheck.pipeline.mathparse import parse_value
 from hwcheck.pipeline.numerals import word_numbers
@@ -80,7 +81,8 @@ async def generate_praise(
         ChatMessage(role="system", content=load_prompt("praise", prompt_version)),
         ChatMessage(role="user", content=_facts(data)),
     ]
-    return await chat_structured(client, messages, PraiseOutput, model=model)
+    with llm_step("praise", prompt_version):
+        return await chat_structured(client, messages, PraiseOutput, model=model)
 
 
 def _facts(data: PraiseInput) -> str:
