@@ -415,3 +415,24 @@ def test_cli_report_rejects_bad_arguments(tmp_path: Path) -> None:
         main(["report", "cost", "--since", "вчера"])
     with pytest.raises(SystemExit):
         main(["report", "cost", "--pricing", str(tmp_path / "нет-такого.json")])
+
+
+def test_cli_report_cost_says_when_journal_is_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Опечатка в пути не должна выглядеть как «вызовов модели не было»."""
+    with pytest.raises(SystemExit):
+        main(["report", "cost", str(tmp_path / "evnets.jsonl")])
+    assert "evnets.jsonl" in capsys.readouterr().err
+
+
+def test_cli_report_cost_says_when_pricing_is_malformed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    journal = write_journal(tmp_path / "events.jsonl", full_journal())
+    pricing = tmp_path / "pricing.json"
+    for broken in ("{не json", '{"models": {"GigaChat-2": {"input_per_1m": "дорого"}}}'):
+        pricing.write_text(broken, encoding="utf-8")
+        with pytest.raises(SystemExit):
+            main(["report", "cost", str(journal), "--pricing", str(pricing)])
+        assert "pricing.json" in capsys.readouterr().err

@@ -127,7 +127,7 @@ def main(argv: list[str] | None = None) -> None:
         # без кредов GigaChat: только чтение журнала
         try:
             print(_report(args))
-        except ValueError as exc:
+        except ReportArgumentsError as exc:
             rep.error(str(exc))
         return
     if args.command == "bench" and args.bench_command == "report":
@@ -136,24 +136,35 @@ def main(argv: list[str] | None = None) -> None:
     asyncio.run(_run(args))
 
 
+class ReportArgumentsError(Exception):
+    """Отчёт не построить из-за аргументов: сообщение показывает argparse, без трассировки."""
+
+
 def _report(args: argparse.Namespace) -> str:
-    """Текст отчёта; ValueError — неверные аргументы (сообщение покажет argparse)."""
     target: list[str] = args.target
     cost = bool(target) and target[0] == "cost"
     paths = target[1:] if cost else target
     if len(paths) > 1:
-        raise ValueError("журнал событий один: report [cost] [events]")
+        raise ReportArgumentsError("журнал событий один: report [cost] [events]")
     events = Path(paths[0]) if paths else Path("var/events.jsonl")
     if not cost:
         return json.dumps(summarize_events(read_events(events)), ensure_ascii=False, indent=2)
     try:
         since = date.fromisoformat(args.since) if args.since else None
     except ValueError as exc:
-        raise ValueError(f"--since: ожидается дата YYYY-MM-DD, получено {args.since!r}") from exc
+        raise ReportArgumentsError(
+            f"--since: ожидается дата YYYY-MM-DD, получено {args.since!r}"
+        ) from exc
     try:
         pricing = load_pricing(args.pricing)
-    except OSError as exc:
-        raise ValueError(f"--pricing: файл тарифов не прочитан: {args.pricing}") from exc
+    except (OSError, ValueError) as exc:
+        # ValueError — и битый JSON, и цена не числом (pydantic): считать по такому файлу нельзя
+        raise ReportArgumentsError(
+            f"--pricing: файл тарифов не прочитан ({type(exc).__name__}): {args.pricing}"
+        ) from exc
+    if not events.is_file():
+        # нет файла и «вызовов модели не было» — разные ответы: пустой отчёт скрыл бы опечатку
+        raise ReportArgumentsError(f"журнал событий не найден: {events}")
     report = cost_report(
         read_events(events), pricing, env=None if args.env == "all" else args.env, since=since
     )
