@@ -331,6 +331,29 @@ def test_unpriced_calls_are_visible_in_every_total() -> None:
     assert text.count("без тарифа") >= 3
 
 
+def test_cost_reported_by_provider_wins_over_tariff() -> None:
+    """Стоимость из журнала (её сообщил шлюз) точнее тарифа и есть даже у модели без тарифа."""
+    rows = [
+        upload(),
+        {**call("solver", MAX, 9_000, 1_000), "cost": 0.5},  # по тарифу было бы 6,0
+        {**call("vision", "gw:qwen3-vl", 2_000, 500), "cost": 0.25},
+        {**call("tutor", "gw:qwen3-vl", 2_000, 500), "cost": "дорого"},  # не число — тарифа нет
+    ]
+    report = cost_report(rows, PRICING)
+    assert report.total.cost == pytest.approx(0.75)
+    assert report.total.unpriced_calls == 1
+    assert report.unpriced_models == ["gw:qwen3-vl"]
+
+
+@pytest.mark.parametrize("reported", [0, 0.0, -1.5, float("nan"), float("inf"), True])
+def test_reported_cost_that_is_not_a_price_falls_back_to_tariff(reported: object) -> None:
+    """Ноль от шлюза — «не знаю цену», а не «бесплатно»: иначе расход исчезает из отчёта."""
+    rows = [upload(), {**call("solver", MAX, 9_000, 1_000), "cost": reported}]
+    report = cost_report(rows, PRICING)
+    assert report.total.cost == pytest.approx(6.0)  # по тарифу, как в `one_check`
+    assert report.total.unpriced_calls == 0
+
+
 # --- обращения по методике конкурса ---
 
 

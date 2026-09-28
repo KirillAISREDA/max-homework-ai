@@ -352,6 +352,42 @@ docker exec homework-bot python -m hwcheck report cost var/events.jsonl --json >
 проверок до неё. Бот на бесплатном лимите физлица фактически не платит — отчёт показывает цену тех
 же токенов по платному тарифу.
 
+## Шлюз моделей
+
+Организаторы конкурса выдали команде ключ к шлюзу моделей с OpenAI-совместимым API. В `.env`:
+
+```bash
+LLM_GATEWAY_URL=https://shared1.multitool.works:4000/v1
+LLM_GATEWAY_KEY=<ключ команды>          # в репозиторий и логи не попадает
+SOLVER_MODEL=gw:gigachat-2-max          # префикс gw: — модель идёт через шлюз
+TUTOR_MODEL=gw:gigachat-2-max
+VISION_MODEL=GigaChat-2-Max             # без префикса — GigaChat API напрямую
+```
+
+- Поставщика выбирает имя модели (`llm/router.py`). Бот не стартует, если модель назначена
+  поставщику, который не настроен: в логе — имя настройки и чего не хватает.
+- GigaChat через шлюз **изображения не принимает** — чтение фото остаётся на GigaChat API, пока не
+  выбрана другая модель распознавания (`bench/reports/2026-09-28-gateway.md`).
+- Лимита одновременных запросов у ключа нет; бот держит не больше `LLM_GATEWAY_CONCURRENCY` (8).
+- Перегрузку шлюза (429, 5xx) и обрыв связи клиент повторяет с растущей паузой, ошибку запроса
+  (4xx) — нет.
+- Стоимость вызова шлюз сообщает в ответе: она пишется в `llm_call` (поле `cost`, рубли) и идёт в
+  отчёт `report cost` вместо пересчёта по тарифу.
+
+Проверить шлюз с сервера и остаток бюджета ключа (значение ключа не печатается):
+
+```bash
+docker exec homework-bot python -m hwcheck solve --no-cache "Вычисли: 17 * 23"
+docker exec homework-bot python -c "
+import httpx; from hwcheck.config import load_settings as s
+c = s(); base = c.llm_gateway_url.removesuffix('/v1')
+i = httpx.get(base + '/key/info', headers={'Authorization': 'Bearer ' + c.llm_gateway_key}).json()['info']
+print('израсходовано', round(i['spend'], 2), 'из', i['max_budget'])"
+```
+
+Вернуться на GigaChat API: убрать префикс `gw:` у моделей (`SOLVER_MODEL=GigaChat-2-Max`,
+`TUTOR_MODEL=GigaChat-2-Pro`) и пересоздать контейнер — `docker compose up -d --force-recreate bot`.
+
 ## Источники трафика
 
 Антифрод конкурса просит сведения об источниках трафика (Положение, Прил. 2 п. 5). Для каждого канала,

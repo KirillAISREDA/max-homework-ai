@@ -11,6 +11,7 @@
 - модель без тарифа в рубли не входит и названа в отчёте: выдуманная цена хуже пропуска.
 """
 
+import math
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date, datetime, timedelta, timezone
@@ -218,11 +219,25 @@ class _PricedCall:
         self.tokens_out = _int(row.get("tokens_out"))
         # нечисловые токены считаются нулём, но вызов не должен сойти за бесплатный молча
         self.malformed = not (_is_int(row.get("tokens_in")) and _is_int(row.get("tokens_out")))
-        self.cost = pricing.cost(self.model, self.tokens_in, self.tokens_out)
+        # стоимость из журнала сообщил сам поставщик (шлюз моделей) — она точнее тарифа
+        reported = _price(row.get("cost"))
+        self.cost = (
+            reported
+            if reported is not None
+            else pricing.cost(self.model, self.tokens_in, self.tokens_out)
+        )
 
     @property
     def tokens(self) -> int:
         return self.tokens_in + self.tokens_out
+
+
+def _price(value: object) -> float | None:
+    """Стоимость из журнала, если это цена: конечное положительное число. Ноль — «цена
+    неизвестна», а не «бесплатно»: иначе расход исчез бы из отчёта."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value) if math.isfinite(value) and value > 0 else None
 
 
 def _is_int(value: object) -> bool:

@@ -20,7 +20,7 @@ from hwcheck.bench.russian import load_ru_cases, render_ru_report, run_ru_case, 
 from hwcheck.bot.handlers import models_for
 from hwcheck.config import Settings
 from hwcheck.db.kb_memory import InMemoryKnowledgeBase
-from hwcheck.llm.gigachat_client import GigaChatClient
+from hwcheck.llm.router import make_llm
 from hwcheck.ocr_client import OcrClient
 from hwcheck.subjects.registry import SubjectDeps, module_for
 from hwcheck.subjects.russian.gaps import HunspellDictionary
@@ -81,7 +81,10 @@ async def run_command(args: argparse.Namespace, settings: Settings) -> None:
     if missing:
         raise SystemExit(f"Нет фото для кейсов: {missing}")
     out = args.out or Path(".cache/bench/runs") / f"{config.name}.jsonl"
-    async with GigaChatClient(settings) as llm:
+    async with make_llm(settings) as llm:
+        # модели стенда заданы его конфигурацией, а не настройками: проверяем до первого вызова
+        for model in (config.vision_model, config.structure_model, config.solver_model):
+            llm.require(model)
         client = BenchClient(llm, args.cache, max_calls=args.max_calls)
         runs = await run_bench(client, cases, index, config, out)
     print(render_report([(config, summarize(cases, runs))]))
@@ -99,7 +102,7 @@ async def ru_command(args: argparse.Namespace, settings: Settings) -> None:
         raise SystemExit(f"Нет фото для кейсов: {missing}")
     RU_RUNS_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with (
-        GigaChatClient(settings) as llm,
+        make_llm(settings) as llm,
         OcrClient(args.ocr_url, timeout_s=args.ocr_timeout) as ocr,
     ):
         client = BenchClient(llm, args.cache, max_calls=args.max_calls)

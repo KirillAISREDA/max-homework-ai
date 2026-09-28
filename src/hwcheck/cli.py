@@ -20,7 +20,9 @@ from hwcheck.db.pool import create_pool
 from hwcheck.eval.offline import run_offline_eval
 from hwcheck.events import EventLog, read_events, summarize_events
 from hwcheck.kb_cli import load_rules_into, load_words, review
-from hwcheck.llm import ChatMessage, GigaChatClient
+from hwcheck.llm import ChatMessage
+from hwcheck.llm.base import LLMClient
+from hwcheck.llm.router import make_llm
 from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.generator import generate_similar
 from hwcheck.pipeline.grade import grade
@@ -243,7 +245,7 @@ async def _run(args: argparse.Namespace) -> None:
         await run_polling(settings)
         return
 
-    async with GigaChatClient(settings) as client:
+    async with make_llm(settings) as client:
         if args.command == "ping":
             result = await client.chat(
                 [ChatMessage(role="user", content="Ответь одним словом: работает?")],
@@ -333,7 +335,7 @@ async def _run(args: argparse.Namespace) -> None:
                 print(exercise.model_dump_json(indent=2))
 
 
-async def _tutor_repl(client: GigaChatClient, settings: Settings, args: argparse.Namespace) -> None:
+async def _tutor_repl(client: LLMClient, settings: Settings, args: argparse.Namespace) -> None:
     """Демо полного цикла в терминале: solve → grade → classify → диалог тьютора."""
     solved, _ = await solve_task(
         client, args.task, model=settings.solver_model, cache=FileCache(Path(".cache/solver"))
