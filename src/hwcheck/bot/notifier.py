@@ -8,11 +8,13 @@
 ответов, фото и имени в нём нет (152-ФЗ). Id MAX родителя расшифровывается только в момент
 отправки (`OnboardingContext.notify`), в журнал и лог идут хэши.
 
-Ни один сбой здесь не доходит до ребёнка: сводку он уже получил, и она не откатывается.
+Ни один сбой `homework_checked` и `error_fixed` не доходит до ребёнка: сводку он уже получил, и
+она не откатывается. Выключатель (`switch`) — действие самого родителя, его сбой родитель видит.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -144,6 +146,10 @@ class ParentNotifier:
         if user_id is None or student_id is None or not state.tasks:
             return
         actor = Actor.of(chat_id, user_id)
+        await self._guard(actor, "notifier_failed", self._checked(actor, student_id, state))
+
+    async def _checked(self, actor: Actor, student_id: int, state: ChatState) -> None:
+        chat_id = actor.chat_id
         summary = summarize(state)
         subject = state.subject
         await self._guard(
@@ -166,8 +172,12 @@ class ParentNotifier:
             # кнопка «Разобрать» в старой сводке жива: повторный разбор — не новая ошибка
             return
         actor = Actor.of(chat_id, user_id)
+        step = self._fixed(actor, state.homework_id, state)
+        await self._guard(actor, "notifier_failed", step)
+
+    async def _fixed(self, actor: Actor, homework_id: int, state: ChatState) -> None:
         homework = await self._guard(
-            actor, "homework_save_failed", self._ctx.repo.resolve_error(state.homework_id)
+            actor, "homework_save_failed", self._ctx.repo.resolve_error(homework_id)
         )
         if homework is None or remaining_buttons(state):
             return
@@ -237,13 +247,17 @@ class ParentNotifier:
     async def _guard[T](
         self, actor: Actor, event: str, step: Awaitable[T], **fields: Any
     ) -> T | None:
-        """Сбой базы или Redis — предупреждение и событие, а не «попробуй ещё раз» ребёнку."""
+        """Любой сбой шага — базы, Redis, самого кода уведомления — предупреждение и событие, а
+        не «попробуй ещё раз» ребёнку. Внешний вызов (`notifier_failed`) ловит то, что не поймали
+        шаги со своими событиями."""
         try:
             return await step
         except Exception as exc:
             error = type(exc).__name__
             logger.warning("%s: %s", event, error)
-            self._ctx.log(
-                event, actor, user_initiated=False, component="notifier", error=error, **fields
-            )
+            # журнал событий тоже может отказать (диск): предупреждение в логе уже есть
+            with contextlib.suppress(Exception):
+                self._ctx.log(
+                    event, actor, user_initiated=False, component="notifier", error=error, **fields
+                )
             return None

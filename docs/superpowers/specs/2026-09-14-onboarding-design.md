@@ -412,7 +412,8 @@ slot_local = дата(local_now) + digest_time
 `notify_sent{kind}` с `component="notifier"`; `kind` — `homework_checked` или `errors_resolved`; `user` —
 обезличенный инициатор (ребёнок), id MAX родителя расшифровывается только в момент отправки. Сбой записи
 `homeworks` — предупреждение в лог и событие `homework_save_failed{error}`: сводка ребёнку уже отправлена и
-не откатывается, уведомление родителю всё равно уходит.
+не откатывается, уведомление родителю всё равно уходит. Любой другой сбой в коде уведомления — событие
+`notifier_failed{error}`; до ребёнка («попробуй ещё раз», `update_failed`) он не доходит.
 
 ## 10. Приватность и безопасность
 
@@ -472,7 +473,8 @@ has_parent|rate_limited}`, `consent_given{policy_version, scenario: child_link|p
 `consent_declined`, `child_linked{grade}`, `homework_owner_asked{n_children}`, `homework_owner_chosen`,
 `notify_mode_set{mode}`, `grade_confirmed{changed}`, `graduated`, `photo_blocked_no_consent`,
 `data_deleted{initiator}`, `notify_sent{kind}`, `notify_failed{kind, error}`,
-`homework_resolved{subject, errors}`, `homework_save_failed{error}` (последние два — с 28.09, §9.1, §9.4).
+`homework_resolved{subject, errors}`, `homework_save_failed{error}`, `notifier_failed{error}` (последние
+три — с 28.09, §9.1, §9.4).
 
 Воронки: ученик 5–9 — роль → класс → предмет → ссылка создана → ссылка открыта → согласие → первая проверка;
 родитель 1–4 — роль → класс → предмет → согласие → первая проверка; родитель 5–9 — роль → класс → согласие →

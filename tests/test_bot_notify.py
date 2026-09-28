@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from hwcheck.bot import handlers
+from hwcheck.bot import handlers, notifier
 from hwcheck.bot.check import RecognizedPhoto, validator_only_grade
 from hwcheck.bot.fsm import ChatState, CheckedTask
 from hwcheck.bot.handlers import RETRY, Bot
@@ -275,6 +275,80 @@ async def test_database_failure_does_not_take_back_the_summary(
     assert "update_failed" not in event_types(kit)
     assert (await kit.ctx.dialogs.get(chat(CHILD))).homework_id is None
     assert [message for _, message, _ in kit.max.to_users] == [CHECKED]  # итог родителю ушёл
+
+
+@pytest.mark.parametrize("broken_step", ["summarize", "checked_text", "child_label"])
+async def test_notifier_bug_never_reaches_the_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, broken_step: str
+) -> None:
+    """Сбой не в базе, а в самом коде уведомления (подсчёт, текст): ребёнок сводку уже получил —
+    «попробуй ещё раз» после неё было бы неправдой (ревью 28.09)."""
+    bot, kit = make_bot(tmp_path)
+    await ready_student(kit)
+
+    def broken(*_args: Any, **_kw: Any) -> Any:
+        raise RuntimeError("bug in notifier")
+
+    monkeypatch.setattr(notifier, broken_step, broken)
+    await bot.handle_update(photo(CHILD, "https://files/1.jpg"))
+
+    assert kit.last(CHILD)[0].startswith("Проверил! 3 из 4 верно.")
+    assert RETRY not in kit.texts(CHILD)
+    types = event_types(kit)
+    assert "update_failed" not in types and "check_failed" not in types
+    failures = [e for e in kit.events() if e["type"] in ("notifier_failed", "notify_failed")]
+    assert [e["error"] for e in failures] == ["RuntimeError"]
+    assert failures[0]["component"] == "notifier"
+    assert kit.max.to_users == []
+
+
+@pytest.mark.parametrize("broken_step", ["remaining_buttons", "resolved_text"])
+async def test_notifier_bug_does_not_break_the_tutoring(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, broken_step: str
+) -> None:
+    bot, kit = make_bot(tmp_path)
+    await ready_student(kit)
+    await bot.handle_update(photo(CHILD, "https://files/1.jpg"))
+
+    def broken(*_args: Any, **_kw: Any) -> Any:
+        raise RuntimeError("bug in notifier")
+
+    monkeypatch.setattr(notifier, broken_step, broken)
+    await resolve_error(bot, kit, monkeypatch, index=3)
+
+    assert kit.last(CHILD)[0] == "Верно! 🎉"
+    assert RETRY not in kit.texts(CHILD)
+    assert "update_failed" not in event_types(kit)
+    [failed] = kit.events("notifier_failed")
+    assert (failed["error"], failed["component"]) == ("RuntimeError", "notifier")
+    assert len(kit.max.to_users) == 1  # только итог проверки
+
+
+async def test_unwritable_event_log_does_not_reach_the_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Сбой базы и следом сбой записи события о нём: защита не должна падать сама."""
+    bot, kit = make_bot(tmp_path)
+    await ready_student(kit)
+
+    async def broken(*_args: Any, **_kw: Any) -> Any:
+        raise ConnectionError("postgres down")
+
+    kit.repo.add_homework = broken  # type: ignore[method-assign]
+    kit.repo.get_profile = broken  # type: ignore[method-assign]
+    log = kit.ctx.events.log
+
+    def picky_log(event_type: str, **fields: Any) -> None:
+        if event_type in ("homework_save_failed", "notify_failed", "notifier_failed"):
+            raise OSError("disk full")
+        log(event_type, **fields)
+
+    monkeypatch.setattr(kit.ctx.events, "log", picky_log)
+    await bot.handle_update(photo(CHILD, "https://files/1.jpg"))
+
+    assert kit.last(CHILD)[0].startswith("Проверил! 3 из 4 верно.")
+    assert RETRY not in kit.texts(CHILD)
+    assert "update_failed" not in event_types(kit)
 
 
 async def test_parent_lookup_failure_is_a_failed_notification(tmp_path: Path) -> None:
