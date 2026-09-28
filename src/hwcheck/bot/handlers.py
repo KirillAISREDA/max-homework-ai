@@ -31,6 +31,7 @@ from hwcheck.bot.clarify import (
 )
 from hwcheck.bot.crops import crop_word
 from hwcheck.bot.fsm import ChatState, CheckedTask, Clarification, StateStore
+from hwcheck.bot.invites import parse_source
 from hwcheck.bot.max_api import MaxClient
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
@@ -240,7 +241,12 @@ class Bot:
             if route == "handled":
                 return
         if update.update_type == "bot_started":
-            self._events.log("bot_started", user_id=user_id, user_initiated=True)
+            self._events.log(
+                "bot_started",
+                user_id=user_id,
+                user_initiated=True,
+                source=_source(update.payload),
+            )
             await self._max.send_message(chat_id, WELCOME)
         elif update.update_type == "message_created" and update.message is not None:
             if update.message.image_urls:
@@ -1032,3 +1038,10 @@ def _parse_tutor_index(payload: str, n_tasks: int) -> int | None:
 def _validator_only_grade(steps: list[str], *, condition: str | None = None) -> GradeResult:
     """Столбик примеров без условия: проверка — только детерминированный пересчёт."""
     return validator_only_grade(steps, condition=condition)
+
+
+def _source(payload: str | None) -> str:
+    """Источник трафика без онбординга: приглашений нет, остаются метка канала и прямой заход."""
+    if not payload:
+        return "direct"
+    return parse_source(payload) or "unknown"

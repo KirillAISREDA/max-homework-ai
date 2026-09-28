@@ -2,6 +2,7 @@
 
 import pytest
 
+from hwcheck.bot import invites
 from hwcheck.bot.invites import (
     CODE_ALPHABET,
     CODE_LENGTH,
@@ -79,3 +80,31 @@ def test_digest_is_keyed_in_prod() -> None:
     set_id_hash_key("secret-key")
     expected = hmac.new(b"secret-key", b"invite:4F7K92QD", hashlib.sha256).hexdigest()
     assert digest("4F7K92QD") == expected
+
+
+@pytest.mark.parametrize(
+    ("payload", "source"),
+    [
+        ("s_kanal-1", "kanal-1"),
+        ("s_chat3b", "chat3b"),
+        ("s_KANAL", "kanal"),  # метку набирают руками: регистр не различаем
+        ("s_" + "a" * 32, "a" * 32),
+    ],
+)
+def test_source_tag_of_start_link(payload: str, source: str) -> None:
+    assert invites.parse_source(payload) == source
+
+
+@pytest.mark.parametrize(
+    "payload", [None, "", "s_", "s_-kanal", "s_канал", "s_a b", "s_" + "a" * 33, "kanal", "p_kanal"]
+)
+def test_broken_source_tag_is_not_a_source(payload: str | None) -> None:
+    assert invites.parse_source(payload) is None
+
+
+def test_source_link_is_ordinary_start_link() -> None:
+    assert invites.source_link("domashka_bot", "kanal-1") == (
+        "https://max.ru/domashka_bot?start=s_kanal-1"
+    )
+    with pytest.raises(ValueError, match="метка"):
+        invites.source_link("domashka_bot", "Канал 1")

@@ -1,8 +1,12 @@
-"""Приглашения «ребёнок ↔ родитель» (спецификация онбординга §4.4, §7): ссылка и запасной код.
+"""Метки ссылки на бота: приглашения «ребёнок ↔ родитель» (спецификация онбординга §4.4, §7)
+и источник трафика.
 
 Ссылка `https://max.ru/<бот>?start=p_<токен>` (ребёнок зовёт родителя) или `c_<токен>` (родитель
 зовёт ребёнка); запасной код — 8 знаков без похожих 0/O и 1/I. В базе — только HMAC токена и кода
 (ключ ID_HASH_KEY): утечка таблицы или бэкапа не даёт подобрать и погасить чужое приглашение.
+
+Источник трафика — `?start=s_<метка>`: своя метка на каждый канал, пост или чат. Антифрод
+конкурса просит сведения об источниках трафика (Положение, Прил. 2 п. 5).
 """
 
 import re
@@ -23,6 +27,9 @@ _PREFIX: dict[InviteKind, str] = {"student_invites_parent": "p", "parent_invites
 _KIND_BY_PREFIX: dict[str, InviteKind] = {prefix: kind for kind, prefix in _PREFIX.items()}
 _TOKEN = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 _CODE = re.compile(rf"^([{CODE_ALPHABET}]{{4}})-?([{CODE_ALPHABET}]{{4}})$")
+_SOURCE_PREFIX = "s"
+# короткая латинская метка: в журнал идёт только она, а не произвольный текст из ссылки
+_SOURCE = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 # кириллица, похожая на латиницу кода: ребёнок набирает код в русской раскладке
 _LOOKALIKES = str.maketrans("АВЕКМНРСТХ", "ABEKMHPCTX")
 
@@ -65,6 +72,22 @@ def parse_start_payload(payload: str | None) -> tuple[InviteKind, str] | None:
     if not separator or kind is None or not _TOKEN.match(token):
         return None
     return kind, token
+
+
+def parse_source(payload: str | None) -> str | None:
+    """Метка источника из `bot_started`: «s_kanal-1» → «kanal-1»; не метка — None."""
+    prefix, separator, tag = (payload or "").partition("_")
+    tag = tag.lower()
+    if prefix != _SOURCE_PREFIX or not separator or not _SOURCE.match(tag):
+        return None
+    return tag
+
+
+def source_link(bot_username: str, tag: str) -> str:
+    """Ссылка на бота для канала или поста; негодная метка — ошибка, а не ссылка без учёта."""
+    if not _SOURCE.match(tag):
+        raise ValueError(f"метка источника — латиница, цифры и дефис, до 32 знаков: {tag!r}")
+    return f"https://max.ru/{bot_username}?start={_SOURCE_PREFIX}_{tag}"
 
 
 def parse_code(text: str) -> str | None:
