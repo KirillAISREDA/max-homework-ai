@@ -73,7 +73,7 @@ class ParentSteps:
         )
         ctx.log("consent_given", actor, policy_version=POLICY_VERSION, scenario="parent_first")
         ctx.log("invite_created", actor, kind=invite.kind)
-        await ctx.reply(actor, texts.FORWARD_TO_CHILD)
+        await ctx.reply(actor, texts.forward_to_child(notify=await ctx.notifies(parent.id)))
         message = texts.CHILD_INVITE_MESSAGE.format(
             link=invite.link(ctx.bot_username), code=invite.display_code
         )
@@ -116,14 +116,13 @@ class ParentSteps:
             await ctx.reply(actor, texts.WHOSE_HOMEWORK, texts.whose_keyboard(young))
         return None
 
-    async def homework_subject(self, actor: Actor, account: Account) -> str:
-        """Предмет ребёнка, чью домашку проверяем: выбранного кнопкой «Чья домашка?» или
-        единственного ребёнка 1–4 класса. Иначе математика — предмет по умолчанию."""
+    async def homework_child(self, actor: Actor, account: Account) -> StudentProfile | None:
+        """Ребёнок, чью домашку проверяем: выбранный кнопкой «Чья домашка?» или единственный
+        ребёнок 1–4 класса. От него — предмет проверки и учёт в `homeworks`."""
         young = await self.young_children(account)
         state = await self._ctx.states.get(actor.user_hash)
         chosen = next((c for c in young if c.id == state.child_id), None)
-        child = chosen or (young[0] if len(young) == 1 else None)
-        return (child.subject if child is not None else None) or "math"
+        return chosen or (young[0] if len(young) == 1 else None)
 
     async def choose_owner(self, actor: Actor, account: Account, child_id: int) -> list[str] | None:
         ctx = self._ctx

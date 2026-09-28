@@ -177,6 +177,8 @@ class Bot:
         self._kb_photos = kb_photos
         # None — ONBOARDING_REQUIRED=false: проверка без онбординга, как до этапа 2
         self._onboarding = onboarding
+        # учёт проверок и итоги родителю: без онбординга (и без базы) их нет
+        self._notifier = onboarding.notifier if onboarding is not None else None
         self._findings = findings
         self._cache = FileCache(SOLVER_CACHE_DIR)
         self._deps = subjects or SubjectDeps(llm, self._models, self._cache)
@@ -232,7 +234,7 @@ class Bot:
             route = await self._onboarding.route(update)
             if isinstance(route, CheckPhotos):
                 # предмет знает только онбординг (профиль ученика) — без него всё идёт в математику
-                await self._on_photo(chat_id, user_id, route.urls, route.subject)
+                await self._on_photo(chat_id, user_id, route.urls, route.subject, route.student_id)
                 return
             if route == "handled":
                 return
@@ -250,7 +252,12 @@ class Bot:
             )
 
     async def _on_photo(
-        self, chat_id: int, user_id: int | None, urls: list[str], subject: str = "math"
+        self,
+        chat_id: int,
+        user_id: int | None,
+        urls: list[str],
+        subject: str = "math",
+        student_id: int | None = None,
     ) -> None:
         dropped = max(0, len(urls) - MAX_PHOTOS)
         self._events.log(
@@ -264,12 +271,16 @@ class Bot:
         hint = f" Фото больше {MAX_PHOTOS} — возьму первые {MAX_PHOTOS}." if dropped else ""
         await self._max.send_message(chat_id, CHECKING + hint)
         try:
-            await self._process_photos(chat_id, user_id, urls[:MAX_PHOTOS], subject)
+            checked = await self._process_photos(chat_id, user_id, urls[:MAX_PHOTOS], subject)
         except Exception as exc:
             # ребёнок не должен остаться наедине с «Проверяю...» и тишиной
             logger.exception("photo processing failed")
             self._events.log("check_failed", user_id=user_id, error=type(exc).__name__)
             await self._max.send_message(chat_id, RETRY)
+            return
+        if checked is not None and self._notifier is not None:
+            # сводка и вопросы ребёнку уже ушли: учёт и итог родителю их не задерживают
+            await self._notifier.homework_checked(chat_id, user_id, student_id, checked)
 
     def _save_photo(self, user_id: int | None, image: bytes) -> str | None:
         """Сбой диска не должен ломать проверку: без фото разбор хуже, но ребёнок получит ответ."""
@@ -348,11 +359,12 @@ class Bot:
 
     async def _process_photos(
         self, chat_id: int, user_id: int | None, urls: list[str], subject: str = "math"
-    ) -> None:
+    ) -> ChatState | None:
         """Все фото сообщения: учебник даёт условия, тетрадь — решения.
 
         Проверяются только задания тетради; условия учебника запоминаются в
         состоянии чата (TTL), так что тетрадь может прийти и следующим сообщением.
+        Возвращает состояние проверки, по которой ушла сводка; None — проверять было нечего.
         """
         if subject != "math":
             try:
@@ -363,9 +375,8 @@ class Bot:
                 logger.warning("предмет %r не настроен: проверка недоступна", subject)
                 self._events.log("subject_unavailable", user_id=user_id, subject=subject)
                 await self._max.send_message(chat_id, SUBJECT_UNAVAILABLE)
-                return
-            await self._process_language_photos(chat_id, user_id, urls, module)
-            return
+                return None
+            return await self._process_language_photos(chat_id, user_id, urls, module)
         state = await self._store.get(chat_id)
         known = list(state.textbook_tasks) if textbook_is_fresh(state.textbook_saved_at) else []
         recognized, photo_paths = await self._recognize_all(user_id, urls)
@@ -384,7 +395,7 @@ class Bot:
                 await self._max.send_message(
                     chat_id, UNREADABLE + (f"\n({comment})" if comment else "")
                 )
-            return
+            return None
         checked = [
             await self._check_task(user_id, task, index)
             for index, task in enumerate(attach_conditions(notebook, textbook))
@@ -402,12 +413,13 @@ class Bot:
         await self._send_review(chat_id, new_state)
         if plan:
             await self._ask_clarification(chat_id, user_id, new_state)
+        return new_state
 
     # --- языки (спецификация §6, §8): страницы приходят от модуля через SubjectPage ---
 
     async def _process_language_photos(
         self, chat_id: int, user_id: int | None, urls: list[str], module: SubjectModule
-    ) -> None:
+    ) -> ChatState | None:
         """Учебник даёт упражнения (запоминаются на TTL), тетрадь — слова «как написано».
 
         Упражнение и тетрадь сопоставляются по номеру, единственная пара — друг с другом
@@ -427,7 +439,7 @@ class Bot:
         album = _split_language_album(pages, kb_paths, known)
         if not album.notebook:
             await self._album_without_notebook(chat_id, state, album, subject)
-            return
+            return None
         remembered = album.remembered
         references = await module.resolve_reference(remembered, self._kb)
         for reference in references:
@@ -449,6 +461,7 @@ class Bot:
             await self._max.send_message(chat_id, OCR_FAILED_PARTIAL)
         if plan:
             await self._ask_clarification(chat_id, user_id, new_state)
+        return new_state
 
     async def _to_checked_tasks(
         self,
@@ -929,6 +942,7 @@ class Bot:
         )
         if session.resolved:
             self._events.log("error_fixed", user_id=user_id, user_initiated=True)
+            fixed = state.tutoring_index
             resolved = (
                 [*state.resolved_indices, state.tutoring_index]
                 if state.tutoring_index is not None
@@ -949,6 +963,8 @@ class Bot:
                 await self._max.send_message(
                     chat_id, "Разберём ещё одну ошибку?", buttons=remaining
                 )
+            if self._notifier is not None:
+                await self._notifier.error_fixed(chat_id, user_id, state, fixed)
         else:
             state = state.model_copy(update={"tutor": session})
             await self._store.set(chat_id, state)

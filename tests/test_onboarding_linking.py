@@ -48,7 +48,7 @@ async def test_parent_opens_link_and_consents(tmp_path: Path) -> None:
     assert payloads(buttons) == ["ob:policy", f"ob:accept:{tag}", f"ob:decline:{tag}"]
 
     await linking(kit).accept(parent, tag)
-    assert kit.last(2)[0] == texts.CONSENT_THANKS
+    assert kit.last(2)[0] == texts.consent_thanks(notify=True)
     allowed = f"{texts.PARENT_ALLOWED}\n\n{texts.INSTRUCTION_STUDENT}"
     assert kit.max.to_users == [(1, allowed, None)]
     assert profile.user_id is not None
@@ -149,7 +149,7 @@ async def test_accept_with_wrong_tag_does_not_touch_other_invite(tmp_path: Path)
     assert linked_a is not None and not linked_a.has_consent
 
     await linking(kit).accept(parent, tag_b)
-    assert kit.last(2)[0] == texts.CONSENT_THANKS
+    assert kit.last(2)[0] == texts.consent_thanks(notify=True)
     assert profile_b.user_id is not None
     linked_b = await kit.repo.own_profile(profile_b.user_id)
     assert linked_b is not None and linked_b.has_consent
@@ -169,7 +169,7 @@ async def test_late_decline_after_other_parent_accepted(tmp_path: Path) -> None:
     dad_tag = consent_tag(kit.last(4)[1])
 
     await linking(kit).accept(dad, dad_tag)
-    assert kit.last(4)[0] == texts.CONSENT_THANKS
+    assert kit.last(4)[0] == texts.consent_thanks(notify=True)
 
     await linking(kit).decline(mum, mum_tag)
     assert kit.last(2)[0] == texts.invite_refusal("student_invites_parent", "has_parent")
@@ -201,10 +201,44 @@ async def test_blocked_child_does_not_break_consent(tmp_path: Path) -> None:
     kit.max.blocked_users.add(1)
     await linking(kit).open_link(actor(2), None, "student_invites_parent", link_token(message))
     await linking(kit).accept(actor(2), consent_tag(kit.last(2)[1]))
-    assert kit.last(2)[0] == texts.CONSENT_THANKS
+    assert kit.last(2)[0] == texts.consent_thanks(notify=True)
     [failed] = kit.events("notify_failed")
     assert (failed["kind"], failed["component"], failed["error"]) == (
         "consent_given",
         "notifier",
         "RuntimeError",
     )
+
+
+async def test_unreadable_notify_mode_does_not_break_consent(tmp_path: Path) -> None:
+    """Согласие уже записано: сбой чтения настройки не должен оставить ребёнка без «разрешил»."""
+    kit = make_kit(tmp_path)
+    _, message = await waiting_student(kit)
+
+    async def broken(_parent_user_id: int) -> str:
+        raise ConnectionError("postgres down")
+
+    kit.repo.notify_mode = broken  # type: ignore[method-assign]
+    await linking(kit).open_link(actor(2), None, "student_invites_parent", link_token(message))
+    await linking(kit).accept(actor(2), consent_tag(kit.last(2)[1]))
+    assert kit.last(2)[0] == texts.consent_thanks(notify=True)
+    assert [who for who, _, _ in kit.max.to_users] == [1]
+
+
+async def test_consent_promises_summaries_only_while_they_are_on(tmp_path: Path) -> None:
+    """Родитель отключил итоги и подключает второго ребёнка: обещать итог было бы неправдой."""
+    kit = make_kit(tmp_path)
+    parent = actor(2)
+    _, first = await waiting_student(kit, user_id=1)
+    await linking(kit).open_link(parent, None, "student_invites_parent", link_token(first))
+    await linking(kit).accept(parent, consent_tag(kit.last(2)[1]))
+    assert kit.last(2)[0] == texts.consent_thanks(notify=True)
+    assert texts.NOTIFY_PROMISE in kit.last(2)[0]
+
+    account = await kit.repo.get_account(parent.user_hash)
+    assert account is not None
+    await kit.repo.set_notify_mode(account.id, "off")
+    _, second = await waiting_student(kit, user_id=3)
+    await linking(kit).open_link(parent, account, "student_invites_parent", link_token(second))
+    await linking(kit).accept(parent, consent_tag(kit.last(2)[1]))
+    assert kit.last(2)[0] == texts.CONSENT_THANKS

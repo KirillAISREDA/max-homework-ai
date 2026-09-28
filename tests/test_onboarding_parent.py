@@ -48,6 +48,8 @@ async def test_parent_of_young_child_sends_photos_himself(tmp_path: Path) -> Non
     await parents(kit).give_consent(me, child)
     await parents(kit).give_consent(me, child)  # второе «Согласен»
     assert kit.last(2) == (texts.INSTRUCTION_PARENT, texts.add_child_keyboard())
+    # 1–4 класс: результат родитель видит сам, итогов отдельным сообщением нет
+    assert texts.NOTIFY_PROMISE not in kit.last(2)[0]
     assert [e["scenario"] for e in kit.events("consent_given")] == ["parent_sends"]
     [consented] = await kit.repo.children(account.id)
     assert consented.has_consent
@@ -64,7 +66,8 @@ async def test_parent_of_older_child_consents_then_forwards_link(tmp_path: Path)
 
     await parents(kit).invite_child(me, None, 7)
     forward, message = kit.texts(2)[-2:]
-    assert forward == texts.FORWARD_TO_CHILD
+    assert forward == texts.forward_to_child(notify=True)
+    assert texts.NOTIFY_PROMISE in forward
     assert f"https://max.ru/{BOT}?start=c_" in message
     invite = await kit.repo.find_invite(token_hash=digest(link_token(message)))
     assert invite is not None and (invite.kind, invite.grade) == ("parent_invites_student", 7)
@@ -119,3 +122,12 @@ async def test_two_young_children_ask_whose_homework(tmp_path: Path) -> None:
     kit.clock.now += timedelta(seconds=OWNER_TTL_S)
     assert await steps.choose_owner(me, account, second_grade.id) is None  # фото устарели
     assert kit.last(2)[0] == texts.PHOTOS_EXPIRED
+
+
+async def test_parent_with_summaries_off_is_not_promised_them(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    me = actor(2)
+    account = await kit.repo.get_or_create_account(me.user_hash, kit.ctx.encrypted_id(me), "parent")
+    await kit.repo.set_notify_mode(account.id, "off")
+    await parents(kit).invite_child(me, account, 7)
+    assert kit.texts(2)[-2] == texts.FORWARD_TO_CHILD

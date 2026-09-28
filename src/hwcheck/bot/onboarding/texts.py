@@ -85,9 +85,16 @@ PARENT_FIRST_CONSENT = (
 PARENT_SENDS_CONSENT = (
     "В 1–4 классе фото домашки присылаете вы — из своего MAX, можно вместе с ребёнком."
 )
+# итог родителю уходит только за ребёнка 5–9 класса со своим MAX (bot/notifier.py); за 1–4 класс
+# фото присылает сам родитель — обещать ему итог было бы неправдой
+NOTIFY_PROMISE = (
+    "После каждой проверки пришлю вам короткий итог; отключить можно кнопкой под сообщением."
+)
 CONSENT_THANKS = "Спасибо! Ребёнок получил доступ и может присылать домашку ✅"
 DECLINED = "Хорошо, доступ не открыт. Если передумаете — попросите ребёнка прислать новую ссылку."
 FORWARD_TO_CHILD = "Спасибо! Перешлите ребёнку сообщение ниже 👇"
+# ссылка ребёнку идёт следующим сообщением — «👇» остаётся последней строкой
+FORWARD_TO_CHILD_NOTIFY = f"Спасибо! {NOTIFY_PROMISE}\n\nПерешлите ребёнку сообщение ниже 👇"
 CHILD_INVITE_MESSAGE = (
     "Открой ссылку, чтобы подключиться к Домашке: {link}\n"
     "Если ссылка не открылась — отправь боту код {code}"
@@ -127,6 +134,15 @@ def bot_link(username: str) -> str:
 
 def consent_text(intro: str) -> str:
     return f"{intro}\n\n{CONSENT_SUMMARY}"
+
+
+def consent_thanks(*, notify: bool) -> str:
+    """notify — итоги у родителя включены: иначе обещание итога было бы неправдой."""
+    return f"{CONSENT_THANKS}\n\n{NOTIFY_PROMISE}" if notify else CONSENT_THANKS
+
+
+def forward_to_child(*, notify: bool) -> str:
+    return FORWARD_TO_CHILD_NOTIFY if notify else FORWARD_TO_CHILD
 
 
 def invite_refusal(kind: InviteKind, result: InviteResult) -> str:

@@ -31,11 +31,14 @@ class FakeMax:
         self.callbacks: list[str] = []
         self.downloads: list[str] = []
         self.blocked_users: set[int] = set()  # заблокировали бота: send_to_user падает
+        # общий порядок отправки: ("chat" | "user", id, текст) — что ушло раньше, сводка или итог
+        self.timeline: list[tuple[str, int, str]] = []
 
     async def send_message(
         self, chat_id: int, text: str, *, buttons: Buttons | None = None
     ) -> None:
         self.sent.append((chat_id, text, buttons))
+        self.timeline.append(("chat", chat_id, text))
 
     async def send_to_user(
         self, user_id: int, text: str, *, buttons: Buttons | None = None
@@ -43,6 +46,7 @@ class FakeMax:
         if user_id in self.blocked_users:
             raise RuntimeError("blocked by user")
         self.to_users.append((user_id, text, buttons))
+        self.timeline.append(("user", user_id, text))
 
     async def answer_callback(self, callback_id: str, *, notification: str | None = None) -> None:
         self.callbacks.append(callback_id)
@@ -188,9 +192,11 @@ def code_of(message: str) -> str:
     return match.group(1)
 
 
-async def ready_student(kit: Kit, user_id: int = 1, grade: int = 7) -> StudentProfile:
-    """Ученик с предметом и подключённым родителем (родитель — user_id + 100)."""
-    me, parent = actor(user_id), actor(user_id + 100)
+async def ready_student(
+    kit: Kit, user_id: int = 1, grade: int = 7, *, parent_id: int | None = None
+) -> StudentProfile:
+    """Ученик с предметом и подключённым родителем (родитель — user_id + 100, если не задан)."""
+    me, parent = actor(user_id), actor(parent_id or user_id + 100)
     profile = await kit.repo.create_student(
         me.user_hash, kit.ctx.encrypted_id(me), grade, kit.ctx.school_year()
     )

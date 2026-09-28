@@ -66,6 +66,18 @@ class OnboardingContext:
     async def reply(self, actor: Actor, text: str, buttons: Buttons | None = None) -> None:
         await self.max.send_message(actor.chat_id, text, buttons=buttons)
 
+    async def notifies(self, parent_user_id: int) -> bool:
+        """Родителю уходят итоги проверок (bot/notifier.py): режим не «не присылать».
+
+        От ответа зависит одна фраза в тексте после согласия. Настройка не прочиталась — считаем
+        по умолчанию (включены): согласие уже записано, и срывать из-за фразы сообщение ребёнку
+        «родитель разрешил» нельзя."""
+        try:
+            return await self.repo.notify_mode(parent_user_id) != "off"
+        except Exception as exc:
+            logger.warning("notify mode unreadable: %s", type(exc).__name__)
+            return True
+
     def log(self, event: str, actor: Actor, *, user_initiated: bool = True, **fields: Any) -> None:
         self.events.log(event, user_id=actor.user_id, user_initiated=user_initiated, **fields)
 

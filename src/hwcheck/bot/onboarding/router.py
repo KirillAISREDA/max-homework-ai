@@ -14,6 +14,7 @@ from typing import Literal
 
 from hwcheck.bot.invites import parse_code, parse_start_payload
 from hwcheck.bot.models import MaxUpdate
+from hwcheck.bot.notifier import ParentNotifier
 from hwcheck.bot.onboarding import texts
 from hwcheck.bot.onboarding.context import Actor, OnboardingContext
 from hwcheck.bot.onboarding.linking import Linking
@@ -43,11 +44,20 @@ class CheckPhotos:
     """Фото, которые онбординг отдаёт в проверку (родитель выбрал, чья домашка).
 
     Предмет знает только онбординг (профиль ученика или выбранного ребёнка) — бот берёт его
-    отсюда, иначе всё уходило бы в математику.
+    отсюда, иначе всё уходило бы в математику. Оттуда же профиль ребёнка: на него записывается
+    проверка, по нему ищется родитель для итога (bot/notifier.py).
     """
 
     urls: list[str]
     subject: str = "math"
+    student_id: int | None = None  # `student_profiles.id`; None — ребёнок не определён
+
+
+def _photos_of(urls: list[str], child: StudentProfile | None) -> CheckPhotos:
+    """Математика — предмет по умолчанию: профиль без предмета до проверки не доходит."""
+    if child is None:
+        return CheckPhotos(urls)
+    return CheckPhotos(urls, subject=child.subject or "math", student_id=child.id)
 
 
 Route = Literal["handled", "pass"] | CheckPhotos
@@ -73,6 +83,8 @@ class Onboarding:
         self._students = StudentSteps(ctx, self._subjects)
         self._parents = ParentSteps(ctx, self._subjects)
         self._linking = Linking(ctx, self._subjects)
+        # тот же контекст, что у шагов: бот берёт notifier отсюда, без онбординга его нет
+        self.notifier = ParentNotifier(ctx)
         self._actions: dict[str, Action] = {
             "role": self._role,
             "grade": self._grade,
@@ -87,6 +99,7 @@ class Onboarding:
             "resend": self._resend,
             "addchild": self._add_child,
             "whose": self._whose,
+            "notify": self._notify,
         }
 
     async def route(self, update: MaxUpdate) -> Route:
@@ -182,15 +195,13 @@ class Onboarding:
 
     async def _on_photo(self, actor: Actor, position: Position, urls: list[str]) -> Route:
         if position.step == "student_ready":
-            profile = position.profile
-            subject = (profile.subject if profile is not None else None) or "math"
-            return CheckPhotos(urls, subject=subject)
+            return _photos_of(urls, position.profile)
         account = position.account
         if account is not None and (position.step == "parent_ready" or position.can_check):
             chosen = await self._parents.on_photo(actor, account, urls)
             if not chosen:
                 return "handled"
-            return CheckPhotos(chosen, subject=await self._parents.homework_subject(actor, account))
+            return _photos_of(chosen, await self._parents.homework_child(actor, account))
         self._ctx.log("photo_blocked_no_consent", actor, step=position.step)
         if position.step == "waiting_parent":
             await self._students.block_photo(actor)
@@ -309,7 +320,16 @@ class Onboarding:
         urls = await self._parents.choose_owner(actor, account, int(arg))
         if not urls:
             return "handled"
-        return CheckPhotos(urls, subject=await self._parents.homework_subject(actor, account))
+        return _photos_of(urls, await self._parents.homework_child(actor, account))
+
+    async def _notify(self, actor: Actor, position: Position, arg: str) -> Route | None:
+        # кнопку под итогом мог нажать кто угодно (пересланное сообщение, выдуманный payload):
+        # режим меняет только родитель и только себе
+        account = position.account
+        if account is None or account.role != "parent" or arg not in ("on", "off"):
+            return None
+        await self.notifier.switch(actor, account, enabled=arg == "on")
+        return "handled"
 
 
 def _parent_side(position: Position) -> bool:
