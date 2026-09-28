@@ -6,12 +6,14 @@ import json
 import logging
 import secrets
 import sys
+from datetime import date
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from hwcheck.bench.cli import add_bench_parser, report_command, ru_command, run_command
 from hwcheck.bot.runner import run_polling
 from hwcheck.config import Settings, load_settings
+from hwcheck.cost import DEFAULT_PRICING, cost_report, load_pricing, render_cost_report
 from hwcheck.crypto import new_user_id_key
 from hwcheck.db.kb import PgKnowledgeBase
 from hwcheck.db.pool import create_pool
@@ -76,8 +78,22 @@ def main(argv: list[str] | None = None) -> None:
         "keys", help="Новые секреты для .env: ID_HASH_KEY, USER_ID_KEY, POSTGRES_PASSWORD"
     )
 
-    rep = sub.add_parser("report", help="Сводка вердиктов и причин «не уверен» по журналу событий")
-    rep.add_argument("events", type=Path, nargs="?", default=Path("var/events.jsonl"))
+    rep = sub.add_parser(
+        "report",
+        help="Сводка вердиктов по журналу событий; `report cost` — стоимость вызовов модели",
+    )
+    # не подкоманда argparse: `hwcheck report var/events.jsonl` из runbook обязан работать как
+    # раньше, а подкоманда забрала бы путь себе
+    rep.add_argument(
+        "target",
+        nargs="*",
+        metavar="[cost] [events]",
+        help="путь к журналу (по умолчанию var/events.jsonl); cost — отчёт о стоимости",
+    )
+    rep.add_argument("--env", default="prod", help="cost: среда prod | test | dev | all")
+    rep.add_argument("--since", default=None, help="cost: с даты YYYY-MM-DD (по Москве)")
+    rep.add_argument("--pricing", type=Path, default=DEFAULT_PRICING, help="cost: файл тарифов")
+    rep.add_argument("--json", action="store_true", help="cost: выгрузка JSON вместо таблицы")
 
     add_bench_parser(sub)
 
@@ -109,12 +125,41 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "report":
         # без кредов GigaChat: только чтение журнала
-        print(json.dumps(summarize_events(read_events(args.events)), ensure_ascii=False, indent=2))
+        try:
+            print(_report(args))
+        except ValueError as exc:
+            rep.error(str(exc))
         return
     if args.command == "bench" and args.bench_command == "report":
         report_command(args)  # только чтение прогонов и разметки
         return
     asyncio.run(_run(args))
+
+
+def _report(args: argparse.Namespace) -> str:
+    """Текст отчёта; ValueError — неверные аргументы (сообщение покажет argparse)."""
+    target: list[str] = args.target
+    cost = bool(target) and target[0] == "cost"
+    paths = target[1:] if cost else target
+    if len(paths) > 1:
+        raise ValueError("журнал событий один: report [cost] [events]")
+    events = Path(paths[0]) if paths else Path("var/events.jsonl")
+    if not cost:
+        return json.dumps(summarize_events(read_events(events)), ensure_ascii=False, indent=2)
+    try:
+        since = date.fromisoformat(args.since) if args.since else None
+    except ValueError as exc:
+        raise ValueError(f"--since: ожидается дата YYYY-MM-DD, получено {args.since!r}") from exc
+    try:
+        pricing = load_pricing(args.pricing)
+    except OSError as exc:
+        raise ValueError(f"--pricing: файл тарифов не прочитан: {args.pricing}") from exc
+    report = cost_report(
+        read_events(events), pricing, env=None if args.env == "all" else args.env, since=since
+    )
+    if args.json:
+        return report.model_dump_json(indent=2)
+    return render_cost_report(report)
 
 
 LOG_MAX_BYTES = 5_000_000
