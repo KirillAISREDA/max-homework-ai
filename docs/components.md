@@ -1,7 +1,7 @@
 # Реестр сторонних компонентов
 
 Раскрытие сторонних библиотек, моделей и API проекта — п. 5.3 Положения о конкурсе Sber500xDisrupt
-(см. `docs/contest/contest.md`). Актуально на: **2026-09-17** (OCR-сервис — `ocrsvc/` на
+(см. `docs/contest/contest.md`). Актуально на: **2026-09-28** (шлюз моделей организаторов конкурса, §3–4); прежняя сверка — 2026-09-17 (OCR-сервис — `ocrsvc/` на
 ReadingPipeline, см. §5, §5.1, §6).
 
 ## 1. Python-зависимости runtime
@@ -15,7 +15,7 @@ ReadingPipeline, см. §5, §5.1, §6).
 | certifi | 2026.7.22 | MPL-2.0 | Корневые сертификаты для TLS; база, к которой `bot/max_api.py` добавляет корень НУЦ Минцифры при обращении к MAX API |
 | cryptography | 50.0.1 | Apache-2.0 OR BSD-3-Clause | Fernet: id MAX в базе хранится только шифротекстом (`crypto.py`, спецификация онбординга §10.1) |
 | gigachat | 0.2.3 | MIT | Официальный SDK GigaChat API — единственный клиент LLM/vision (`llm/gigachat_client.py`), OAuth и его обновление берёт на себя |
-| httpx | 0.28.1 | BSD-3-Clause | Асинхронный HTTP-клиент MAX Bot API (`bot/max_api.py`): long polling `/updates`, отправка сообщений |
+| httpx | 0.28.1 | BSD-3-Clause | Асинхронный HTTP-клиент MAX Bot API (`bot/max_api.py`): long polling `/updates`, отправка сообщений; клиент шлюза моделей (`llm/gateway_client.py`) |
 | pillow | 12.3.0 | MIT-CMU | Обработка фотографий тетради перед vision-запросом (`pipeline/normalize.py`: `Image`, `ImageOps`) |
 | pydantic | 2.13.5 | MIT | Модели данных и валидация: JSON Schema LLM-контрактов (`pipeline/schemas.py`), состояние FSM (`bot/fsm.py`, `bot/models.py`) |
 | pydantic-settings | 2.15.0 | MIT | Загрузка конфигурации из `.env` в `Settings` (`config.py`) |
@@ -55,11 +55,26 @@ ReadingPipeline, см. §5, §5.1, §6).
 Примечание: идентификаторы моделей заданы дефолтами в коде и подлежат сверке с актуальной линейкой
 GigaChat при обновлении (комментарий в `config.py`).
 
+**Шлюз моделей организаторов конкурса** (с 28.09.2026). Модель шага идёт через шлюз, если её имя в
+настройке начинается с `gw:` (`llm/router.py`); без префикса — в GigaChat API. Какие модели работают
+в проде, видно по полю `model` события `llm_call` в журнале.
+
+| Настройка в проде | Модель шлюза | Разработчик модели | Используется для |
+|---|---|---|---|
+| `solver_model` | `gw:gigachat-2-max` | ПАО Сбербанк | эталонное решение |
+| `tutor_model` | `gw:gigachat-2-max` | ПАО Сбербанк | разбор страницы на задания, классификатор ошибок, тьютор, объяснение верного решения |
+| `vision_model` | GigaChat-2-Max напрямую | ПАО Сбербанк | чтение фото: GigaChat через шлюз изображения не принимает |
+
+Модели сторонних разработчиков (Google Gemini, Anthropic Claude, OpenAI GPT, Alibaba Qwen) проверялись
+только на стенде, на страницах открытого датасета — `bench/reports/2026-09-28-gateway.md`. В проде они
+не используются: для чтения фото детей нужны новая версия политики и согласия.
+
 ## 4. Внешние API
 
 | API | Хост(ы) | Назначение | Аутентификация |
 |---|---|---|---|
 | GigaChat API | OAuth: `ngw.devices.sberbank.ru`; данные: `gigachat.devices.sberbank.ru` | LLM- и vision-инференс (см. раздел 3) | OAuth 2.0 по `gigachat_credentials`/`gigachat_scope` (`.env`, не в git); токен на 30 минут, обновление — внутри SDK `gigachat` |
+| Шлюз моделей организаторов Sber500 x Disrupt | `shared1.multitool.works:4000` (Москва, Yandex Cloud) | LLM-инференс по OpenAI-совместимому API (`/v1/chat/completions`), 95 моделей; стоимость вызова — в заголовке ответа | Ключ команды в заголовке `Authorization` (`llm_gateway_key`, `.env`, не в git) |
 | MAX Bot API | `platform-api2.max.ru` (настраивается через `max_base_url`) | Приём апдейтов (long polling `GET /updates`), скачивание фото из сообщений, отправка сообщений и ответов на кнопки | Токен бота в заголовке `Authorization` (`max_token`, `.env`, не в git) |
 
 TLS к `platform-api2.max.ru` требует корня НУЦ Минцифры сверх `certifi` (см. раздел 5, сертификат).
