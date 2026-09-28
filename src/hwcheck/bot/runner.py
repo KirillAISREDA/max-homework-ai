@@ -42,8 +42,8 @@ from hwcheck.db.kb import PgKnowledgeBase
 from hwcheck.db.pool import create_pool
 from hwcheck.db.repo import PgProfileRepository
 from hwcheck.events import EventLog, set_id_hash_key
-from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.llm.journal import JournaledLLM
+from hwcheck.llm.router import make_llm
 from hwcheck.ocr_client import OcrClient
 from hwcheck.photos import PhotoStore
 from hwcheck.pipeline.solver import FileCache
@@ -266,7 +266,8 @@ async def run_polling(settings: Settings) -> None:
         )
         # каждый вызов модели — событие llm_call в том же журнале: стоимость проверки и
         # конкурсный учёт обращений считаются по вызовам, а не по шагам
-        llm = JournaledLLM(await resources.enter_async_context(GigaChatClient(settings)), events)
+        # поставщика выбирает имя модели: «gw:…» — шлюз, иначе GigaChat API
+        llm = JournaledLLM(await resources.enter_async_context(make_llm(settings)), events)
         me = await max_client.me()
         logger.info("bot started: %s", me.get("name") or me)
         print(f"Бот запущен: {me.get('name', me)}. Ctrl+C — остановка.")

@@ -107,7 +107,7 @@ async def test_user_of_update_does_not_leak_into_next_update(tmp_path: Path) -> 
 async def test_runner_gives_bot_and_subjects_the_journaled_client(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Раннер обязан обернуть клиента GigaChat: иначе бот работает, а журнал вызовов пуст."""
+    """Раннер обязан обернуть клиента моделей: иначе бот работает, а журнал вызовов пуст."""
     captured: dict[str, Any] = {}
 
     class FakeResource:
@@ -131,7 +131,7 @@ async def test_runner_gives_bot_and_subjects_the_journaled_client(
         return None
 
     monkeypatch.setattr(runner, "MaxClient", FakeResource)
-    monkeypatch.setattr(runner, "GigaChatClient", FakeResource)
+    monkeypatch.setattr(runner, "make_llm", FakeResource)
     monkeypatch.setattr(runner, "Bot", FakeBot)
     monkeypatch.setattr(runner, "_poll_loop", no_polling)
     monkeypatch.setattr(runner, "_install_stop_handler", lambda *_args: None)

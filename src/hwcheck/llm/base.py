@@ -24,6 +24,8 @@ class LLMResult(BaseModel):
     tokens_in: int = 0
     tokens_out: int = 0
     latency_s: float = 0.0
+    # стоимость вызова, если её сообщил поставщик (шлюз моделей), в его валюте
+    cost: float | None = None
 
 
 class LLMClient(Protocol):
@@ -198,6 +200,8 @@ async def chat_structured[T: BaseModel](
         retry_result.tokens_in += result.tokens_in
         retry_result.tokens_out += result.tokens_out
         retry_result.latency_s += result.latency_s
+        if result.cost is not None:
+            retry_result.cost = (retry_result.cost or 0.0) + result.cost
         try:
             return _parse(schema, retry_result.content), retry_result
         except ValidationError as retry_error:

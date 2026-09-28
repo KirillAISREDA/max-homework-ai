@@ -1,0 +1,1 @@
+{"name": "gw-gemini25flash", "vision_model": "gw:gemini-2.5-flash", "structure_model": "gw:gigachat-2-max", "solver_model": "gw:gigachat-2-max"}

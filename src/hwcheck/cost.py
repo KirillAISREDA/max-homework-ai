@@ -218,7 +218,13 @@ class _PricedCall:
         self.tokens_out = _int(row.get("tokens_out"))
         # нечисловые токены считаются нулём, но вызов не должен сойти за бесплатный молча
         self.malformed = not (_is_int(row.get("tokens_in")) and _is_int(row.get("tokens_out")))
-        self.cost = pricing.cost(self.model, self.tokens_in, self.tokens_out)
+        # стоимость из журнала сообщил сам поставщик (шлюз моделей) — она точнее тарифа
+        reported = row.get("cost")
+        self.cost = (
+            float(reported)
+            if isinstance(reported, int | float) and not isinstance(reported, bool)
+            else pricing.cost(self.model, self.tokens_in, self.tokens_out)
+        )
 
     @property
     def tokens(self) -> int:

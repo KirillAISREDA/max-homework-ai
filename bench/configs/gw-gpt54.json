@@ -1,0 +1,1 @@
+{"name": "gw-gpt54", "vision_model": "gw:gpt-5.4", "structure_model": "gw:gigachat-2-max", "solver_model": "gw:gigachat-2-max"}

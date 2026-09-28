@@ -331,6 +331,20 @@ def test_unpriced_calls_are_visible_in_every_total() -> None:
     assert text.count("без тарифа") >= 3
 
 
+def test_cost_reported_by_provider_wins_over_tariff() -> None:
+    """Стоимость из журнала (её сообщил шлюз) точнее тарифа и есть даже у модели без тарифа."""
+    rows = [
+        upload(),
+        {**call("solver", MAX, 9_000, 1_000), "cost": 0.5},  # по тарифу было бы 6,5
+        {**call("vision", "gw:qwen3-vl", 2_000, 500), "cost": 0.25},
+        {**call("tutor", "gw:qwen3-vl", 2_000, 500), "cost": "дорого"},  # не число — тарифа нет
+    ]
+    report = cost_report(rows, PRICING)
+    assert report.total.cost == pytest.approx(0.75)
+    assert report.total.unpriced_calls == 1
+    assert report.unpriced_models == ["gw:qwen3-vl"]
+
+
 # --- обращения по методике конкурса ---
 
 

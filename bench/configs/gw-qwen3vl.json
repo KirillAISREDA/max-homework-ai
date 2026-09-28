@@ -1,0 +1,1 @@
+{"name": "gw-qwen3vl", "vision_model": "gw:qwen3-vl-235b-a22b-instruct", "structure_model": "gw:gigachat-2-max", "solver_model": "gw:gigachat-2-max"}

@@ -14,6 +14,15 @@ class Settings(BaseSettings):
     # PERS-фримиум: 1 одновременный запрос; больше — 429 (арх. §8: семафор)
     gigachat_concurrency: int = 1
 
+    # шлюз моделей с OpenAI-совместимым API (выдан организаторами конкурса); модель шага идёт
+    # через него, если её имя начинается с «gw:» (VISION_MODEL=gw:…), иначе — в GigaChat API
+    llm_gateway_url: str = ""
+    llm_gateway_key: str = ""
+    llm_gateway_timeout: float = 90.0
+    llm_gateway_max_retries: int = 3
+    # лимита одновременных запросов у ключа нет; предел — чтобы всплеск не уронил шлюз
+    llm_gateway_concurrency: int = 8
+
     max_token: str = ""
     max_base_url: str = "https://platform-api2.max.ru"
     # platform-api2.max.ru подписан НУЦ Минцифры: корень добавляется к certifi

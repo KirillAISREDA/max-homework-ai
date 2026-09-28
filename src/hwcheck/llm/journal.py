@@ -92,7 +92,14 @@ class JournaledLLM:
             # BaseException: отмена по SIGTERM посреди запроса — тоже состоявшееся обращение
             self._log(kind, model, started, error=type(exc).__name__)
             raise
-        self._log(kind, model, started, tokens_in=result.tokens_in, tokens_out=result.tokens_out)
+        self._log(
+            kind,
+            model,
+            started,
+            tokens_in=result.tokens_in,
+            tokens_out=result.tokens_out,
+            cost=result.cost,
+        )
         return result
 
     def _log(
@@ -103,6 +110,7 @@ class JournaledLLM:
         *,
         tokens_in: int = 0,
         tokens_out: int = 0,
+        cost: float | None = None,
         error: str | None = None,
     ) -> None:
         step, prompt_version = _step.get()
@@ -117,6 +125,7 @@ class JournaledLLM:
                 kind=kind,
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
+                cost=cost,  # сообщил поставщик (шлюз); None — считать по тарифу
                 latency_ms=round((time.perf_counter() - started) * 1000),
                 status="ok" if error is None else "error",
                 error=error,

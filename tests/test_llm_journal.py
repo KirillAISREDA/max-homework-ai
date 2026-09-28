@@ -263,3 +263,17 @@ async def test_journal_recovery_resets_failure_streak(
 
     assert not [r for r in caplog.records if r.levelno == logging.ERROR]
     assert len(llm_calls(path)) == 2
+
+
+async def test_cost_reported_by_provider_is_written(tmp_path: Path) -> None:
+    """Шлюз сообщает стоимость вызова сам: она точнее пересчёта токенов по тарифу."""
+
+    class Priced:
+        async def chat(self, messages: Any, *, model: str, temperature: float = 0.1) -> LLMResult:
+            return LLMResult(content="ok", model=model, tokens_in=10, tokens_out=5, cost=0.25)
+
+    path = tmp_path / "events.jsonl"
+    client = JournaledLLM(Priced(), EventLog(path, "prod"))  # type: ignore[arg-type]
+    await client.chat([ChatMessage(role="user", content="тест")], model="gw:gigachat-2-max")
+    [event] = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert (event["model"], event["cost"]) == ("gw:gigachat-2-max", 0.25)
