@@ -14,6 +14,7 @@ from hwcheck.llm.journal import JournaledLLM
 from hwcheck.pipeline.classifier import classify_error
 from hwcheck.pipeline.generator import generate_similar
 from hwcheck.pipeline.grade import grade
+from hwcheck.pipeline.praise import PraiseInput, generate_praise
 from hwcheck.pipeline.solver import RefSolution, solve_task
 from hwcheck.pipeline.tutor import tutor_reply
 from hwcheck.pipeline.vision import recognize_page, recognize_page_two_stage
@@ -22,6 +23,8 @@ from hwcheck.subjects.russian.gaps import derive_text
 from hwcheck.subjects.russian.recognize import recognize_page as recognize_ru_page
 from hwcheck.subjects.russian.rules import classify_orthogram
 from test_classifier_generator import BAD_EXERCISE, GOOD_EXERCISE, classifier_json
+from test_praise import COLUMN, TECHNIQUE, WHY
+from test_praise import reply as praise_json
 from test_ru_gaps import WORDS
 from test_ru_recognize import TEXTBOOK, FakeVision
 from test_ru_tutor import _session as word_session
@@ -142,4 +145,11 @@ async def test_ru_orthogram_step(tmp_path: Path) -> None:
     client, path = journaled(FakeLLMClient([answer]), tmp_path)
     await classify_orthogram(client, "машына", "машина", "Едет машына", model="s")
     assert steps(path) == [("ru_orthogram", "v1", "chat")]
+    assert_prompts_exist(steps(path))
+
+
+async def test_praise_step(tmp_path: Path) -> None:
+    client, path = journaled(FakeLLMClient([praise_json((COLUMN.index, TECHNIQUE, WHY))]), tmp_path)
+    await generate_praise(client, PraiseInput(tasks=[COLUMN]), model="m")
+    assert steps(path) == [("praise", "v1", "chat")]
     assert_prompts_exist(steps(path))

@@ -42,7 +42,8 @@ from hwcheck.bot.pages import (
     task_label,
     textbook_is_fresh,
 )
-from hwcheck.bot.summary import clarified_line, review_header, task_line
+from hwcheck.bot.praise import explain_correct, with_fallback_praise
+from hwcheck.bot.summary import clarified_line, review_message
 from hwcheck.bot.summary import lower as _lower
 from hwcheck.bot.summary import remaining_buttons as _remaining_buttons
 from hwcheck.config import Settings
@@ -407,6 +408,14 @@ class Bot:
             await self._check_task(user_id, task, index)
             for index, task in enumerate(attach_conditions(notebook, textbook))
         ]
+        # за что похвалили верные задания: один вызов модели на домашку, сбой — запасной текст
+        checked = await explain_correct(
+            self._llm,
+            checked,
+            model=self._settings.tutor_model,
+            events=self._events,
+            user_id=user_id,
+        )
         plan = plan_clarifications(checked)
         new_state = ChatState(
             phase="clarifying" if plan else "review",
@@ -666,19 +675,8 @@ class Bot:
             logger.exception("findings save failed")
 
     async def _send_review(self, chat_id: int, state: ChatState) -> None:
-        asked = {c.task_index for c in state.clarifications}
-        lines = []
-        buttons = []
-        for i, item in enumerate(state.tasks):
-            if i in asked:
-                lines.append(f"{task_label(item.task)} — уточню у тебя одну деталь ✍️")
-                continue
-            line, button = task_line(i, item)
-            lines.append(line)
-            if button:
-                buttons.append(button)
-        header = review_header(state)
-        await self._max.send_message(chat_id, header + "\n".join(lines), buttons=buttons or None)
+        text, buttons = review_message(state)
+        await self._max.send_message(chat_id, text, buttons=buttons or None)
 
     # --- уточняющие вопросы (bot/clarify.py): код ведёт очередь, ответ пересчитывается ---
 
@@ -781,6 +779,8 @@ class Bot:
             message = f"Хорошо, оставлю {_lower(task_label(before.task))} как есть 🤔"
             buttons = None
         else:
+            # задание могло стать верным после ответа: объяснение — из пересчёта, без модели
+            updated = with_fallback_praise(clarification.task_index, updated)
             tasks[clarification.task_index] = updated
             confirmed_finding = next(
                 (f for f in updated.findings if f.id == clarification.finding_id), None

@@ -22,6 +22,10 @@ class FakeMaxWithPhoto(FakeMax):
         return make_image()
 
 
+# третий вызов проверки — похвала верным заданиям; пустой ответ оставляет запасные тексты
+NO_PRAISE = json.dumps({"items": []})
+
+
 def read_events(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
@@ -40,7 +44,8 @@ def make_bot(tmp_path: Path, inner: Any, *, test_users: set[str]) -> tuple[Bot, 
 
 
 async def test_llm_calls_of_update_carry_its_user_trace_and_models(tmp_path: Path) -> None:
-    bot, path = make_bot(tmp_path, FakeTwoStageClient([TRANSCRIPT], [STRUCTURED]), test_users=set())
+    inner = FakeTwoStageClient([TRANSCRIPT], [STRUCTURED, NO_PRAISE])
+    bot, path = make_bot(tmp_path, inner, test_users=set())
 
     await bot.handle_update(MaxUpdate.model_validate(PHOTO_UPDATE))
 
@@ -50,6 +55,7 @@ async def test_llm_calls_of_update_carry_its_user_trace_and_models(tmp_path: Pat
     assert [(c["step"], c["model"]) for c in calls] == [
         ("vision", "GigaChat-2-Max"),
         ("vision_structure", "GigaChat-2-Pro"),
+        ("praise", "GigaChat-2-Pro"),
     ]
     assert {c["trace_id"] for c in calls} == {uploaded["trace_id"]}
     assert {c["user"] for c in calls} == {anonymize(42)}
@@ -57,20 +63,20 @@ async def test_llm_calls_of_update_carry_its_user_trace_and_models(tmp_path: Pat
     # событие шага остаётся как было: на нём отчёты и разбор спорных проверок по фото
     recognized = next(e for e in events if e["type"] == "vision_recognized")
     assert (recognized["component"], recognized["calls"]) == ("vision_two_stage", 2)
-    assert recognized["tokens"] == sum(c["tokens_in"] + c["tokens_out"] for c in calls)
+    assert recognized["tokens"] == sum(c["tokens_in"] + c["tokens_out"] for c in calls[:2])
 
 
 async def test_llm_calls_of_tester_are_test_traffic(tmp_path: Path) -> None:
     tester = anonymize(42)
     assert tester is not None
     bot, path = make_bot(
-        tmp_path, FakeTwoStageClient([TRANSCRIPT], [STRUCTURED]), test_users={tester}
+        tmp_path, FakeTwoStageClient([TRANSCRIPT], [STRUCTURED, NO_PRAISE]), test_users={tester}
     )
 
     await bot.handle_update(MaxUpdate.model_validate(PHOTO_UPDATE))
 
     calls = [e for e in read_events(path) if e["type"] == "llm_call"]
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert {(c["env"], c["user"]) for c in calls} == {("test", tester)}
 
 

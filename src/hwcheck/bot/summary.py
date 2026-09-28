@@ -2,6 +2,7 @@
 
 Строка задания — по худшей находке: верно / есть ошибка / стоит перепроверить / разобрал без
 оценки. Кнопка «Разобрать» — только для ошибок (verified или подтверждённый candidate).
+К верному заданию дописывается объяснение, за что похвалили (`CheckedTask.praise`).
 """
 
 from __future__ import annotations
@@ -12,6 +13,8 @@ from hwcheck.bot.pages import task_label
 from hwcheck.subjects.base import Finding, strength_of_task
 from hwcheck.subjects.math.module import findings_from_grade
 
+MAX_MESSAGE_CHARS = 4000  # лимит текста сообщения MAX
+
 
 def task_findings(index: int, item: CheckedTask) -> list[Finding]:
     """Находки модуля; запасной вывод из `grade` — только у предмета с пересчётом (математика)."""
@@ -21,6 +24,19 @@ def task_findings(index: int, item: CheckedTask) -> list[Finding]:
 
 
 def task_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str]] | None]:
+    line, button = verdict_line(index, item)
+    praise = praise_of(index, item)
+    return (f"{line} {praise}" if praise else line), button
+
+
+def praise_of(index: int, item: CheckedTask) -> str | None:
+    """Объяснение показываем, только пока задание верно: текст мог остаться от прошлого вердикта."""
+    if not item.praise or strength_of_task(task_findings(index, item)) != "ok":
+        return None
+    return item.praise
+
+
+def verdict_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str]] | None]:
     label = task_label(item.task)
     findings = task_findings(index, item)
     strength = strength_of_task(findings)
@@ -50,6 +66,47 @@ def review_header(state: ChatState) -> str:
         1 for i, t in enumerate(state.tasks) if strength_of_task(task_findings(i, t)) == "ok"
     )
     return f"Проверил! {correct} из {len(state.tasks)} верно.\n"
+
+
+def review_message(state: ChatState) -> tuple[str, Buttons]:
+    """Текст сводки и кнопки «Разобрать»; задания с вопросом ученику ждут его ответа."""
+    asked = {c.task_index for c in state.clarifications}
+    verdicts: list[str] = []
+    praises: list[str | None] = []
+    buttons: Buttons = []
+    for index, item in enumerate(state.tasks):
+        if index in asked:
+            verdicts.append(f"{task_label(item.task)} — уточню у тебя одну деталь ✍️")
+            praises.append(None)
+            continue
+        line, button = verdict_line(index, item)
+        verdicts.append(line)
+        praises.append(praise_of(index, item))
+        if button:
+            buttons.append(button)
+    return _fit(review_header(state), verdicts, praises), buttons
+
+
+def _fit(header: str, verdicts: list[str], praises: list[str | None]) -> str:
+    """Сводка в пределах лимита сообщения: объяснения опускаются с конца, вердикты остаются все —
+    без объяснения ребёнок обойдётся, без вердикта нет."""
+    kept = list(praises)
+    while True:
+        lines = [
+            f"{verdict} {praise}" if praise else verdict
+            for verdict, praise in zip(verdicts, kept, strict=True)
+        ]
+        text = header + "\n".join(lines)
+        explained = [i for i, praise in enumerate(kept) if praise]
+        if message_length(text) <= MAX_MESSAGE_CHARS or not explained:
+            return text
+        kept[explained[-1]] = None
+
+
+def message_length(text: str) -> int:
+    """Длина в элементах UTF-16: эмодзи вроде 🤔 занимают два. Как считает MAX, документация
+    не говорит — берём счёт с запасом, чтобы сообщение точно прошло лимит."""
+    return len(text.encode("utf-16-le")) // 2
 
 
 def remaining_buttons(state: ChatState) -> Buttons:

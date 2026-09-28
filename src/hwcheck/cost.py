@@ -29,7 +29,7 @@ LLM_EVENT = "llm_call"
 START_EVENT = "bot_started"
 NO_SOURCE = "не записан"
 # события шагов с component, которые суммируют вызовы модели: те же обращения, что и llm_call
-STEP_SUMMARY_COMPONENTS = frozenset({"vision_two_stage", "solver", "classifier", "tutor"})
+STEP_SUMMARY_COMPONENTS = frozenset({"vision_two_stage", "solver", "classifier", "tutor", "praise"})
 
 NO_TARIFF = "тариф не задан"
 

@@ -41,6 +41,9 @@ class CheckedTask(BaseModel):
     subject_task: SubjectTask | None = None
     reference: Reference | None = None  # эталон модуля — тьютору
     payload: dict[str, Any] = Field(default_factory=dict)  # TaskResult.payload модуля
+    # за что похвалили верное задание (bot/praise.py): хранится, чтобы повторный показ сводки
+    # не звал модель заново; None — задание не верно или запись Redis до появления поля
+    praise: str | None = None
 
 
 class Clarification(BaseModel):

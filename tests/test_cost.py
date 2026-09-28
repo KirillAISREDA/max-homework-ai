@@ -379,6 +379,19 @@ def test_solver_answer_from_cache_is_a_request_of_its_own() -> None:
     assert contest.per_check == pytest.approx(5.0)
 
 
+def test_praise_event_repeats_its_model_call() -> None:
+    """Событие шага похвалы пишется только при вызове модели — в зачёт идёт сам `llm_call`."""
+    where: dict[str, Any] = {"trace": "t1", "user": "u1", "ts": DAY1}
+    rows = [
+        *one_check(),
+        call("praise", PRO, 400, 90, **where),
+        event("praise_generated", component="praise", n_tasks=1, n_fallback=0, **where),
+    ]
+    contest = cost_report(rows, PRICING).contest
+    assert contest.step_summary_events == 2  # распознавание и похвала
+    assert contest.component_events_without_summaries == 4
+
+
 def test_traffic_sources_count_users_by_first_start() -> None:
     rows = [
         event("bot_started", trace="s1", user="u1", source="kanal-1", user_initiated=True),

@@ -1,0 +1,231 @@
+"""Похвала за верное решение: какой приём ученик применил правильно и почему решение верное.
+
+Жёсткие правила В КОДЕ, не в промпте:
+- верность решения устанавливает валидатор; сюда приходят только уже верные задания, модель
+  ничего не оценивает — она формулирует;
+- один вызов на домашку (тариф GigaChat — один одновременный запрос);
+- выход проверяется детерминированно: числа только из записи этого задания, без слов об
+  ошибках, не длиннее пары предложений. Что не прошло — заменяется текстом из данных валидатора.
+"""
+
+import re
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from hwcheck.llm.base import ChatMessage, LLMClient, LLMResult, chat_structured
+from hwcheck.llm.journal import llm_step
+from hwcheck.pipeline.grade import GradeResult
+from hwcheck.pipeline.mathparse import parse_value
+from hwcheck.pipeline.numerals import word_numbers
+from hwcheck.prompts import load_prompt
+
+PROMPT_VERSION = "v1"
+MAX_PRAISE_CHARS = 220
+# в промпт — начало записи: длинное условие и хвост решения приём не меняют, а вызов удлиняют
+MAX_CONDITION_CHARS = 500
+MAX_STEPS = 12
+
+# смешанное число, дробь, десятичная дробь, целое — как читает запись валидатор
+_NUMBER = re.compile(r"\d+\s+\d+\s*/\s*\d+|\d+\s*/\s*\d+|\d+[.,]\d+|\d+")
+# части записи «7 1/8»: ребёнку можно назвать и дробь «1/8», и числитель «1»
+_NUMBER_PART = re.compile(r"\d+\s*/\s*\d+|\d+[.,]\d+|\d+")
+_DIGITS = re.compile(r"\d+")
+# «1 000», «12 500»: разряды через пробел (в том числе неразрывный) — одно число
+_THOUSANDS = re.compile(r"(?<!\d)\d{1,3}(?:[    ]\d{3})+(?!\d)")
+# похвала за верное решение не говорит об ошибках; «но» — только отдельным словом:
+# на «но» кончаются «правильно» и «верно». «Не верно» раздельно — та же мысль (ревью)
+_ERROR_MARKER = re.compile(
+    r"ошиб|не\s*верн|не\s*правильн|не\s*точн|исправ|однако"
+    r"|(?<![а-яё])(?:но|зато|хотя)(?![а-яё])",
+    re.IGNORECASE,
+)
+# запись ребёнка уходит в промпт как есть: её текст не должен вернуться ребёнку ссылкой
+_LINK = re.compile(r"https?://|www\.|@", re.IGNORECASE)
+_SPACES = re.compile(r"\s+")
+# «в два действия», «в 2 шага»: число здесь — счёт строк решения, а не число из задачи
+_STEP_COUNT = re.compile(r"(?<![\w/.,])([а-яё]+|\d+)\s+(?:действи|шаг)[а-яё]*", re.IGNORECASE)
+
+FALLBACK_ANSWER = "Ответ сошёлся с моим пересчётом."
+
+
+class PraiseTask(BaseModel):
+    index: int = Field(description="Номер задания в домашке — по нему текст вернётся к заданию")
+    condition: str = ""
+    steps: list[str] = Field(default_factory=list, description="Шаги ученика, по строкам")
+    answer: str | None = None
+
+
+class PraiseInput(BaseModel):
+    tasks: list[PraiseTask]
+    grade: int | None = Field(default=None, description="Класс ученика, если известен")
+
+
+class PraiseItem(BaseModel):
+    index: int
+    technique: str = Field(description="Какой приём применён, 3–8 слов")
+    why: str = Field(description="Почему решение верное, одно предложение на «ты»")
+
+
+class PraiseOutput(BaseModel):
+    items: list[PraiseItem]
+
+
+async def generate_praise(
+    client: LLMClient,
+    data: PraiseInput,
+    *,
+    model: str,
+    prompt_version: str = PROMPT_VERSION,
+) -> tuple[PraiseOutput, LLMResult]:
+    """Единственный вызов модели шага; сбой формата — `StructuredOutputError` наверх."""
+    messages = [
+        ChatMessage(role="system", content=load_prompt("praise", prompt_version)),
+        ChatMessage(role="user", content=_facts(data)),
+    ]
+    with llm_step("praise", prompt_version):
+        return await chat_structured(client, messages, PraiseOutput, model=model)
+
+
+def _shown(task: PraiseTask) -> tuple[str, list[str]]:
+    """Условие и шаги в том виде, в каком их видит модель; по ним же проверяется её ответ."""
+    return task.condition.strip()[:MAX_CONDITION_CHARS], task.steps[:MAX_STEPS]
+
+
+def _facts(data: PraiseInput) -> str:
+    parts = [f"Класс ученика: {data.grade}"] if data.grade is not None else []
+    for task in data.tasks:
+        condition, shown_steps = _shown(task)
+        steps = "\n".join(shown_steps)
+        lines = [f"Задание index={task.index}"]
+        if condition:
+            lines.append(f"Условие: {condition}")
+        lines.append(f"Решение ученика:\n{steps}")
+        if (task.answer or "").strip():
+            lines.append(f"Ответ ученика: {task.answer}")
+        parts.append("\n".join(lines))
+    return "\n\n".join(parts)
+
+
+def accepted_praise(data: PraiseInput, output: PraiseOutput) -> dict[int, str]:
+    """Тексты, прошедшие проверку, по индексу задания; остальным вызывающий даёт запасной.
+
+    Индекс не из присланного списка отбрасывается: это могло бы оказаться задание с ошибкой.
+    """
+    tasks = {task.index: task for task in data.tasks}
+    texts: dict[int, str] = {}
+    seen: set[int] = set()
+    for item in output.items:
+        task = tasks.get(item.index)
+        if task is None or item.index in seen:
+            continue
+        seen.add(item.index)  # второй текст на то же задание не заменяет первый
+        text = _safe_text(item, task)
+        if text is not None:
+            texts[item.index] = text
+    return texts
+
+
+def _safe_text(item: PraiseItem, task: PraiseTask) -> str | None:
+    """Объяснение с приёмом; приём не прошёл проверку — одно объяснение: оно ближе к решению
+    ребёнка, чем запасной текст. Объяснение не прошло — None."""
+    full = praise_text(item)
+    if full is None:
+        return None
+    if is_safe(full, task):
+        return full
+    why = _sentence(item.why)
+    return why if is_safe(why, task) else None
+
+
+def praise_text(item: PraiseItem) -> str | None:
+    """Строка для сводки: «почему» и приём; None — модель не заполнила одно из полей."""
+    why = _sentence(item.why)
+    technique = _SPACES.sub(" ", item.technique).strip().rstrip(".!").strip()
+    if not why or not technique:
+        return None
+    return f"{why} Приём — {technique[0].lower()}{technique[1:]}."
+
+
+def _sentence(text: str) -> str:
+    text = _SPACES.sub(" ", text).strip()
+    return text if not text or text[-1] in ".!?" else f"{text}."
+
+
+def is_safe(text: str, task: PraiseTask) -> bool:
+    if len(text) > MAX_PRAISE_CHARS or _ERROR_MARKER.search(text) or _LINK.search(text):
+        return False
+    text = _without_step_count(text, task)
+    known = _known_numbers(task)
+    # число словами — то же число: текст без единой цифры проверку не обходит
+    named = [parse_value(str(number)) for number in word_numbers(text)]
+    if not all(value in known for value in named):
+        return False
+    # «1 000» читаем и как есть, и одним числом: как записал ученик, модель не знает
+    return any(_all_known(reading, known) for reading in (text, _join_thousands(text)))
+
+
+def _without_step_count(text: str, task: PraiseTask) -> str:
+    """Текст без верно названного числа действий: счёт строк решения виден в записи ребёнка,
+    хотя самого числа в ней может не быть. Неверный счёт остаётся и проверку не пройдёт."""
+    count = sum(1 for step in _shown(task)[1] if step.strip())
+
+    def drop(match: re.Match[str]) -> str:
+        token = match.group(1)
+        named = [int(token)] if token.isdigit() else word_numbers(token)
+        return " " if named == [count] else match.group()
+
+    return _STEP_COUNT.sub(drop, text)
+
+
+def _all_known(text: str, known: set[Any]) -> bool:
+    mentioned = [parse_value(token) for token in _NUMBER.findall(text)]
+    return all(value is not None and value in known for value in mentioned)
+
+
+def _known_numbers(task: PraiseTask) -> set[Any]:
+    """Числа задания, которые видела модель: условие, шаги ученика, его ответ. Число из
+    непоказанного хвоста длинного решения она могла только выдумать."""
+    condition, steps = _shown(task)
+    written = "\n".join([condition, *steps, task.answer or ""])
+    tokens: list[str] = []
+    for reading in (written, _join_thousands(written)):
+        for pattern in (_NUMBER, _NUMBER_PART, _DIGITS):
+            tokens.extend(pattern.findall(reading))
+    values = {parse_value(token) for token in tokens}
+    return values - {None}
+
+
+def _join_thousands(text: str) -> str:
+    return _THOUSANDS.sub(lambda match: _SPACES.sub("", match.group()), text)
+
+
+def describable(grade: GradeResult, steps: list[str]) -> bool:
+    """Есть что описывать: шаги записаны, и пересчёт не нашёл в них расхождений.
+
+    Описка при верном ответе и обрывки деления уголком — верное задание с неверными строками:
+    модель повторила бы их ребёнку как правильные.
+    """
+    clean = not any(c.status == "mismatch" or c.doubtful for c in grade.line_checks)
+    return clean and any(step.strip() for step in steps)
+
+
+def fallback_praise(grade: GradeResult) -> str:
+    """Текст без модели — только то, что установил валидатор."""
+    verified = sum(1 for c in grade.line_checks if c.status == "ok")
+    clean = not any(c.status == "mismatch" or c.doubtful for c in grade.line_checks)
+    if not clean or verified == 0:
+        return FALLBACK_ANSWER
+    if verified == 1:
+        recount = "Пересчитал твоё действие — сходится"
+    else:
+        recount = f"Пересчитал {verified} {_actions(verified)} — все сходятся"
+    return f"{recount}, и ответ верный." if grade.answers_match else f"{recount}."
+
+
+def _actions(n: int) -> str:
+    if n % 10 == 1 and n % 100 != 11:
+        return "действие"
+    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        return "действия"
+    return "действий"
