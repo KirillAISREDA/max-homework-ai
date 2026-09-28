@@ -81,12 +81,17 @@ def test_parent_intro_says_where_he_is_and_what_bot_does() -> None:
     assert welcome == f"{intro}\n\n{texts.PARENT_GRADE}" and len(welcome) <= INTRO_LIMIT
 
 
-def test_summary_is_promised_only_to_parent_of_older_child() -> None:
-    """Итог после проверки — родителю ребёнка 5–9 класса; за 1–4 класс фото присылает он сам и
-    результат видит сразу. Пока класс неизвестен (вводное), итог не обещаем."""
-    promise = "После каждой проверки бот пришлёт вам короткий итог"
-    assert promise in texts.CHILD_ASKS_CONSENT and promise in texts.PARENT_FIRST_CONSENT
-    assert "итог" not in texts.PARENT_SENDS_CONSENT and "итог" not in texts.PARENT_INTRO
+def test_summary_is_not_promised_before_notifications_exist() -> None:
+    """Итог родителю после проверки обещают только тексты ветки уведомлений (§9.1): обещание в
+    экране согласия без работающей рассылки — ложное. За 1–4 класс фото присылает сам родитель
+    и результат видит сразу, в том же чате."""
+    for text in (
+        texts.PARENT_INTRO,
+        texts.CHILD_ASKS_CONSENT,
+        texts.PARENT_FIRST_CONSENT,
+        texts.PARENT_SENDS_CONSENT,
+    ):
+        assert "итог" not in text
     assert "фото домашки присылаете вы" in texts.PARENT_SENDS_CONSENT
     assert "сразу" in texts.PARENT_SENDS_CONSENT
 
