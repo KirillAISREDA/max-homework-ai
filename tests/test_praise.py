@@ -90,7 +90,36 @@ def test_whitespace_and_trailing_dots_are_normalized() -> None:
 def test_number_outside_the_solution_is_rejected() -> None:
     # 973 в решении нет: модель «пересчитала» сама — такой текст ребёнку не показываем
     assert accepted("Ты правильно сложил числа: 803 + 169 = 973.") == {}
-    assert accepted("Ты верно сложил числа.", technique="сложение в 2 действия") == {}
+
+
+TWO_STEPS = PraiseTask(
+    index=1, condition="Вычисли: 56 : 7 + 12", steps=["56 : 7 = 8", "8 + 12 = 20"], answer="20"
+)
+TWO_STEPS_WHY = "Сначала ты правильно разделил 56 на 7, получив 8, затем добавил 12."
+
+
+def test_count_of_actions_is_checked_against_the_record() -> None:
+    """«В два действия» — не выдуманное число, а счёт строк решения (живая проба 28.09)."""
+    for technique in ("деление и сложение в два действия", "решение в 2 действия"):
+        text = accepted(TWO_STEPS_WHY, technique=technique, task=TWO_STEPS)[1]
+        assert text.endswith(f"Приём — {technique}.")
+
+
+def test_wrong_name_of_technique_leaves_the_explanation() -> None:
+    """Название приёма не прошло проверку — объяснение остаётся: оно ближе к решению ребёнка,
+    чем запасной текст."""
+    # действий два, а не три; в решении COLUMN действие одно
+    assert accepted(TWO_STEPS_WHY, technique="решение в три действия", task=TWO_STEPS) == {
+        1: TWO_STEPS_WHY
+    }
+    assert accepted("Ты верно сложил числа.", technique="сложение в 2 действия") == {
+        0: "Ты верно сложил числа."
+    }
+
+
+def test_unsafe_explanation_is_not_rescued_by_technique() -> None:
+    assert accepted("Ты нашёл 1 % и умножил: 803 + 169 = 972.") == {}
+    assert accepted("Ты решил верно, но медленно.") == {}
 
 
 def test_numbers_are_compared_by_value_with_this_task_only() -> None:

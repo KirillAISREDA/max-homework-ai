@@ -43,6 +43,8 @@ _ERROR_MARKER = re.compile(
 # запись ребёнка уходит в промпт как есть: её текст не должен вернуться ребёнку ссылкой
 _LINK = re.compile(r"https?://|www\.|@", re.IGNORECASE)
 _SPACES = re.compile(r"\s+")
+# «в два действия», «в 2 шага»: число здесь — счёт строк решения, а не число из задачи
+_STEP_COUNT = re.compile(r"(?<![\w/.,])([а-яё]+|\d+)\s+(?:действи|шаг)[а-яё]*", re.IGNORECASE)
 
 FALLBACK_ANSWER = "Ответ сошёлся с моим пересчётом."
 
@@ -112,26 +114,42 @@ def accepted_praise(data: PraiseInput, output: PraiseOutput) -> dict[int, str]:
         if task is None or item.index in seen:
             continue
         seen.add(item.index)  # второй текст на то же задание не заменяет первый
-        text = praise_text(item)
-        if text is not None and is_safe(text, task):
+        text = _safe_text(item, task)
+        if text is not None:
             texts[item.index] = text
     return texts
 
 
+def _safe_text(item: PraiseItem, task: PraiseTask) -> str | None:
+    """Объяснение с приёмом; приём не прошёл проверку — одно объяснение: оно ближе к решению
+    ребёнка, чем запасной текст. Объяснение не прошло — None."""
+    full = praise_text(item)
+    if full is None:
+        return None
+    if is_safe(full, task):
+        return full
+    why = _sentence(item.why)
+    return why if is_safe(why, task) else None
+
+
 def praise_text(item: PraiseItem) -> str | None:
     """Строка для сводки: «почему» и приём; None — модель не заполнила одно из полей."""
-    why = _SPACES.sub(" ", item.why).strip()
+    why = _sentence(item.why)
     technique = _SPACES.sub(" ", item.technique).strip().rstrip(".!").strip()
     if not why or not technique:
         return None
-    if why[-1] not in ".!?":
-        why += "."
     return f"{why} Приём — {technique[0].lower()}{technique[1:]}."
+
+
+def _sentence(text: str) -> str:
+    text = _SPACES.sub(" ", text).strip()
+    return text if not text or text[-1] in ".!?" else f"{text}."
 
 
 def is_safe(text: str, task: PraiseTask) -> bool:
     if len(text) > MAX_PRAISE_CHARS or _ERROR_MARKER.search(text) or _LINK.search(text):
         return False
+    text = _without_step_count(text, task)
     known = _known_numbers(task)
     # число словами — то же число: текст без единой цифры проверку не обходит
     named = [parse_value(str(number)) for number in word_numbers(text)]
@@ -139,6 +157,19 @@ def is_safe(text: str, task: PraiseTask) -> bool:
         return False
     # «1 000» читаем и как есть, и одним числом: как записал ученик, модель не знает
     return any(_all_known(reading, known) for reading in (text, _join_thousands(text)))
+
+
+def _without_step_count(text: str, task: PraiseTask) -> str:
+    """Текст без верно названного числа действий: счёт строк решения виден в записи ребёнка,
+    хотя самого числа в ней может не быть. Неверный счёт остаётся и проверку не пройдёт."""
+    count = sum(1 for step in task.steps if step.strip())
+
+    def drop(match: re.Match[str]) -> str:
+        token = match.group(1)
+        named = [int(token)] if token.isdigit() else word_numbers(token)
+        return " " if named == [count] else match.group()
+
+    return _STEP_COUNT.sub(drop, text)
 
 
 def _all_known(text: str, known: set[Any]) -> bool:
