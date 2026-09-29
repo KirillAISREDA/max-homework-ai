@@ -89,6 +89,7 @@ async def test_all_models_on_gateway_need_no_gigachat_credentials() -> None:
         llm_gateway_url="https://gateway.test/v1",
         llm_gateway_key="sk-test",
         vision_model="gw:v",
+        vision_model_domestic="gw:d",
         solver_model="gw:s",
         tutor_model="gw:t",
         lite_model="gw:l",

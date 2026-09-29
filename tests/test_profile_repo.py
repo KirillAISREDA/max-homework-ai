@@ -110,6 +110,10 @@ async def test_young_children_replace_unfinished_and_keep_consented(
     children = await repo.children(parent.id)
     assert [(c.grade, c.has_consent) for c in children] == [(3, True), (4, False)]
     assert children[1].id == second.id
+    # версия политики согласия — у профиля: по ней выбирается модель чтения фото
+    assert [c.consent_policy for c in children] == ["v0", None]
+    assert await repo.give_parent_consent(second.id, "p1", "v2", NOW)
+    assert [c.consent_policy for c in await repo.children(parent.id)] == ["v0", "v2"]
 
 
 async def test_waitlist_ignores_duplicates(repo: ProfileRepository) -> None:
@@ -127,6 +131,7 @@ async def test_parent_accepts_student_invite_once(repo: ProfileRepository) -> No
     outcome = await repo.accept_parent_invite(token, "p1", b"p1", "v0", NOW)
     assert (outcome.result, outcome.notify) == ("ok", b"s1")
     assert outcome.profile is not None and outcome.profile.has_consent
+    assert outcome.profile.consent_policy == "v0"
     parent = await repo.get_account("p1")
     assert parent is not None and parent.role == "parent"
     assert [c.id for c in await repo.children(parent.id)] == [profile.id]
