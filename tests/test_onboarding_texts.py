@@ -348,10 +348,16 @@ def test_product_is_called_by_its_full_name_everywhere() -> None:
     short_name = re.compile(r"Домашк(?!аИИ)")
     for value in [*all_texts(), *policy_messages()]:
         assert not short_name.search(value), value
-    # тексты есть и вне texts.py (сводка, итоги родителю, промпты моделей): смотрим исходники
+    # тексты есть и вне texts.py (сводка, итоги родителю, промпты моделей, карточки правил):
+    # смотрим исходники. Предложение, которое начинается словом «Домашка» о домашней работе,
+    # тест тоже остановит — его проще перестроить, чем учить тест отличать одно от другого
     root = Path(__file__).resolve().parents[1]
-    sources = [*(root / "src").rglob("*.py"), *(root / "prompts").rglob("*.md")]
-    assert len(sources) > 50
+    sources = [
+        *(root / "src").rglob("*.py"),
+        *(root / "prompts").rglob("*.md"),
+        *(root / "assets" / "kb").rglob("*.json"),
+    ]
+    assert len(sources) > 50 and any(path.suffix == ".json" for path in sources)
     for path in sources:
         found = short_name.search(path.read_text(encoding="utf-8"))
         assert found is None, f"{path.relative_to(root)}: {found.group() if found else ''}"
