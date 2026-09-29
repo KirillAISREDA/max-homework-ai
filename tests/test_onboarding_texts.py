@@ -253,10 +253,14 @@ def test_consent_screen_markup_is_balanced_and_promises_the_report_but_not_the_m
         texts.PARENT_FIRST_CONSENT.format(grade=7),
         texts.PARENT_SENDS_CONSENT,
     ):
-        text = texts.consent_text(intro)
-        assert text.count("**") % 2 == 0
-        assert not re.search(r"[_`~^\[\]]|\+\+", text), text  # остальная разметка MAX
-        assert texts.CONSENT_REPORT in text
+        for weekly, promise in (
+            (True, texts.CONSENT_REPORT),
+            (False, texts.CONSENT_REPORT_ON_REQUEST),
+        ):
+            text = texts.consent_text(intro, weekly=weekly)
+            assert text.count("**") % 2 == 0
+            assert not re.search(r"[_`~^\[\]]|\+\+", text), text  # остальная разметка MAX
+            assert promise in text and text.count("отчёт") == 1
     assert texts.CONSENT_FORMAT == "markdown"
     assert "меню" not in texts.CONSENT_SUMMARY
     assert texts.CONSENT_REPORT == (
@@ -284,7 +288,7 @@ def test_every_consent_screen_fits_one_max_message() -> None:
         texts.PARENT_SENDS_CONSENT,
     ]
     for intro in intros:
-        text = texts.consent_text(intro)
+        text = texts.consent_text(intro, weekly=True)  # самый длинный вариант
         assert len(text) < message_length(text) <= MAX_MESSAGE_CHARS, intro
         assert message_length(text) <= MAX_MESSAGE_LEN, intro
 
@@ -392,3 +396,19 @@ def test_product_is_called_by_its_full_name_everywhere() -> None:
         found = short_name.search(path.read_text(encoding="utf-8"))
         assert found is None, f"{path.relative_to(root)}: {found.group() if found else ''}"
     assert "ДомашкаИИ" in texts.HELLO and "**ДомашкаИИ**" in texts.CONSENT_SUMMARY
+
+
+def test_consent_screen_promises_weekly_report_only_when_it_is_sent() -> None:
+    """Рассылка раз в неделю включается настройкой. Пока она выключена, обещание «раз в неделю»
+    в тексте согласия было бы неправдой (ревью безопасности 29.09): экран обещает отчёт по
+    запросу — он работает всегда."""
+    intro = texts.PARENT_SENDS_CONSENT
+    off = texts.consent_text(intro)
+    assert off == texts.consent_text(intro, weekly=False)  # по умолчанию — осторожный вариант
+    assert "Раз в неделю" not in off
+    assert "📈 По вашему запросу вы сможете получать отчёт о прогрессе." in off
+    on = texts.consent_text(intro, weekly=True)
+    assert "📈 Раз в неделю или по вашему запросу вы сможете получать отчёт о прогрессе." in on
+    assert on == f"{intro}\n\n{texts.CONSENT_SUMMARY}"
+    # всё остальное на экране — одинаково
+    assert off.replace(texts.CONSENT_REPORT_ON_REQUEST, texts.CONSENT_REPORT) == on

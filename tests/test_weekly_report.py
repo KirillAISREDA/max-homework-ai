@@ -33,7 +33,7 @@ from test_parent_report import (
 
 SLOT = datetime(2026, 9, 20, 15, 0, tzinfo=UTC)
 WEEK = timedelta(days=7)
-HEADER = "📈 Отчёт за неделю: 13–20 сентября"
+HEADER = "📈 Отчёт за неделю: 14–20 сентября"
 EMPTY_WEEK = f"{HEADER}\n\nНа этой неделе домашку на проверку не присылали."
 SWITCH_OFF: Buttons = [
     [{"type": "callback", "text": "Не присылать по воскресеньям", "payload": "ob:weekly:off"}]
@@ -121,7 +121,7 @@ async def test_week_is_seven_days_before_the_slot(tmp_path: Path) -> None:
     )
     assert await send(kit, slot=SLOT + WEEK) == "sent"
     assert kit.max.to_users[-1][1] == (
-        "📈 Отчёт за неделю: 20–27 сентября\n\n"
+        "📈 Отчёт за неделю: 21–27 сентября\n\n"
         "Ребёнок (7 класс)\nМатематика — 1 домашка, 8 заданий: все верно ✅"
     )
 

@@ -220,15 +220,15 @@ def test_weekly_period_is_seven_days_before_the_slot() -> None:
     period = weekly_period(SLOT)
     assert (period.start, period.end) == (PREVIOUS, SLOT)
     assert period.start.tzinfo is UTC and period.end.tzinfo is UTC
-    assert (period.first_day, period.last_day) == (date(2026, 9, 27), date(2026, 10, 4))
-    assert period_label(period.first_day, period.last_day) == "27 сентября – 4 октября"
+    assert (period.first_day, period.last_day) == (date(2026, 9, 28), date(2026, 10, 4))
+    assert period_label(period.first_day, period.last_day) == "28 сентября – 4 октября"
 
 
 def test_previous_period_is_the_week_before() -> None:
     period = previous_period(SLOT)
     assert (period.start, period.end) == (PREVIOUS - WEEK, PREVIOUS)
-    assert (period.first_day, period.last_day) == (date(2026, 9, 20), date(2026, 9, 27))
-    assert period_label(period.first_day, period.last_day) == "20–27 сентября"
+    assert (period.first_day, period.last_day) == (date(2026, 9, 21), date(2026, 9, 27))
+    assert period_label(period.first_day, period.last_day) == "21–27 сентября"
     assert previous_period(SLOT) == weekly_period(PREVIOUS)
 
 
@@ -242,15 +242,24 @@ def test_weeks_follow_each_other_without_gaps_and_overlaps() -> None:
 def test_period_across_the_year() -> None:
     slot = datetime(2027, 1, 3, 18, 0, tzinfo=MSK)
     period = weekly_period(slot)
-    assert (period.first_day, period.last_day) == (date(2026, 12, 27), date(2027, 1, 3))
-    assert period_label(period.first_day, period.last_day) == "27 декабря 2026 – 3 января 2027"
+    assert (period.first_day, period.last_day) == (date(2026, 12, 28), date(2027, 1, 3))
+    assert period_label(period.first_day, period.last_day) == "28 декабря 2026 – 3 января 2027"
     before = previous_period(slot)
-    assert period_label(before.first_day, before.last_day) == "20–27 декабря"
+    assert period_label(before.first_day, before.last_day) == "21–27 декабря"
 
 
 def test_period_days_are_moscow_days() -> None:
     """Слот в 09:00 мск — это 06:00 UTC того же дня; в 00 часов UTC дата была бы вчерашней."""
     slot = last_slot(msk(9, 30, 12), WeeklySchedule(weekday=2, hour=9))
     period = weekly_period(slot)
-    assert (period.first_day, period.last_day) == (date(2026, 9, 23), date(2026, 9, 30))
-    assert period_label(period.first_day, period.last_day) == "23–30 сентября"
+    assert (period.first_day, period.last_day) == (date(2026, 9, 24), date(2026, 9, 30))
+    assert period_label(period.first_day, period.last_day) == "24–30 сентября"
+
+
+def test_labels_of_neighbouring_weeks_do_not_share_a_day() -> None:
+    """Неделя кончается в 18:00, а подпись — по дням: с общей датой родитель прочёл бы два
+    отчёта как двойной счёт одного дня."""
+    this_week, last_week = weekly_period(SLOT), previous_period(SLOT)
+    assert last_week.last_day + timedelta(days=1) == this_week.first_day
+    assert (this_week.last_day - this_week.first_day).days == 6  # семь дней, как в неделе
+    assert last_week.end == this_week.start  # а само окно — без зазора и без наложения

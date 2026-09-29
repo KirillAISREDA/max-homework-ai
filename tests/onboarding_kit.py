@@ -104,7 +104,7 @@ class Kit:
         return text, buttons
 
 
-def make_kit(tmp_path: Path) -> Kit:
+def make_kit(tmp_path: Path, *, weekly_report: bool = False) -> Kit:
     fake = FakeMax()
     clock = Clock()
     # часы общие с контекстом: домашка записывается временем сценария и попадает в период отчёта
@@ -119,6 +119,7 @@ def make_kit(tmp_path: Path) -> Kit:
         cipher=UserIdCipher(new_user_id_key()),
         bot_username=BOT,
         clock=clock,
+        weekly_report=weekly_report,
     )
     return Kit(ctx, fake, repo, clock, events_path)
 

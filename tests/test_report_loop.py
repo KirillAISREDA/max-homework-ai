@@ -366,7 +366,7 @@ async def test_missed_week_is_skipped_and_journalled_once(tmp_path: Path) -> Non
 
     kit.clock.now = SLOT + WEEK  # следующая неделя идёт как обычно
     assert await loop.tick(stop) == 3
-    assert [text for _, text, _ in kit.max.to_users] == [EMPTY_WEEK.replace("13–20", "20–27")] * 3
+    assert [text for _, text, _ in kit.max.to_users] == [EMPTY_WEEK.replace("14–20", "21–27")] * 3
     assert len(kit.events("weekly_slot_missed")) == 1
 
 
@@ -439,7 +439,7 @@ async def test_schedule_of_the_loop_is_configured(tmp_path: Path) -> None:
     kit.clock.now = datetime(2026, 9, 23, 6, 0, tzinfo=UTC)  # среда 23.09, 09:00 мск
     assert await loop.tick(stop) == 3
     [text] = {text for _, text, _ in kit.max.to_users}
-    assert text.startswith("📈 Отчёт за неделю: 16–23 сентября\n\n")
+    assert text.startswith("📈 Отчёт за неделю: 17–23 сентября\n\n")
     [buttons] = {str(buttons) for _, _, buttons in kit.max.to_users}
     assert "Не присылать по средам" in buttons
 

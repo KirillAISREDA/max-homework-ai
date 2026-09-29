@@ -299,6 +299,7 @@ def make_onboarding(
         events=events,
         cipher=UserIdCipher(settings.user_id_key),
         bot_username=username,
+        weekly_report=settings.weekly_report,
     )
     # отчёт родителю читает ту же базу, что и профили
     return Onboarding(ctx, PgReportRepository(pool), weekly_schedule(settings))

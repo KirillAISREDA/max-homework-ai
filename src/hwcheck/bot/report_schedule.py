@@ -108,14 +108,18 @@ def deliverable(now: datetime, slot: datetime, schedule: WeeklySchedule) -> bool
 
 
 def weekly_period(slot: datetime) -> Period:
-    """Неделя отчёта: 7 суток до слота. Подпись — календарные дни по Москве, от дня прошлого
-    слота до дня этого: «27 сентября – 4 октября»."""
+    """Неделя отчёта: 7 суток до слота. Подпись — семь календарных дней по Москве, последний
+    — день слота: «28 сентября – 4 октября».
+
+    День прошлого слота в подпись не входит, хотя его вечер в неделю входит: иначе одна и
+    та же дата закрывала бы один отчёт и открывала следующий, и родитель читал бы это как
+    двойной счёт (ревью 29.09)."""
     end = _moscow(slot)
     start = end - WEEK
     return Period(
         start=start.astimezone(UTC),
         end=end.astimezone(UTC),
-        first_day=start.date(),
+        first_day=start.date() + timedelta(days=1),
         last_day=end.date(),
     )
 

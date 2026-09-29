@@ -53,6 +53,9 @@ class OnboardingContext:
     cipher: UserIdCipher
     bot_username: str
     clock: Callable[[], datetime] = utc_now
+    # рассылка отчёта раз в неделю включена (`WEEKLY_REPORT`): от этого зависит, что обещает
+    # экран согласия
+    weekly_report: bool = False
 
     def now(self) -> datetime:
         return self.clock()
@@ -92,7 +95,10 @@ class OnboardingContext:
         """Событие без автора: рассылку по расписанию никто не нажимал, событие — о получателе.
 
         Id MAX расшифровывается здесь и уходит только в журнал, а тот пишет хэш и сам узнаёт
-        тестера (`TEST_USERS`) — как в событиях нажатий. Дальше контекста id не идёт."""
+        тестера (`TEST_USERS`) — как в событиях нажатий. Дальше контекста id не идёт.
+
+        Это второе место, где id расшифровывается, — кроме отправки (`send_to`): у события
+        по расписанию нет автора, чей id пришёл бы с апдейтом."""
         user_id = self.cipher.decrypt(account.user_id_enc)
         self.events.log(event, user_id=user_id, user_initiated=False, **fields)
 
