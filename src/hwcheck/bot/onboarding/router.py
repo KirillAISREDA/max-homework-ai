@@ -25,8 +25,10 @@ from hwcheck.bot.onboarding.policy import policy_messages
 from hwcheck.bot.onboarding.renewal import ConsentRenewal
 from hwcheck.bot.onboarding.student import StudentSteps
 from hwcheck.bot.onboarding.subject import SubjectStep
+from hwcheck.bot.report import ParentReporter
 from hwcheck.bot.subjects import PARENT_SENDS_UP_TO_GRADE
 from hwcheck.db.repo import Account, StudentProfile
+from hwcheck.db.reports import ReportRepository
 
 Step = Literal[
     "role",  # новый пользователь
@@ -40,6 +42,8 @@ Step = Literal[
 _UPDATES = frozenset({"bot_started", "message_callback", "message_created"})
 _GRADE = re.compile(r"[1-9]")
 _PROFILE_ID = re.compile(r"[0-9]{1,18}")
+# действия без аргумента: payload с аргументом — чужой, в нём мог бы приехать id чужого ребёнка
+_NO_ARGUMENT = frozenset({"report"})
 
 
 @dataclass(frozen=True)
@@ -88,17 +92,20 @@ Action = Callable[[Actor, Position, str], Awaitable[Route | None]]
 
 
 class Onboarding:
-    def __init__(self, ctx: OnboardingContext) -> None:
+    def __init__(self, ctx: OnboardingContext, reports: ReportRepository | None = None) -> None:
         self._ctx = ctx
+        # без хранилища отчёта кнопки «Отчёт о прогрессе» нет нигде, а её payload — не действие
+        has_report = reports is not None
         self._subjects = SubjectStep(ctx)
         self._students = StudentSteps(ctx, self._subjects)
-        self._parents = ParentSteps(ctx, self._subjects)
+        self._parents = ParentSteps(ctx, self._subjects, report=has_report)
         self._linking = Linking(ctx, self._subjects)
         self._renewal = ConsentRenewal(ctx)
+        self._reporter = ParentReporter(ctx, reports) if reports is not None else None
         # замок живёт, пока его кто-то держит или ждёт: словарь не растёт с числом пользователей
         self._user_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         # тот же контекст, что у шагов: бот берёт notifier отсюда, без онбординга его нет
-        self.notifier = ParentNotifier(ctx)
+        self.notifier = ParentNotifier(ctx, report=has_report)
         self._actions: dict[str, Action] = {
             "role": self._role,
             "grade": self._grade,
@@ -115,6 +122,7 @@ class Onboarding:
             "whose": self._whose,
             "notify": self._notify,
             "renew": self._renew,
+            "report": self._report,
         }
 
     async def route(self, update: MaxUpdate) -> Route:
@@ -242,10 +250,12 @@ class Onboarding:
         if not payload.startswith("ob:"):  # кнопка проверки у того, кто онбординг не прошёл
             await self._show(actor, position)
             return "handled"
-        name, _, arg = payload.removeprefix("ob:").partition(":")
+        name, separator, arg = payload.removeprefix("ob:").partition(":")
         # только действие: id профиля и метка ссылки связали бы в журнале хэш родителя с детьми
         self._ctx.log("button_pressed", actor, payload=f"ob:{name}")
         action = self._actions.get(name)
+        if separator and name in _NO_ARGUMENT:
+            action = None  # «ob:report:» — тоже с аргументом, пусть и пустым
         route = await action(actor, position, arg) if action is not None else None
         if route is None:
             await self._show(actor, position)
@@ -370,6 +380,15 @@ class Onboarding:
         if account is None or account.role != "parent" or arg not in ("on", "off"):
             return None
         await self.notifier.switch(actor, account, enabled=arg == "on")
+        return "handled"
+
+    async def _report(self, actor: Actor, position: Position, arg: str) -> Route | None:
+        # кнопку мог нажать кто угодно, как и выключатель итогов: отчёт получает только родитель
+        # и только о своих детях — их хранилище ищет по аккаунту нажавшего
+        account = position.account
+        if self._reporter is None or account is None or account.role != "parent":
+            return None
+        await self._reporter.on_request(actor, account)
         return "handled"
 
 

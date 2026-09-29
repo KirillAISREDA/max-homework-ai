@@ -9,6 +9,7 @@ from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.onboarding import texts
 from hwcheck.bot.onboarding.policy import policy_messages
 from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
+from hwcheck.db.repo import HomeworkCounts
 from onboarding_kit import (
     Kit,
     actor,
@@ -440,6 +441,105 @@ async def test_foreign_notify_payloads_change_nothing(tmp_path: Path) -> None:
     await ob.route(press(101, "ob:notify:off"))
     assert await kit.repo.notify_mode(parent.id) == "off"
     assert await kit.repo.notify_mode(other.id) == "instant"
+
+
+REPORT_HEADER = "📈 Отчёт за 7 дней: 10–16 сентября"  # часы набора — 16.09.2026
+
+
+async def test_parent_asks_for_report(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx, kit.repo)
+    child = await ready_student(kit, user_id=1)
+    await kit.repo.add_homework(child.id, "math", HomeworkCounts(3, 3, 0, 0))
+
+    assert await ob.route(press(101, "ob:report")) == "handled"
+    assert kit.last(101) == (
+        f"{REPORT_HEADER}\n\nРебёнок (7 класс)\nМатематика — 1 домашка, 3 задания: все верно ✅",
+        None,
+    )
+    assert kit.max.callbacks == ["cb-ob:report"]
+    assert kit.events("button_pressed")[-1]["payload"] == "ob:report"
+    [sent] = kit.events("parent_report_sent")
+    assert (sent["kind"], sent["user"]) == ("on_request", actor(101).user_hash)
+
+
+async def test_report_button_is_in_parent_status_and_under_notifications(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx, kit.repo)
+    await ready_student(kit, user_id=1)
+
+    await ob.route(text(101, "как там ребёнок?"))
+    status, buttons = kit.last(101)
+    assert status.startswith(texts.PARENT_STATUS_HEADER)
+    assert buttons == texts.status_keyboard(report=True)
+    assert payloads(buttons) == ["ob:addchild", "ob:report"]
+
+    await ob.route(press(101, "ob:notify:on"))
+    assert kit.last(101) == (
+        notifier.SWITCHED_ON,
+        notifier.switch_keyboard(enabled=True, report=True),
+    )
+    assert payloads(kit.last(101)[1]) == ["ob:notify:off", "ob:report"]
+
+
+async def test_only_parent_gets_report(tmp_path: Path) -> None:
+    """Payload недоверенный: ученик и посторонний видят свой шаг, а не отчёт."""
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx, kit.repo)
+    child = await ready_student(kit, user_id=1)
+    await kit.repo.add_homework(child.id, "math", HomeworkCounts(3, 3, 0, 0))
+
+    assert await ob.route(press(1, "ob:report")) == "handled"  # ребёнок переслал себе кнопку
+    assert kit.last(1) == (texts.INSTRUCTION_STUDENT, None)
+    assert await ob.route(press(9, "ob:report")) == "handled"  # посторонний без аккаунта
+    assert kit.last(9) == (texts.HELLO, texts.role_keyboard())
+    assert await kit.repo.get_account(actor(9).user_hash) is None
+    assert kit.events("parent_report_sent") == [] and kit.events("parent_report_failed") == []
+    assert all("Отчёт" not in message for _, message, _ in kit.max.sent)
+
+
+async def test_report_payload_takes_no_argument(tmp_path: Path) -> None:
+    """Отчёт — всегда о детях нажавшего: id в payload нет, payload с аргументом — не отчёт."""
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx, kit.repo)
+    child = await ready_student(kit, user_id=1)
+    other = await kit.repo.get_or_create_account(actor(7).user_hash, b"x", "parent")
+
+    foreign = (
+        "ob:report:123",
+        f"ob:report:{child.id}",
+        f"ob:report:{other.id}",
+        "ob:report:all",
+        "ob:report: ",
+        "ob:report:",
+        "ob:report::",
+        "ob:Report",
+        "ob:report ",
+    )
+    for payload in foreign:
+        assert await ob.route(press(101, payload)) == "handled", payload
+        assert kit.last(101)[0].startswith(texts.PARENT_STATUS_HEADER), payload
+    assert kit.events("parent_report_sent") == [] and kit.events("parent_report_failed") == []
+    # в журнал — только действие: чужой аргумент туда не попадает
+    assert all(e["payload"].count(":") == 1 for e in kit.events("button_pressed"))
+
+    assert await ob.route(press(101, "ob:report")) == "handled"
+    assert kit.last(101)[0].startswith(REPORT_HEADER)
+
+
+async def test_without_report_storage_there_is_no_button_and_no_action(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    await ready_student(kit, user_id=1)
+
+    assert await ob.route(press(101, "ob:report")) == "handled"  # как неизвестное действие
+    status, buttons = kit.last(101)
+    assert status.startswith(texts.PARENT_STATUS_HEADER)
+    assert buttons == texts.add_child_keyboard()
+    await ob.route(press(101, "ob:notify:on"))
+    assert kit.last(101)[1] == notifier.switch_keyboard(enabled=True)
+    assert payloads(kit.last(101)[1]) == ["ob:notify:off"]
+    assert kit.events("parent_report_sent") == [] and kit.events("parent_report_failed") == []
 
 
 async def test_start_writes_traffic_source(tmp_path: Path) -> None:

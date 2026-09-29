@@ -23,6 +23,7 @@ from typing import Any
 from hwcheck.bot.fsm import ChatState
 from hwcheck.bot.max_api import Buttons, callback_button
 from hwcheck.bot.onboarding.context import Actor, OnboardingContext
+from hwcheck.bot.onboarding.texts import report_row
 from hwcheck.bot.pages import task_label
 from hwcheck.bot.summary import lower, remaining_buttons, task_findings
 from hwcheck.db.repo import Account, Homework, HomeworkCounts, NotifyMode, StudentProfile
@@ -128,16 +129,21 @@ def resolved_text(child: str, subject: str) -> str:
     return f"{child} разобрал все ошибки в {_homework_of(subject, 'домашке')} ✅"
 
 
-def switch_keyboard(*, enabled: bool) -> Buttons:
-    """Под итогом — выключатель; под подтверждением отключения — кнопка «обратно»."""
-    if enabled:
-        return [[callback_button(NOTIFY_OFF_BUTTON, "ob:notify:off")]]
-    return [[callback_button(NOTIFY_ON_BUTTON, "ob:notify:on")]]
+def switch_keyboard(*, enabled: bool, report: bool = False) -> Buttons:
+    """Под итогом — выключатель; под подтверждением отключения — кнопка «обратно».
+
+    `report` — под итогом второй строкой идёт кнопка отчёта (bot/report.py)."""
+    if not enabled:
+        return [[callback_button(NOTIFY_ON_BUTTON, "ob:notify:on")]]
+    switch = [callback_button(NOTIFY_OFF_BUTTON, "ob:notify:off")]
+    return [switch, report_row()] if report else [switch]
 
 
 class ParentNotifier:
-    def __init__(self, ctx: OnboardingContext) -> None:
+    def __init__(self, ctx: OnboardingContext, *, report: bool = False) -> None:
         self._ctx = ctx
+        # кнопка отчёта — только когда отчёт есть кому собрать (у онбординга есть хранилище)
+        self._report = report
 
     async def homework_checked(
         self, chat_id: int, user_id: int | None, student_id: int | None, state: ChatState
@@ -204,7 +210,7 @@ class ParentNotifier:
         await self._ctx.repo.set_notify_mode(parent.id, mode)
         self._ctx.log("notify_mode_set", actor, mode=mode)
         text = SWITCHED_ON if enabled else SWITCHED_OFF
-        await self._ctx.reply(actor, text, switch_keyboard(enabled=enabled))
+        await self._ctx.reply(actor, text, switch_keyboard(enabled=enabled, report=self._report))
 
     async def _save(
         self, chat_id: int, student_id: int, subject: str, counts: HomeworkCounts
@@ -225,7 +231,7 @@ class ParentNotifier:
         if found is None:
             return
         parent, child = found
-        buttons = switch_keyboard(enabled=True)
+        buttons = switch_keyboard(enabled=True, report=self._report)
         await self._ctx.notify(actor, parent.user_id_enc, text(child), kind=kind, buttons=buttons)
 
     async def _recipient(self, student_id: int) -> tuple[Account, str] | None:

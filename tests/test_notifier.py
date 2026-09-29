@@ -190,3 +190,12 @@ def test_switch_keyboard_offers_the_opposite() -> None:
     assert switch_keyboard(enabled=False) == [
         [{"type": "callback", "text": "Присылать итоги", "payload": "ob:notify:on"}]
     ]
+
+
+def test_report_button_is_second_row_under_instant_notification() -> None:
+    assert switch_keyboard(enabled=True, report=True) == [
+        [{"type": "callback", "text": "Не присылать итоги", "payload": "ob:notify:off"}],
+        [{"type": "callback", "text": "📈 Отчёт о прогрессе", "payload": "ob:report"}],
+    ]
+    # под подтверждением отключения — только кнопка «обратно»
+    assert switch_keyboard(enabled=False, report=True) == switch_keyboard(enabled=False)

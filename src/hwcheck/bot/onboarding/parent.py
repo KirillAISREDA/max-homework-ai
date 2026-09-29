@@ -20,9 +20,13 @@ OWNER_TTL_S = TEXTBOOK_TTL_S
 
 
 class ParentSteps:
-    def __init__(self, ctx: OnboardingContext, subjects: SubjectStep) -> None:
+    def __init__(
+        self, ctx: OnboardingContext, subjects: SubjectStep, *, report: bool = False
+    ) -> None:
         self._ctx = ctx
         self._subjects = subjects
+        # кнопка отчёта — только когда отчёт есть кому собрать (у онбординга есть хранилище)
+        self._report = report
 
     async def _parent(self, actor: Actor, account: Account | None) -> Account:
         if account is not None:
@@ -86,7 +90,8 @@ class ParentSteps:
         await ctx.reply(actor, message)
 
     async def show_status(self, actor: Actor, account: Account) -> None:
-        """До меню (этап 3): список детей и [Добавить ребёнка]; никого нет — класс ребёнка."""
+        """До меню (этап 3): список детей, [Добавить ребёнка] и отчёт; никого нет — класс
+        ребёнка. Пока ребёнок не открыл ссылку, отчитываться не о ком — кнопки отчёта нет."""
         ctx = self._ctx
         children = [c for c in await ctx.repo.children(account.id) if c.has_consent]
         waiting = await ctx.repo.open_child_invites(account.id, ctx.now())
@@ -94,7 +99,8 @@ class ParentSteps:
             await self.ask_grade(actor)
             return
         status = texts.parent_status(children, [invite.grade for invite in waiting])
-        await ctx.reply(actor, status, texts.add_child_keyboard())
+        buttons = texts.status_keyboard(report=self._report and bool(children))
+        await ctx.reply(actor, status, buttons)
 
     async def young_children(self, account: Account) -> list[StudentProfile]:
         children = await self._ctx.repo.children(account.id)

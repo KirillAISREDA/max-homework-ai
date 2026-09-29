@@ -270,6 +270,12 @@ def test_consent_and_waiting_keyboards() -> None:
     assert payloads(texts.consent_keyboard("ob:pconsent:7")) == ["ob:policy", "ob:pconsent:7"]
     assert payloads(texts.waiting_parent_keyboard()) == ["ob:resend", "ob:example"]
     assert payloads(texts.add_child_keyboard()) == ["ob:addchild"]
+    assert texts.status_keyboard(report=False) == texts.add_child_keyboard()
+    with_report = texts.status_keyboard(report=True)
+    assert payloads(with_report) == ["ob:addchild", "ob:report"]
+    assert [len(row) for row in with_report] == [1, 1]  # отчёт — отдельной строкой
+    assert with_report[1] == texts.report_row()
+    assert with_report[1][0]["text"] == texts.REPORT_BUTTON == "📈 Отчёт о прогрессе"
 
 
 def test_whose_keyboard_numbers_children_of_same_grade() -> None:
