@@ -79,8 +79,16 @@ class InMemoryProfileRepository:
     def _own(self, user_id: int) -> _Profile | None:
         return next((p for p in self._profiles.values() if p.user_id == user_id), None)
 
+    def _consent_policy(self, profile_id: int) -> str | None:
+        active = (
+            c.policy_version
+            for c in self.consents
+            if c.profile_id == profile_id and c.revoked_at is None
+        )
+        return next(active, None)
+
     def _has_consent(self, profile_id: int) -> bool:
-        return any(c.profile_id == profile_id and c.revoked_at is None for c in self.consents)
+        return self._consent_policy(profile_id) is not None
 
     def _view(self, profile: _Profile) -> StudentProfile:
         return StudentProfile(
@@ -91,6 +99,7 @@ class InMemoryProfileRepository:
             grade_year=profile.grade_year,
             subject=profile.subject,
             has_consent=self._has_consent(profile.id),
+            consent_policy=self._consent_policy(profile.id),
         )
 
     async def get_account(self, user_hash: str) -> Account | None:
@@ -153,6 +162,29 @@ class InMemoryProfileRepository:
             return False
         self.consents.append(_Consent(parent_hash, profile_id, None, policy_version, now))
         return True
+
+    async def renew_consent(
+        self,
+        profile_id: int,
+        parent_user_id: int,
+        parent_hash: str,
+        policy_version: str,
+        now: datetime,
+    ) -> str | None:
+        profile = self._profiles.get(profile_id)
+        if profile is None or profile.parent_user_id != parent_user_id:
+            return None
+        active = next(
+            (c for c in self.consents if c.profile_id == profile_id and c.revoked_at is None),
+            None,
+        )
+        if active is None or active.policy_version == policy_version:
+            return None
+        active.revoked_at = now
+        self.consents.append(
+            _Consent(parent_hash, profile_id, active.student_hash, policy_version, now)
+        )
+        return active.policy_version
 
     async def create_invite(
         self,

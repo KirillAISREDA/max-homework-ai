@@ -20,6 +20,7 @@ from hwcheck.bot.onboarding.context import Actor, OnboardingContext
 from hwcheck.bot.onboarding.linking import Linking
 from hwcheck.bot.onboarding.parent import ParentSteps
 from hwcheck.bot.onboarding.policy import policy_messages
+from hwcheck.bot.onboarding.renewal import ConsentRenewal
 from hwcheck.bot.onboarding.student import StudentSteps
 from hwcheck.bot.onboarding.subject import SubjectStep
 from hwcheck.bot.subjects import PARENT_SENDS_UP_TO_GRADE
@@ -51,13 +52,21 @@ class CheckPhotos:
     urls: list[str]
     subject: str = "math"
     student_id: int | None = None  # `student_profiles.id`; None — ребёнок не определён
+    # версия политики согласия за этого ребёнка: по ней бот решает, можно ли передать фото
+    # сторонней модели (`policy.allows_foreign_models`)
+    policy_version: str | None = None
 
 
 def _photos_of(urls: list[str], child: StudentProfile | None) -> CheckPhotos:
     """Математика — предмет по умолчанию: профиль без предмета до проверки не доходит."""
     if child is None:
         return CheckPhotos(urls)
-    return CheckPhotos(urls, subject=child.subject or "math", student_id=child.id)
+    return CheckPhotos(
+        urls,
+        subject=child.subject or "math",
+        student_id=child.id,
+        policy_version=child.consent_policy,
+    )
 
 
 Route = Literal["handled", "pass"] | CheckPhotos
@@ -83,6 +92,7 @@ class Onboarding:
         self._students = StudentSteps(ctx, self._subjects)
         self._parents = ParentSteps(ctx, self._subjects)
         self._linking = Linking(ctx, self._subjects)
+        self._renewal = ConsentRenewal(ctx)
         # тот же контекст, что у шагов: бот берёт notifier отсюда, без онбординга его нет
         self.notifier = ParentNotifier(ctx)
         self._actions: dict[str, Action] = {
@@ -100,6 +110,7 @@ class Onboarding:
             "addchild": self._add_child,
             "whose": self._whose,
             "notify": self._notify,
+            "renew": self._renew,
         }
 
     async def route(self, update: MaxUpdate) -> Route:
@@ -197,13 +208,14 @@ class Onboarding:
 
     async def _on_photo(self, actor: Actor, position: Position, urls: list[str]) -> Route:
         if position.step == "student_ready":
-            return _photos_of(urls, position.profile)
+            return await self._check(actor, urls, position.profile)
         account = position.account
         if account is not None and (position.step == "parent_ready" or position.can_check):
             chosen = await self._parents.on_photo(actor, account, urls)
             if not chosen:
                 return "handled"
-            return _photos_of(chosen, await self._parents.homework_child(actor, account))
+            child = await self._parents.homework_child(actor, account)
+            return await self._check(actor, chosen, child)
         self._ctx.log("photo_blocked_no_consent", actor, step=position.step)
         if position.step == "waiting_parent":
             await self._students.block_photo(actor)
@@ -323,7 +335,23 @@ class Onboarding:
         urls = await self._parents.choose_owner(actor, account, int(arg))
         if not urls:
             return "handled"
-        return _photos_of(urls, await self._parents.homework_child(actor, account))
+        return await self._check(actor, urls, await self._parents.homework_child(actor, account))
+
+    async def _check(
+        self, actor: Actor, urls: list[str], child: StudentProfile | None
+    ) -> CheckPhotos:
+        """Фото уходят в проверку; согласие по прежней политике — заодно просим о новом."""
+        await self._renewal.remind(actor, child)
+        return _photos_of(urls, child)
+
+    async def _renew(self, actor: Actor, position: Position, arg: str) -> Route | None:
+        # кнопку могли переслать или подделать: согласие меняет только родитель, а что ребёнок
+        # его — проверяет хранилище
+        account = position.account
+        if account is None or account.role != "parent" or not _PROFILE_ID.fullmatch(arg):
+            return None
+        await self._renewal.accept(actor, account, int(arg))
+        return "handled"
 
     async def _notify(self, actor: Actor, position: Position, arg: str) -> Route | None:
         # кнопку под итогом мог нажать кто угодно (пересланное сообщение, выдуманный payload):

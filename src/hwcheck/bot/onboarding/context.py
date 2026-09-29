@@ -89,9 +89,9 @@ class OnboardingContext:
         *,
         kind: str,
         buttons: Buttons | None = None,
-    ) -> None:
+    ) -> bool:
         """Сообщение второй стороне связки. Не дошло (бот заблокирован) — событие notify_failed,
-        а не сбой апдейта: у автора действие уже выполнено (§9.4, §11)."""
+        а не сбой апдейта: у автора действие уже выполнено (§9.4, §11). Возвращает, дошло ли."""
         try:
             await self.max.send_to_user(self.cipher.decrypt(user_id_enc), text, buttons=buttons)
         except Exception as exc:
@@ -104,5 +104,6 @@ class OnboardingContext:
                 kind=kind,
                 error=type(exc).__name__,
             )
-            return
+            return False
         self.log("notify_sent", actor, user_initiated=False, component="notifier", kind=kind)
+        return True

@@ -101,7 +101,7 @@ docker compose logs --tail 20 bot                # «onboarding: required»
 ```
 
 С запуска для реальных семей (01.10.2026) флаг `ONBOARDING_REQUIRED=true` в prod включён постоянно:
-оператор в политике назван (v1), отзыв согласия и удаление данных — по письму оператору, вручную
+оператор в политике назван (действует v2: передача фото сторонней модели), отзыв согласия и удаление данных — по письму оператору, вручную
 («Удаление данных по запросу» ниже); меню отзыва (этап 3) и вычитка политики юристом — в работе.
 
 Выключить (поломка онбординга мешает проверке): то же с `ONBOARDING_REQUIRED=false`, в логе
@@ -397,13 +397,19 @@ LLM_GATEWAY_URL=https://shared1.multitool.works:4000/v1
 LLM_GATEWAY_KEY=<ключ команды>          # в репозиторий и логи не попадает
 SOLVER_MODEL=gw:gigachat-2-max          # префикс gw: — модель идёт через шлюз
 TUTOR_MODEL=gw:gigachat-2-max
-VISION_MODEL=GigaChat-2-Max             # без префикса — GigaChat API напрямую
+VISION_MODEL=gw:gemini-3.1-pro-preview  # чтение фото — с согласием по политике v2 и новее
+VISION_MODEL_DOMESTIC=GigaChat-2-Max    # без префикса — GigaChat API напрямую
 ```
 
 - Поставщика выбирает имя модели (`llm/router.py`). Бот не стартует, если модель назначена
   поставщику, который не настроен: в логе — имя настройки и чего не хватает.
-- GigaChat через шлюз **изображения не принимает** — чтение фото остаётся на GigaChat API, пока не
-  выбрана другая модель распознавания (`bench/reports/2026-09-28-gateway.md`).
+- GigaChat через шлюз **изображения не принимает**, поэтому фото читает сторонняя модель шлюза
+  (`VISION_MODEL`, выбор — `bench/reports/2026-09-28-gateway.md`). Это трансграничная передача:
+  сторонней модели уходят только фото семей, чьё согласие дано по политике v2 и новее. Фото
+  остальных — согласие по v0 или v1, бот без онбординга — читает `VISION_MODEL_DOMESTIC`.
+- Семьи с согласием по прежней политике бот просит согласиться заново (не чаще раза в 3 дня,
+  события `consent_renewal_asked`, `consent_renewed`); проверка при этом не останавливается.
+- Какая модель прочитала фото, видно в журнале: `llm_call` с `kind: vision`, поле `model`.
 - Лимита одновременных запросов у ключа нет; бот держит не больше `LLM_GATEWAY_CONCURRENCY` (8).
 - Перегрузку шлюза (429, 5xx) и обрыв связи клиент повторяет с растущей паузой, ошибку запроса
   (4xx) — нет.
@@ -421,8 +427,8 @@ i = httpx.get(base + '/key/info', headers={'Authorization': 'Bearer ' + c.llm_ga
 print('израсходовано', round(i['spend'], 2), 'из', i['max_budget'])"
 ```
 
-Вернуться на GigaChat API: убрать префикс `gw:` у моделей (`SOLVER_MODEL=GigaChat-2-Max`,
-`TUTOR_MODEL=GigaChat-2-Pro`) и пересоздать контейнер — `docker compose up -d --force-recreate bot`.
+Вернуться на GigaChat API: убрать префикс `gw:` у моделей (`VISION_MODEL=GigaChat-2-Max`,
+`SOLVER_MODEL=GigaChat-2-Max`, `TUTOR_MODEL=GigaChat-2-Pro`) и пересоздать контейнер — `docker compose up -d --force-recreate bot`.
 
 ## Источники трафика
 

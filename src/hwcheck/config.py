@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     # Роутинг по моделям (арх. §4): Max — vision и сложная математика, Pro — тьютор,
     # Lite — короткие реплики. Идентификаторы сверять с актуальной линейкой GigaChat.
     vision_model: str = "GigaChat-2-Max"
+    # чтение фото, когда согласие родителя не покрывает передачу сторонней модели (политика до
+    # v2) или согласия нет (бот без онбординга): фото остаётся у GigaChat
+    vision_model_domestic: str = "GigaChat-2-Max"
     solver_model: str = "GigaChat-2-Max"
     tutor_model: str = "GigaChat-2-Pro"
     lite_model: str = "GigaChat-2"

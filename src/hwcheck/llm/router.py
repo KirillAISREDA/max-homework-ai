@@ -15,7 +15,13 @@ from hwcheck.llm.gigachat_client import GigaChatClient
 from hwcheck.pipeline.vision import VisionAndChatClient
 
 GATEWAY_PREFIX = "gw:"
-MODEL_SETTINGS = ("vision_model", "solver_model", "tutor_model", "lite_model")
+MODEL_SETTINGS = (
+    "vision_model",
+    "vision_model_domestic",
+    "solver_model",
+    "tutor_model",
+    "lite_model",
+)
 
 
 class ProviderNotConfigured(RuntimeError):
