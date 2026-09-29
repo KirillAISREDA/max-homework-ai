@@ -10,12 +10,16 @@ from typing import Any
 
 import pytest
 
-from hwcheck.bot.handlers import Bot
+from hwcheck.bot.check import CheckModels, recognize_photo, vision_of, vision_override
+from hwcheck.bot.handlers import Bot, models_for
 from hwcheck.bot.onboarding.policy import POLICY_VERSION, allows_foreign_models
 from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
 from hwcheck.config import Settings
 from hwcheck.llm.journal import JournaledLLM
+from hwcheck.subjects.russian.module import RussianModule
 from onboarding_kit import Kit, make_kit, photo, ready_student
+from test_ru_gaps import WORDS
+from test_ru_recognize import TEXTBOOK
 from test_vision_two_stage import STRUCTURED, TRANSCRIPT, FakeTwoStageClient, make_image
 
 FOREIGN = "gw:gemini-3.1-pro-preview"
@@ -100,3 +104,51 @@ async def test_check_photos_carry_policy_of_consent(tmp_path: Path) -> None:
         student_id=profile.id,
         policy_version=POLICY_VERSION,
     )
+
+
+# --- модель по умолчанию — отечественная: путь, забывший о согласии, безопасен (ревью 29.09) ---
+
+
+class ModelSpy(FakeTwoStageClient):
+    """Запоминает, какой модели ушло фото."""
+
+    def __init__(self, vision: list[str], chats: list[str]) -> None:
+        super().__init__(vision, chats)
+        self.vision_models: list[str] = []
+
+    async def analyze_image(self, image: bytes, **kwargs: Any) -> Any:
+        self.vision_models.append(kwargs["model"])
+        return await super().analyze_image(image, **kwargs)
+
+
+def test_models_of_settings_read_photo_by_domestic_model() -> None:
+    """Модели, собранные один раз при старте бота (`SubjectDeps`), о согласии не знают."""
+    settings = Settings(_env_file=None, vision_model=FOREIGN, vision_model_domestic=DOMESTIC)
+    assert models_for(settings).vision == DOMESTIC
+
+
+async def test_any_photo_reader_obeys_consent_of_the_check() -> None:
+    models = CheckModels(vision=DOMESTIC, structure="s", solver="m")
+    spy = ModelSpy([TRANSCRIPT, TRANSCRIPT], [STRUCTURED, STRUCTURED])
+
+    await recognize_photo(spy, make_image(), models)
+    with vision_override(FOREIGN):
+        await recognize_photo(spy, make_image(), models)
+    with vision_override(None):
+        assert vision_of(models) == DOMESTIC
+
+    assert spy.vision_models == [DOMESTIC, FOREIGN]
+
+
+@pytest.mark.parametrize(("override", "expected"), [(None, DOMESTIC), (FOREIGN, FOREIGN)])
+async def test_language_module_obeys_consent_of_the_check(
+    override: str | None, expected: str
+) -> None:
+    """Модуль предмета создаётся при старте бота с моделями из настроек: без этого теста фото
+    русского языка уходило сторонней модели у всех семей."""
+    spy = ModelSpy([TEXTBOOK], [])
+    models = CheckModels(vision=DOMESTIC, structure="s", solver="m")
+    module = RussianModule(spy, models, ocr=None, dictionary=WORDS)
+    with vision_override(override):
+        await module.recognize(make_image())
+    assert spy.vision_models == [expected]

@@ -8,9 +8,7 @@ import asyncio
 import contextlib
 import logging
 import time
-from collections.abc import Iterator
-from contextvars import ContextVar
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 from hwcheck.bot.check import (
@@ -19,6 +17,7 @@ from hwcheck.bot.check import (
     recognize_photo,
     split_pages,
     validator_only_grade,
+    vision_override,
 )
 from hwcheck.bot.clarify import (
     MAX_ATTEMPTS,
@@ -104,27 +103,23 @@ REVIEW_DONE = "Эту домашку я уже проверил 👍 Пришл�
 SOLVER_CACHE_DIR = Path(".cache/solver")
 
 
-# модель чтения фото текущей проверки: зависит от согласия родителя. Контекст, а не поле
-# бота: проверки разных чатов идут параллельно, у каждой своя
-_vision_model: ContextVar[str | None] = ContextVar("vision_model", default=None)
-
-
-@contextlib.contextmanager
-def _vision_for(settings: Settings, policy_version: str | None) -> Iterator[None]:
-    """Сторонней модели фото уходит только с согласием по политике, которая об этом говорит."""
+def _vision_for(
+    settings: Settings, policy_version: str | None
+) -> contextlib.AbstractContextManager[None]:
+    """Сторонней модели фото уходит только с согласием по политике, которая об этом говорит;
+    иначе проверке ничего не назначено, и фото читает модель из `models_for`."""
     foreign = allows_foreign_models(policy_version)
-    model = settings.vision_model if foreign else settings.vision_model_domestic
-    token = _vision_model.set(model)
-    try:
-        yield
-    finally:
-        _vision_model.reset(token)
+    return vision_override(settings.vision_model if foreign else None)
 
 
 def models_for(settings: Settings) -> CheckModels:
-    """Роутинг моделей по шагам (арх. §4) — один источник и для бота, и для раннера."""
+    """Роутинг моделей по шагам (арх. §4) — один источник и для бота, и для раннера.
+
+    Чтение фото — отечественная модель: эти модели собираются один раз при старте и попадают в
+    модули предметов, которые о согласии семьи не знают. Стороннюю модель назначает проверке
+    `_vision_for`, и тот, кто о нём забыл, остаётся на безопасной."""
     return CheckModels(
-        vision=settings.vision_model,
+        vision=settings.vision_model_domestic,
         structure=settings.tutor_model,
         solver=settings.solver_model,
     )
@@ -220,9 +215,7 @@ class Bot:
 
     @property
     def _models(self) -> CheckModels:
-        models = models_for(self._settings)
-        vision = _vision_model.get()
-        return models if vision is None else replace(models, vision=vision)
+        return models_for(self._settings)
 
     async def handle_update(self, update: MaxUpdate) -> None:
         # один trace_id на все вызовы компонентов по апдейту (антифрод, Прил. 2 п. 5);
