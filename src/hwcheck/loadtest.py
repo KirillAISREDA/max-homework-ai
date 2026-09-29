@@ -445,6 +445,9 @@ async def _run_cli(args: argparse.Namespace) -> str:
     from hwcheck.llm.router import make_llm
 
     settings = load_settings()
+    # страницы теста — открытый датасет, не работы детей: их читает модель прода. Боту без
+    # онбординга согласие неизвестно, и он взял бы отечественную модель — подменяем её
+    settings = settings.model_copy(update={"vision_model_domestic": settings.vision_model})
     files = sorted(
         p for p in args.photos.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png")
     )
