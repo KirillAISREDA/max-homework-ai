@@ -163,3 +163,5 @@ async def test_blocked_parent_does_not_stop_the_check(tmp_path: Path) -> None:
     assert isinstance(route, CheckPhotos) and route.student_id == profile.id
     [failed] = kit.events("notify_failed")
     assert failed["kind"] == "consent_renewal"
+    # просьба не дошла — значит, родителя не спросили: в счёт спрошенных семья не идёт
+    assert kit.events("consent_renewal_asked") == []

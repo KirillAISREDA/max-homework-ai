@@ -53,7 +53,10 @@ class ConsentRenewal:
             parent = await ctx.repo.account_by_id(child.parent_user_id)
             if parent is None or parent.role != "parent":
                 return
-            await ctx.notify(actor, parent.user_id_enc, text, kind=NOTIFY_KIND, buttons=buttons)
+            if not await ctx.notify(
+                actor, parent.user_id_enc, text, kind=NOTIFY_KIND, buttons=buttons
+            ):
+                return  # не дошло: родителя не спросили, в журнале — notify_failed
         ctx.log(
             "consent_renewal_asked",
             actor,
