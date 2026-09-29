@@ -119,7 +119,7 @@ class Linking:
             await ctx.reply(actor, texts.invite_refusal(invite.kind, outcome.result))
             return
         ctx.log("child_linked", actor, grade=profile.grade)
-        await ctx.reply(actor, texts.CHILD_LINKED)
+        await ctx.reply(actor, texts.CHILD_LINKED, fmt=texts.CHILD_LINKED_FORMAT)
         if profile.subject is None:
             await self._subjects.ask(actor, profile)
         else:

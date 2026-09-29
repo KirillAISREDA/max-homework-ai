@@ -97,11 +97,24 @@ def test_summary_is_not_promised_before_notifications_exist() -> None:
 
 
 def test_linked_sides_learn_what_domashka_is() -> None:
+    # текст Кирилла (29.09): короткие строки с эмодзи вместо одного абзаца
     child = texts.CHILD_LINKED
-    assert child.startswith("Привет! Родитель подключил тебя к Домашке")
-    for meaning in ("бот", "фото", "за минуту", "где ошибка", "не подсказываю", "самому"):
-        assert meaning in child, meaning
-    assert "Разрешение родителя уже есть" in child and len(child) <= INTRO_LIMIT
+    assert child.split("\n\n") == [
+        "👋 Привет!",
+        "Родитель подключил тебя к **Домашке** 🪄",
+        "📷 Это бот, который проверяет домашку по фото.",
+        "Фотографируешь тетрадь по математике — и за минуту узнаёшь:\n"
+        "✅ что решено верно\n"
+        "🔎 а где ошибка",
+        "💡 Ответ я не подсказываю — помогаю найти ошибку самому.",
+        "🔐 Разрешение родителя уже есть.",
+    ]
+    assert len(child) <= INTRO_LIMIT
+    # разметка — только жирное название: непарная «**» показала бы ребёнку звёздочки
+    assert child.count("**") == 2 and not re.search(r"[_`~^\[\]]|\+\+", child)
+    assert texts.CHILD_LINKED_FORMAT == "markdown"
+    assert texts.SUBJECT_STUDENT == "📚 Какой предмет хочешь проверить?"
+    assert texts.SUBJECT_PARENT == "Какой предмет проверяем?"  # родителю — как было
 
     # что такое сервис, родителю говорит экран согласия; вводное — как проходит проверка
     parent = texts.CHILD_ASKS_CONSENT.format(grade=7)

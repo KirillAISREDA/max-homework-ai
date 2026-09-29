@@ -98,7 +98,9 @@ async def test_child_opens_parent_link_and_parent_is_told(tmp_path: Path) -> Non
         consent_at=kit.clock.now,
     )
     await linking(kit).open_link(actor(3), None, "parent_invites_student", invite.token)
+    # приветствие и вопрос о предмете — два сообщения; жирное название — только в первом
     assert kit.texts(3) == [texts.CHILD_LINKED, texts.SUBJECT_STUDENT]
+    assert kit.formats(3) == ["markdown", None]
     assert kit.max.to_users == [(2, texts.CHILD_JOINED.format(grade=6), None)]
     assert kit.events("child_linked")[0]["grade"] == 6
 
