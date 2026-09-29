@@ -5,9 +5,13 @@
 Что считается:
 - «семья» — аккаунт, приславший домашку. За ребёнка 1–4 класса фото присылает родитель, ребёнок
   5–9 класса — сам; двое детей со своими аккаунтами — две строки;
-- «дошла до верного ответа» — бот подтвердил верное решение хотя бы одного задания
-  (`passed_correct`) или ребёнок довёл разбор ошибки с тьютором до верного ответа
-  (`passed_fixed`). «Разобрал все ошибки домашки» считается отдельно и строже;
+- «дошла до верного ответа» — бот подтвердил верное решение хотя бы одного задания, сразу
+  или после ответа на уточняющий вопрос (`passed_correct`), либо ребёнок довёл разбор ошибки
+  с тьютором до верного ответа (`passed_fixed`);
+- строгий счёт (`passed_strict`) — вся домашка верна или разобраны все её ошибки: одно верное
+  задание среди неразобранных ошибок в него не входит. Завысить отчёт хуже, чем занизить;
+- счётчики заданий — по первой проверке: ответ на уточняющий вопрос пишется отдельным событием
+  без номера задания и «не уверен» в «верно» не переносит;
 - аккаунты команды и тестировщиков пишутся в журнал со средой `test` и в отчёт по `prod` не
   входят (Положение, Прил. 2 п. 5.1.3).
 """
@@ -24,6 +28,7 @@ from hwcheck.cost import CHECK_EVENT, MSK, NO_SOURCE, START_EVENT, Row, moscow_t
 Status = Literal["passed_fixed", "passed_correct", "errors_open", "uncertain", "no_result"]
 
 TASK_EVENT = "task_checked"
+CLARIFIED_EVENT = "task_clarified"
 FIXED_EVENT = "error_fixed"
 RESOLVED_EVENT = "homework_resolved"
 FAILED_EVENT = "check_failed"
@@ -38,6 +43,10 @@ STATUS_TEXT: dict[Status, str] = {
     "uncertain": "бот не уверен, вердикта нет",
     "no_result": "задания не разобраны",
 }
+FAMILY_NOTE = (
+    "Семья здесь — аккаунт, приславший домашку: двое детей со своими аккаунтами — две строки. "
+    "Счётчики заданий — по первой проверке, без ответов на уточняющие вопросы."
+)
 USER_PREFIX = 6  # знаков идентификатора в таблице: строки различимы, полный — в выгрузке JSON
 
 
@@ -54,9 +63,12 @@ class Family(BaseModel):
     correct: int = 0
     wrong: int = 0
     uncertain: int = 0
-    errors_fixed: int = 0  # разборов, дошедших до верного ответа
+    clarified_correct: int = 0  # «верно» после ответа на уточняющий вопрос
+    # разборов, дошедших до верного ответа; повторный разбор той же ошибки считается ещё раз
+    errors_fixed: int = 0
     homeworks_resolved: int = 0  # домашек, где разобраны все ошибки
     status: Status = "no_result"
+    passed_strict: bool = False  # вся домашка верна или разобраны все ошибки домашки
 
 
 class FamiliesReport(BaseModel):
@@ -71,6 +83,7 @@ class FamiliesReport(BaseModel):
     passed: int = 0  # прошли сценарий
     passed_correct: int = 0
     passed_fixed: int = 0
+    passed_strict: int = 0  # строгий счёт: вся домашка верна или все ошибки разобраны
     resolved_all: int = 0  # разобрали все ошибки хотя бы одной домашки
     by_status: dict[str, int] = Field(default_factory=dict)  # не прошедшие — по причинам
     families: list[Family] = Field(default_factory=list)
@@ -110,6 +123,7 @@ def families_report(
         passed=sum(statuses[status] for status in PASSED),
         passed_correct=statuses["passed_correct"],
         passed_fixed=statuses["passed_fixed"],
+        passed_strict=sum(1 for family in families if family.passed_strict),
         resolved_all=sum(1 for family in families if family.homeworks_resolved),
         by_status={
             status: count
@@ -136,6 +150,13 @@ def _family(user: str, events: Sequence[Row], source: str) -> Family:
     correct = sum(1 for verdict in verdicts if verdict in CORRECT)
     wrong = sum(1 for verdict in verdicts if verdict in WRONG)
     fixed = _count(events, FIXED_EVENT)
+    clarified = sum(
+        1
+        for row in events
+        if row.get("type") == CLARIFIED_EVENT and str(row.get("verdict")) in CORRECT
+    )
+    clean = _clean_checks(events)
+    resolved = _count(events, RESOLVED_EVENT)
     return Family(
         user=user,
         source=source,
@@ -143,15 +164,17 @@ def _family(user: str, events: Sequence[Row], source: str) -> Family:
         last_activity=moscow_time(max(row["ts"] for row in events)),
         active_days=len({datetime.fromtimestamp(row["ts"], MSK).date() for row in events}),
         homeworks=len(uploads),
-        clean_checks=_clean_checks(events),
+        clean_checks=clean,
         failed_checks=_count(events, FAILED_EVENT),
         tasks=len(verdicts),
         correct=correct,
         wrong=wrong,
         uncertain=len(verdicts) - correct - wrong,
+        clarified_correct=clarified,
         errors_fixed=fixed,
-        homeworks_resolved=_count(events, RESOLVED_EVENT),
-        status=_status(tasks=len(verdicts), correct=correct, wrong=wrong, fixed=fixed),
+        homeworks_resolved=resolved,
+        status=_status(tasks=len(verdicts), correct=correct + clarified, wrong=wrong, fixed=fixed),
+        passed_strict=bool(clean or resolved),
     )
 
 
@@ -186,7 +209,9 @@ def _status(*, tasks: int, correct: int, wrong: int, fixed: int) -> Status:
 def render_families_report(report: FamiliesReport) -> str:
     lines = [f"Семьи, прошедшие сценарий — среда: {report.env}"]
     if report.since:
-        lines.append(f"Период: с {report.since} (по Москве)")
+        lines.append(
+            f"Период: с {report.since} (по Москве); первая домашка и счётчики — внутри периода"
+        )
     if report.data_from and report.data_to:
         lines.append(f"События в журнале: {_moment(report.data_from)} — {_moment(report.data_to)}")
     if report.skipped_rows:
@@ -200,12 +225,13 @@ def render_families_report(report: FamiliesReport) -> str:
         f"Прошли сценарий: {report.passed}",
         f"  - {STATUS_TEXT['passed_fixed']}: {report.passed_fixed}",
         f"  - {STATUS_TEXT['passed_correct']}: {report.passed_correct}",
-        f"Разобрали все ошибки хотя бы одной домашки: {report.resolved_all}",
+        f"Строгий счёт — вся домашка верна или все ошибки разобраны: {report.passed_strict}",
+        f"  - из них разобрали все ошибки домашки: {report.resolved_all}",
     ]
     if report.by_status:
         lines.append(f"Не прошли: {report.uploaded - report.passed}")
         lines += [f"  - {STATUS_TEXT[s]}: {n}" for s, n in _statuses(report.by_status)]
-    return "\n".join([*lines, "", *_table(report.families)])
+    return "\n".join([*lines, "", *_table(report.families), "", FAMILY_NOTE])
 
 
 def _statuses(by_status: dict[str, int]) -> list[tuple[Status, int]]:
@@ -215,7 +241,7 @@ def _statuses(by_status: dict[str, int]) -> list[tuple[Status, int]]:
 def _table(families: Sequence[Family]) -> list[str]:
     head = (
         "| Семья | Источник | Первая домашка | Дней | Домашек | Заданий "
-        "| Верно | С ошибкой | Не уверен | Разобрано ошибок | Итог |"
+        "| Верно | С ошибкой | Не уверен | Разборов до верного | Строго | Итог |"
     )
     lines = [head, "|" + "---|" * (head.count("|") - 1)]
     for family in families:
@@ -230,6 +256,7 @@ def _table(families: Sequence[Family]) -> list[str]:
             str(family.wrong),
             str(family.uncertain),
             str(family.errors_fixed),
+            "да" if family.passed_strict else "нет",
             STATUS_TEXT[family.status],
         ]
         lines.append("| " + " | ".join(cells) + " |")

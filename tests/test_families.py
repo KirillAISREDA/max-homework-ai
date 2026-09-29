@@ -220,3 +220,46 @@ def test_cli_report_families_refuses_missing_journal_and_bad_date(
     with pytest.raises(SystemExit):
         main(["report", "families", str(journal), "--since", "вчера"])
     assert "--since" in capsys.readouterr().err
+
+
+def test_answer_to_a_clarifying_question_can_bring_the_family_to_a_correct_answer() -> None:
+    """Вердикт после уточнения пишется отдельным событием в другой трассе; без него семья, у
+    которой «не уверен» стало «верно», осталась бы не прошедшей."""
+    rows = [
+        *check("u1", "t1", ["uncertain"]),
+        event("task_clarified", user="u1", trace="t2", ts=DAY1 + 30, verdict="correct"),
+        *check("u2", "t3", ["uncertain"]),
+        event("task_clarified", user="u2", trace="t4", ts=DAY1 + 30, verdict="wrong"),
+    ]
+    report = families_report(rows)
+    one = family(report, "u1")
+    assert (one.status, one.clarified_correct) == ("passed_correct", 1)
+    assert family(report, "u2").status == "uncertain"
+    assert report.passed == 1
+
+
+def test_strict_count_needs_a_whole_homework_correct_or_all_errors_resolved() -> None:
+    """Одно верное задание среди ошибок — «прошла» по мягкому счёту, но не по строгому."""
+    rows = [
+        *check("lucky", "t1", ["correct", "wrong", "wrong"]),
+        *check("clean", "t2", ["correct", "correct"]),
+        *check("worked", "t3", ["wrong"]),
+        event("error_fixed", user="worked", trace="t4", ts=DAY1 + 60),
+        event("homework_resolved", user="worked", trace="t4", ts=DAY1 + 61),
+        *check("halfway", "t5", ["wrong", "wrong"]),
+        event("error_fixed", user="halfway", trace="t6", ts=DAY1 + 60),
+    ]
+    report = families_report(rows)
+    assert (report.passed, report.passed_strict) == (4, 2)
+    strict = {f.user for f in report.families if f.passed_strict}
+    assert strict == {"clean", "worked"}
+
+
+def test_text_report_explains_what_a_family_is_and_shows_the_strict_count() -> None:
+    rows = [*check("lucky", "t1", ["correct", "wrong"]), *check("clean", "t2", ["correct"])]
+    text = render_families_report(families_report(rows, since=date(2026, 10, 1)))
+    assert "Прошли сценарий: 2" in text
+    assert "Строгий счёт — вся домашка верна или все ошибки разобраны: 1" in text
+    assert "Семья здесь — аккаунт" in text
+    assert "внутри периода" in text
+    text.encode("cp1251")
