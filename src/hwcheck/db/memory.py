@@ -163,6 +163,29 @@ class InMemoryProfileRepository:
         self.consents.append(_Consent(parent_hash, profile_id, None, policy_version, now))
         return True
 
+    async def renew_consent(
+        self,
+        profile_id: int,
+        parent_user_id: int,
+        parent_hash: str,
+        policy_version: str,
+        now: datetime,
+    ) -> str | None:
+        profile = self._profiles.get(profile_id)
+        if profile is None or profile.parent_user_id != parent_user_id:
+            return None
+        active = next(
+            (c for c in self.consents if c.profile_id == profile_id and c.revoked_at is None),
+            None,
+        )
+        if active is None or active.policy_version == policy_version:
+            return None
+        active.revoked_at = now
+        self.consents.append(
+            _Consent(parent_hash, profile_id, active.student_hash, policy_version, now)
+        )
+        return active.policy_version
+
     async def create_invite(
         self,
         invite: NewInvite,

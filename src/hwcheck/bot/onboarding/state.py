@@ -21,6 +21,8 @@ class OnboardingState(BaseModel):
     pending_at: float | None = None  # когда пришло первое из этих фото
     child_id: int | None = None  # ребёнок 1–4 класса, выбранный для текущей домашки
     child_chosen_at: float | None = None
+    # когда родителя просили обновить согласие: id профиля ребёнка → время (renewal.py)
+    renewal_asked: dict[str, float] = Field(default_factory=dict)
 
 
 class OnboardingStateStore(Protocol):

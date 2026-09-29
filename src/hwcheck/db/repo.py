@@ -135,6 +135,20 @@ class ProfileRepository(Protocol):
         """Согласие на ребёнка 1–4 класса; активное уже есть — False."""
         ...
 
+    async def renew_consent(
+        self,
+        profile_id: int,
+        parent_user_id: int,
+        parent_hash: str,
+        policy_version: str,
+        now: datetime,
+    ) -> str | None:
+        """Новое согласие вместо действующего: прежнее отзывается и остаётся записью.
+
+        Возвращает версию прежнего согласия; None — менять нечего: согласия нет, оно уже по
+        этой версии, или ребёнок не этого родителя."""
+        ...
+
     async def create_invite(
         self,
         invite: NewInvite,
@@ -410,6 +424,34 @@ class PgProfileRepository:
             now,
         )
         return bool(status == "INSERT 0 1")
+
+    async def renew_consent(
+        self,
+        profile_id: int,
+        parent_user_id: int,
+        parent_hash: str,
+        policy_version: str,
+        now: datetime,
+    ) -> str | None:
+        async with self._pool.acquire() as conn, conn.transaction():
+            # блокировка записи согласия: два нажатия «Согласен» подряд не создадут двух новых
+            active = await conn.fetchrow(
+                "SELECT c.id, c.student_hash, c.policy_version FROM consents c "
+                "JOIN student_profiles p ON p.id = c.student_profile_id "
+                "WHERE c.student_profile_id = $1 AND c.revoked_at IS NULL "
+                "AND p.parent_user_id = $2 FOR UPDATE OF c",
+                profile_id,
+                parent_user_id,
+            )
+            if active is None or active["policy_version"] == policy_version:
+                return None
+            await conn.execute(
+                "UPDATE consents SET revoked_at = $2 WHERE id = $1", active["id"], now
+            )
+            await conn.execute(
+                _CONSENT, parent_hash, profile_id, active["student_hash"], policy_version, now
+            )
+            return str(active["policy_version"])
 
     async def create_invite(
         self,
