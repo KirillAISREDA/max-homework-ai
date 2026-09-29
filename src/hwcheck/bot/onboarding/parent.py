@@ -50,11 +50,12 @@ class ParentSteps:
             return
         intro = texts.PARENT_FIRST_CONSENT.format(grade=grade)
         buttons = texts.consent_keyboard(f"ob:pconsent:{grade}")
-        await ctx.reply(actor, texts.consent_text(intro), buttons)
+        await ctx.reply(actor, texts.consent_text(intro), buttons, fmt=texts.CONSENT_FORMAT)
 
     async def ask_consent(self, actor: Actor) -> None:
         buttons = texts.consent_keyboard("ob:consent")
-        await self._ctx.reply(actor, texts.consent_text(texts.PARENT_SENDS_CONSENT), buttons)
+        text = texts.consent_text(texts.PARENT_SENDS_CONSENT)
+        await self._ctx.reply(actor, text, buttons, fmt=texts.CONSENT_FORMAT)
 
     async def give_consent(self, actor: Actor, child: StudentProfile) -> None:
         ctx = self._ctx

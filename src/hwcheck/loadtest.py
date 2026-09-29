@@ -82,6 +82,7 @@ class LoadMax:
         *,
         buttons: Buttons | None = None,
         image_token: str | None = None,
+        fmt: str | None = None,
     ) -> None:
         self.replies += 1
         self._buttons[chat_id] = buttons or []

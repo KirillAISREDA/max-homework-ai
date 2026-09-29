@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 from hwcheck.bot.fsm import StateStore
-from hwcheck.bot.max_api import Buttons, MaxClient
+from hwcheck.bot.max_api import Buttons, MaxClient, TextFormat
 from hwcheck.bot.onboarding.state import OnboardingStateStore
 from hwcheck.bot.subjects import school_year
 from hwcheck.crypto import UserIdCipher
@@ -63,8 +63,15 @@ class OnboardingContext:
     def encrypted_id(self, actor: Actor) -> bytes:
         return self.cipher.encrypt(actor.user_id)
 
-    async def reply(self, actor: Actor, text: str, buttons: Buttons | None = None) -> None:
-        await self.max.send_message(actor.chat_id, text, buttons=buttons)
+    async def reply(
+        self,
+        actor: Actor,
+        text: str,
+        buttons: Buttons | None = None,
+        *,
+        fmt: TextFormat | None = None,
+    ) -> None:
+        await self.max.send_message(actor.chat_id, text, buttons=buttons, fmt=fmt)
 
     async def notifies(self, parent_user_id: int) -> bool:
         """Родителю уходят итоги проверок (bot/notifier.py): режим не «не присылать».

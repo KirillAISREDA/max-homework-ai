@@ -54,10 +54,13 @@ async def test_parent_of_young_child_sends_photos_himself(tmp_path: Path) -> Non
     await parents(kit).ask_consent(me)
     consent, buttons = kit.last(2)
     assert consent == texts.consent_text(texts.PARENT_SENDS_CONSENT)
+    assert kit.last_format(2) == "markdown"  # жирный шрифт экрана согласия
     assert payloads(buttons) == ["ob:policy", "ob:consent"]
     await parents(kit).give_consent(me, child)
     await parents(kit).give_consent(me, child)  # второе «Согласен»
     assert kit.last(2) == (texts.INSTRUCTION_PARENT, texts.add_child_keyboard())
+    # разметка — только у экрана согласия: в остальных текстах «*» и «_» — это знаки
+    assert kit.last_format(2) is None
     # 1–4 класс: результат родитель видит сам, итогов отдельным сообщением нет
     assert texts.NOTIFY_PROMISE not in kit.last(2)[0]
     assert [e["scenario"] for e in kit.events("consent_given")] == ["parent_sends"]
@@ -72,6 +75,7 @@ async def test_parent_of_older_child_consents_then_forwards_link(tmp_path: Path)
     assert await kit.repo.get_account(me.user_hash) is None  # до «Согласен» ничего не хранится
     consent, buttons = kit.last(2)
     assert consent == texts.consent_text(texts.PARENT_FIRST_CONSENT.format(grade=7))
+    assert kit.last_format(2) == "markdown"
     assert payloads(buttons) == ["ob:policy", "ob:pconsent:7"]
 
     await parents(kit).invite_child(me, None, 7)
