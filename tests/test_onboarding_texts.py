@@ -103,10 +103,12 @@ def test_linked_sides_learn_what_domashka_is() -> None:
         assert meaning in child, meaning
     assert "Разрешение родителя уже есть" in child and len(child) <= INTRO_LIMIT
 
+    # что такое сервис, родителю говорит экран согласия; вводное — как проходит проверка
     parent = texts.CHILD_ASKS_CONSENT.format(grade=7)
-    for meaning in ("бот", "фото", "находит ошибки", "без готовых ответов", "не нейросеть"):
+    for meaning in ("бот", "фото", "за минуту", "находит ошибки", "не нейросеть"):
         assert meaning in parent, meaning
     assert "согласие" in parent and len(parent) <= INTRO_LIMIT
+    assert "не решает задания за ребёнка" in texts.consent_text(parent)
 
     young = texts.YOUNG_STUDENT
     assert "мама или папа" in young and "ссылку" in young
@@ -127,7 +129,10 @@ def test_ready_answers_are_mentioned_only_as_refused() -> None:
     """Готовые ответы бот не даёт: упоминать их можно только с отрицанием."""
     mention = re.compile(r"[^.!?\n]*готов\w+ ответ\w+[^.!?\n]*")
     mentions = [m.group().lower() for value in all_texts() for m in mention.finditer(value)]
-    assert len(mentions) >= 4  # оба вводных, инструкции, приглашение родителю
+    # вводное родителя, инструкции, приглашение родителю; экран согласия говорит то же словами
+    # «не решает задания за ребёнка»
+    assert len(mentions) >= 3
+    assert "не решает задания за ребёнка" in texts.CONSENT_SUMMARY
     for sentence in mentions:
         assert re.search(r"\b(не|без)\b", sentence), sentence
 
@@ -174,11 +179,21 @@ def test_policy_fits_max_messages() -> None:
     assert "GigaChat" in "\n".join(messages)
 
 
-def test_consent_summary_names_transfer_and_version() -> None:
+def test_consent_screen_is_short_and_sends_to_the_full_policy() -> None:
+    """Решение Кирилла 29.09: на экране согласия — что такое сервис и какие данные нужны;
+    получатели данных, цели, хранение и отзыв согласия — в полном тексте политики."""
     summary = texts.CONSENT_SUMMARY
-    assert "GigaChat (ПАО Сбербанк)" in summary and POLICY_VERSION in summary
-    # передача фото за рубеж названа до нажатия «Согласен», а не только в полном тексте
-    assert "Gemini (Google, США)" in summary and "за пределы России" in summary
+    for meaning in (
+        "не решает задания за ребёнка",
+        "класс и выбранный предмет",
+        "фото домашних заданий — храним до 30 дней",
+        "результаты проверок",
+        "идентификатор MAX — в зашифрованном виде",
+        "Имя ребёнка и школа",
+        "родителем или законным представителем",
+        f"политика {POLICY_VERSION}",
+    ):
+        assert meaning in summary, meaning
     text = texts.consent_text(texts.CHILD_ASKS_CONSENT.format(grade=7))
     assert text.startswith("Ваш ребёнок (7 класс)") and len(text) <= MAX_MESSAGE_LEN
     intros = [
@@ -189,16 +204,45 @@ def test_consent_summary_names_transfer_and_version() -> None:
     assert all(len(texts.consent_text(intro)) <= MAX_MESSAGE_LEN for intro in intros)
 
 
-def test_consent_summary_promises_only_what_exists() -> None:
-    """Меню отзыва появится на этапе 3 — до него отзыв через оператора (финальное ревью, F10)."""
-    lines = texts.CONSENT_SUMMARY.splitlines()
+def test_what_the_consent_screen_leaves_out_is_in_the_full_policy() -> None:
+    """Экран согласия не называет получателей данных — значит, их обязан назвать текст, на
+    который он ссылается: иначе родитель не узнал бы о передаче фото за рубеж нигде."""
+    summary = texts.CONSENT_SUMMARY
+    assert "Gemini" not in summary and "GigaChat" not in summary
+    policy = "\n".join(policy_messages())
+    for meaning in (
+        "Gemini компании Google LLC (США)",
+        "трансграничная передача",
+        "за пределами России",
+        "GigaChat (ПАО Сбербанк, Россия)",
+        "Как отозвать согласие и удалить данные",
+        "на серверах оператора в России",
+        "уведомления и сводки родителю",
+    ):
+        assert meaning in policy, meaning
+
+
+def test_consent_screen_names_buttons_as_they_are_on_the_keyboard() -> None:
+    labels = [b["text"] for row in texts.consent_keyboard("ob:consent", "ob:no") for b in row]
+    assert labels == ["Полный текст", "Согласен", "Отказать"]
+    assert "**«Согласен»**" in texts.CONSENT_SUMMARY
+    assert "**«Полный текст»**" in texts.CONSENT_SUMMARY
+
+
+def test_consent_screen_markup_is_balanced_and_promises_only_what_exists() -> None:
+    """Непарная «**» показала бы родителю звёздочки. Меню отзыва появится на этапе 3, отчёт о
+    прогрессе — вместе с самим отчётом: до них экран согласия их не обещает."""
+    for intro in (
+        texts.CHILD_ASKS_CONSENT.format(grade=7),
+        texts.PARENT_FIRST_CONSENT.format(grade=7),
+        texts.PARENT_SENDS_CONSENT,
+    ):
+        text = texts.consent_text(intro)
+        assert text.count("**") % 2 == 0
+        assert not re.search(r"[_`~^\[\]]|\+\+", text), text  # остальная разметка MAX
+    assert texts.CONSENT_FORMAT == "markdown"
     assert "меню" not in texts.CONSENT_SUMMARY
-    assert "Как отозвать: написать оператору — контакт в полном тексте." in lines
-    assert lines[-2:] == [
-        "Нажимая «Согласен», вы подтверждаете, что вы родитель или законный представитель "
-        "ребёнка, и соглашаетесь на эту передачу.",
-        f"Полный текст — кнопка «Полный текст» (политика {POLICY_VERSION}).",
-    ]
+    assert "отчёт" not in texts.CONSENT_SUMMARY
 
 
 def test_grade_and_role_keyboards() -> None:

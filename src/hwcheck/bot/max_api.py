@@ -7,7 +7,7 @@ marker) — для разработки; webhook (POST /subscriptions) доба�
 import logging
 import ssl
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import certifi
 import httpx
@@ -17,6 +17,8 @@ from hwcheck.bot.models import MaxUpdate
 logger = logging.getLogger(__name__)
 
 Buttons = list[list[dict[str, str]]]
+# разметка текста сообщения (dev.max.ru, «Форматирование текста»)
+TextFormat = Literal["markdown", "html"]
 
 
 def ssl_verify(extra_ca: str | None) -> ssl.SSLContext | bool:
@@ -86,8 +88,11 @@ class MaxClient:
         *,
         buttons: Buttons | None = None,
         image_token: str | None = None,
+        fmt: TextFormat | None = None,
     ) -> None:
-        await self._post_message({"chat_id": chat_id}, text, buttons, image_token)
+        """`fmt` — разметка текста. По умолчанию её нет: в ответах бота есть «*» и «_»
+        (умножение, пропуски в словах), разметка превратила бы их в курсив."""
+        await self._post_message({"chat_id": chat_id}, text, buttons, image_token, fmt)
 
     async def send_to_user(
         self,
@@ -106,8 +111,11 @@ class MaxClient:
         text: str,
         buttons: Buttons | None,
         image_token: str | None = None,
+        fmt: TextFormat | None = None,
     ) -> None:
         body: dict[str, Any] = {"text": text}
+        if fmt is not None:
+            body["format"] = fmt
         attachments: list[dict[str, Any]] = []
         if image_token:
             attachments.append({"type": "image", "payload": {"token": image_token}})

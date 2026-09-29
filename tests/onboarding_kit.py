@@ -28,6 +28,7 @@ BOT = "domashka_bot"
 class FakeMax:
     def __init__(self) -> None:
         self.sent: list[tuple[int, str, Buttons | None]] = []  # (chat_id, текст, кнопки)
+        self.formats: list[str | None] = []  # разметка каждого сообщения из `sent`
         self.to_users: list[tuple[int, str, Buttons | None]] = []  # (user_id, текст, кнопки)
         self.callbacks: list[str] = []
         self.downloads: list[str] = []
@@ -36,9 +37,15 @@ class FakeMax:
         self.timeline: list[tuple[str, int, str]] = []
 
     async def send_message(
-        self, chat_id: int, text: str, *, buttons: Buttons | None = None
+        self,
+        chat_id: int,
+        text: str,
+        *,
+        buttons: Buttons | None = None,
+        fmt: str | None = None,
     ) -> None:
         self.sent.append((chat_id, text, buttons))
+        self.formats.append(fmt)
         self.timeline.append(("chat", chat_id, text))
 
     async def send_to_user(
@@ -81,6 +88,11 @@ class Kit:
 
     def texts(self, user_id: int) -> list[str]:
         return [text for chat_id, text, _ in self.max.sent if chat_id == chat(user_id)]
+
+    def last_format(self, user_id: int) -> str | None:
+        """Разметка последнего сообщения пользователю в чат."""
+        sent = zip(self.max.sent, self.max.formats, strict=True)
+        return [fmt for message, fmt in sent if message[0] == chat(user_id)][-1]
 
     def last(self, user_id: int) -> tuple[str, Buttons | None]:
         _, text, buttons = [m for m in self.max.sent if m[0] == chat(user_id)][-1]

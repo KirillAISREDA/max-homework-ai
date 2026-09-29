@@ -43,6 +43,7 @@ async def test_parent_opens_link_and_consents(tmp_path: Path) -> None:
     await linking(kit).open_link(parent, None, "student_invites_parent", link_token(message))
     consent, buttons = kit.last(2)
     assert consent == texts.consent_text(texts.CHILD_ASKS_CONSENT.format(grade=7))
+    assert kit.last_format(2) == "markdown"
     tag = consent_tag(buttons)
     assert len(tag) == 12
     assert payloads(buttons) == ["ob:policy", f"ob:accept:{tag}", f"ob:decline:{tag}"]

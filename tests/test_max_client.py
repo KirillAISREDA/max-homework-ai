@@ -23,10 +23,14 @@ async def test_send_to_user_uses_user_id_and_send_message_chat_id() -> None:
         )
         await client.send_to_user(42, "привет", buttons=[[callback_button("Да", "ob:accept")]])
         await client.send_message(7, "в чат")
+        await client.send_message(7, "**жирный**", fmt="markdown")
 
-    assert [dict(r.url.params) for r in requests] == [{"user_id": "42"}, {"chat_id": "7"}]
+    assert [dict(r.url.params) for r in requests[:2]] == [{"user_id": "42"}, {"chat_id": "7"}]
     body = json.loads(requests[0].content)
     assert body["text"] == "привет"
+    # разметка — только когда её просят: в обычных ответах «*» — знак умножения
+    assert "format" not in body and "format" not in json.loads(requests[1].content)
+    assert json.loads(requests[2].content) == {"text": "**жирный**", "format": "markdown"}
     assert body["attachments"][0]["payload"]["buttons"][0][0]["payload"] == "ob:accept"
 
 
