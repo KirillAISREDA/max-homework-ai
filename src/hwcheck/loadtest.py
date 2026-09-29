@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 Handler = Callable[[MaxUpdate], Coroutine[Any, Any, None]]
 FIRST_CHAT_ID = 9_000_000_000  # вне диапазона настоящих чатов: записи теста видны в журнале
 DRAIN_TIMEOUT_S = 300.0  # сколько ждать ответов после конца шага, прежде чем считать их потерей
+# сколько ждать остановки отменённых обработок сверх срока диспетчера
+STOP_TIMEOUT_S = 60.0
 KINDS = ("photo", "button", "text")
 
 
@@ -238,7 +240,7 @@ class StepResult:
     completed: int
     failed: int  # бот ответил «попробуй ещё раз» или обработка упала
     unfinished: int  # не дождались ответа за DRAIN_TIMEOUT_S
-    wall_s: float  # от начала шага до последнего ответа
+    wall_s: float  # от начала шага до конца ожидания ответов
     throughput: float  # обработано сообщений в секунду
     latency: dict[str, Latency]
     queue_wait_p95: float | None
@@ -297,8 +299,19 @@ class _Run:
     """Один шаг: что отправили, что вернулось."""
 
     samples: list[Sample] = field(default_factory=list)
+    queued: dict[int, float] = field(default_factory=dict)  # чат → когда пришло сообщение
     sent: int = 0
     peak: int = 0
+    finished: float = 0.0  # конец ожидания ответов по часам журнала событий
+
+
+@dataclass(frozen=True)
+class _Load:
+    handler: Handler
+    load_max: LoadMax
+    users: VirtualUsers
+    limits: DispatchLimits
+    drain_timeout_s: float
 
 
 async def run_load(
@@ -312,37 +325,12 @@ async def run_load(
     drain_timeout_s: float = DRAIN_TIMEOUT_S,
 ) -> list[StepResult]:
     users = users or VirtualUsers(load_max)
-    queued: dict[int, float] = {}
-
-    def timed_into(run: _Run) -> Handler:
-        async def timed(update: MaxUpdate) -> None:
-            chat_id = update.effective_chat_id
-            assert chat_id is not None
-            started, failed = time.monotonic(), False
-            try:
-                await handler(update)
-            except Exception:
-                failed = True
-                logger.exception("load: update failed")
-            failed = load_max.take_failure(chat_id) or failed
-            now = time.monotonic()
-            run.samples.append(Sample(_kind(update), queued.pop(chat_id), started, now, not failed))
-            users.done(chat_id)
-
-        return timed
-
+    load = _Load(handler, load_max, users, limits or DispatchLimits(), drain_timeout_s)
     results = []
     for step in steps:
-        # у шага свой диспетчер: что бот не разобрал за срок, отменяется и считается «без
-        # ответа», а не доезжает в замеры следующего шага
         run = _Run()
-        dispatcher = UpdateDispatcher(timed_into(run), limits or DispatchLimits())
         began = time.time()
-        try:
-            await _send(step, dispatcher, users, queued, run)
-            await _drain(dispatcher, drain_timeout_s)
-        finally:
-            await dispatcher.abort()
+        stopped = await _run_step(step, load, run)
         calls = [e for e in read_events(events_path) if e.get("type") == "llm_call"]
         results.append(
             summarize_step(
@@ -350,23 +338,62 @@ async def run_load(
                 list(run.samples),
                 calls,
                 began,
-                time.time(),
+                run.finished,
                 sent=run.sent,
                 peak=run.peak,
                 families=users.count,
             )  # fmt: skip
         )
         logger.info("load: шаг %g/с — %d из %d", step.rps, len(run.samples), run.sent)
+        if not stopped:
+            # их вызовы модели попали бы в токены и стоимость следующего шага
+            logger.error("load: обработки шага %g/с не остановились — тест прерван", step.rps)
+            break
     return results
 
 
-async def _send(
-    step: Step,
-    dispatcher: UpdateDispatcher,
-    users: VirtualUsers,
-    queued: dict[int, float],
-    run: _Run,
-) -> None:
+async def _run_step(step: Step, load: _Load, run: _Run) -> bool:
+    """Шаг нагрузки. False — отменённые обработки не остановились за срок.
+
+    У шага свой диспетчер: что бот не разобрал за срок, отменяется и считается «без ответа», а
+    не доезжает в замеры следующего шага.
+    """
+    dispatcher = UpdateDispatcher(_timed(load, run), load.limits)
+    try:
+        await _send(step, dispatcher, load.users, run)
+        await _drain(dispatcher, load.drain_timeout_s)
+        # до отмены: время остановки обработок — не работа бота, в замеры не идёт
+        run.finished = time.time()
+    finally:
+        stopped = await _stop(dispatcher)
+        # семья, не дождавшаяся ответа, напишет снова — в следующем шаге
+        for chat_id in run.queued:
+            load.users.done(chat_id)
+        run.queued.clear()
+    return stopped
+
+
+def _timed(load: _Load, run: _Run) -> Handler:
+    async def timed(update: MaxUpdate) -> None:
+        chat_id = update.effective_chat_id
+        assert chat_id is not None
+        started, failed = time.monotonic(), False
+        try:
+            await load.handler(update)
+        except Exception:
+            failed = True
+            logger.exception("load: update failed")
+        failed = load.load_max.take_failure(chat_id) or failed
+        queued_at = run.queued.pop(chat_id, None)
+        if queued_at is None:
+            return  # шаг уже закрыт: ответ опоздал и в замеры не идёт
+        run.samples.append(Sample(_kind(update), queued_at, started, time.monotonic(), not failed))
+        load.users.done(chat_id)
+
+    return timed
+
+
+async def _send(step: Step, dispatcher: UpdateDispatcher, users: VirtualUsers, run: _Run) -> None:
     """Открытый поток: сообщения приходят по расписанию, не дожидаясь ответов на прежние."""
     start = time.monotonic()
     total = round(step.rps * step.seconds)
@@ -377,7 +404,7 @@ async def _send(
         update = users.next_update()
         chat_id = update.effective_chat_id
         assert chat_id is not None
-        queued[chat_id] = time.monotonic()
+        run.queued[chat_id] = time.monotonic()
         dispatcher.submit(update)
         run.sent += 1
         run.peak = max(run.peak, dispatcher.pending)
@@ -387,6 +414,15 @@ async def _drain(dispatcher: UpdateDispatcher, timeout_s: float) -> None:
     deadline = time.monotonic() + timeout_s
     while dispatcher.pending and time.monotonic() < deadline:
         await asyncio.sleep(0.01)
+
+
+async def _stop(dispatcher: UpdateDispatcher) -> bool:
+    """Отменяет недоделанное и ждёт, пока обработки действительно остановятся."""
+    await dispatcher.abort()
+    deadline = time.monotonic() + STOP_TIMEOUT_S
+    while dispatcher.chats and time.monotonic() < deadline:
+        await asyncio.sleep(0.05)
+    return dispatcher.chats == 0
 
 
 def peak_memory_mb() -> float | None:

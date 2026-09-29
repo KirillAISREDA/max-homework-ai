@@ -7,6 +7,8 @@ from typing import Any
 
 import pytest
 
+from hwcheck import loadtest
+from hwcheck.bot import dispatch
 from hwcheck.bot.handlers import RETRY
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.loadtest import (
@@ -164,26 +166,56 @@ async def test_run_load_sends_at_rate_and_waits_for_answers(tmp_path: Path) -> N
 async def test_unanswered_step_does_not_leak_into_the_next(tmp_path: Path) -> None:
     """Шаг, который бот не успел разобрать, отменяется: хвост не попадает в замеры следующего."""
     load_max = LoadMax(PHOTOS)
-    slow = True
+    users = VirtualUsers(load_max)
+    handled = 0
 
     async def bot(update: MaxUpdate) -> None:
+        nonlocal handled
+        handled += 1
         chat_id = update.effective_chat_id
         assert chat_id is not None
-        if slow:
+        if handled <= 5:  # весь первый шаг бот «думает» дольше срока ожидания
             await asyncio.sleep(30)
         await load_max.send_message(chat_id, "Проверил! 1 из 1 верно.")
 
     events = tmp_path / "events.jsonl"
     events.write_text("", encoding="utf-8")
     steps = [Step(rps=50, seconds=0.1), Step(rps=50, seconds=0.1)]
-    task = asyncio.ensure_future(
-        run_load(bot, load_max, steps, events_path=events, drain_timeout_s=0.2)
+    first, second = await run_load(
+        bot, load_max, steps, events_path=events, users=users, drain_timeout_s=0.2
     )
-    await asyncio.sleep(0.25)
-    slow = False  # второй шаг бот разбирает сразу
-    first, second = await task
     assert (first.sent, first.completed, first.unfinished) == (5, 0, 5)
     assert (second.sent, second.completed, second.unfinished) == (5, 5, 0)
+    # семьи, не дождавшиеся ответа, пишут снова, а не пропадают: новых во втором шаге нет
+    assert users.count == 5
+    # время отмены обработок в замер шага не входит
+    assert first.wall_s < 1.0
+
+
+async def test_run_stops_when_cancelled_work_keeps_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Обработка, пережившая отмену, звала бы модель во время следующего шага: его токены и
+    стоимость были бы чужими. Тест прерывается, готовые шаги остаются в отчёте."""
+    monkeypatch.setattr(dispatch, "CANCEL_GRACE_S", 0.05)
+    monkeypatch.setattr(loadtest, "STOP_TIMEOUT_S", 0.05)
+    load_max = LoadMax(PHOTOS)
+    survived = asyncio.Event()
+
+    async def stubborn(update: MaxUpdate) -> None:
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            await asyncio.sleep(0.3)
+            survived.set()
+
+    events = tmp_path / "events.jsonl"
+    events.write_text("", encoding="utf-8")
+    steps = [Step(rps=50, seconds=0.1), Step(rps=50, seconds=0.1)]
+    results = await run_load(stubborn, load_max, steps, events_path=events, drain_timeout_s=0.1)
+    assert [(r.sent, r.completed) for r in results] == [(5, 0)]
+    await survived.wait()  # опоздавший ответ в замеры не попал и тест не уронил
+    assert results[0].completed == 0
 
 
 def test_report_names_peak_memory() -> None:

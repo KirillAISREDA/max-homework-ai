@@ -318,7 +318,10 @@ timeout 100 s`.
 cd /opt/max-homework-ai
 mkdir -p var/loadtest/photos && chown -R 1000:1000 var/loadtest
 # страницы — только открытый датасет (`data/photo_*`), не работы детей
-docker run --rm --name homework-loadtest --memory 1g --cpus 1 \n  --env-file .env -v "$PWD/var/loadtest:/app/var/loadtest" max-homework-ai-bot \n  python -m hwcheck.loadtest --photos var/loadtest/photos \n  --steps "1:60,2:60,5:60,10:60" --out var/loadtest/report.md
+docker run --rm --name homework-loadtest --memory 1g --cpus 1 \
+  --env-file .env -v "$PWD/var/loadtest:/app/var/loadtest" max-homework-ai-bot \
+  python -m hwcheck.loadtest --photos var/loadtest/photos \
+  --steps "1:60,2:60,5:60,10:60" --out var/loadtest/report.md
 ```
 
 | Параметр | По умолчанию | Что делает |
