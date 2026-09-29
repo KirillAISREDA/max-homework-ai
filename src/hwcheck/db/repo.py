@@ -45,6 +45,9 @@ class StudentProfile:
     grade_year: int
     subject: str | None
     has_consent: bool
+    # версия политики действующего согласия; None — согласия нет. От неё зависит, можно ли
+    # передавать фото сторонней модели (bot/onboarding/policy.py)
+    consent_policy: str | None = None
 
     @property
     def sent_by_parent(self) -> bool:
@@ -200,7 +203,9 @@ class ProfileRepository(Protocol):
 _PROFILE = (
     "SELECT p.id, p.user_id, p.parent_user_id, p.grade, p.grade_year, p.subject, "
     "EXISTS (SELECT 1 FROM consents c WHERE c.student_profile_id = p.id "
-    "AND c.revoked_at IS NULL) AS has_consent FROM student_profiles p"
+    "AND c.revoked_at IS NULL) AS has_consent, "
+    "(SELECT c.policy_version FROM consents c WHERE c.student_profile_id = p.id "
+    "AND c.revoked_at IS NULL LIMIT 1) AS consent_policy FROM student_profiles p"
 )
 # класс ссылки ученика — из его профиля, ссылки родителя — из самой ссылки
 _INVITE = (
@@ -240,6 +245,7 @@ def _profile(row: asyncpg.Record) -> StudentProfile:
         grade_year=row["grade_year"],
         subject=row["subject"],
         has_consent=row["has_consent"],
+        consent_policy=row["consent_policy"],
     )
 
 

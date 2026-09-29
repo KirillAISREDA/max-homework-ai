@@ -8,7 +8,9 @@ import asyncio
 import contextlib
 import logging
 import time
-from dataclasses import dataclass
+from collections.abc import Iterator
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from hwcheck.bot.check import (
@@ -34,6 +36,7 @@ from hwcheck.bot.fsm import ChatState, CheckedTask, Clarification, StateStore
 from hwcheck.bot.invites import parse_source
 from hwcheck.bot.max_api import MaxClient
 from hwcheck.bot.models import MaxUpdate
+from hwcheck.bot.onboarding.policy import allows_foreign_models
 from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
 from hwcheck.bot.pages import (
     MAX_PHOTOS,
@@ -99,6 +102,23 @@ NOTHING_TO_TUTOR = "Здесь нечего разбирать — ошибка 
 REVIEW_HINT = "Выбери задание для разбора 👇 Или пришли фото новой домашки 📸"
 REVIEW_DONE = "Эту домашку я уже проверил 👍 Пришли фото следующей — проверю 📸"
 SOLVER_CACHE_DIR = Path(".cache/solver")
+
+
+# модель чтения фото текущей проверки: зависит от согласия родителя. Контекст, а не поле
+# бота: проверки разных чатов идут параллельно, у каждой своя
+_vision_model: ContextVar[str | None] = ContextVar("vision_model", default=None)
+
+
+@contextlib.contextmanager
+def _vision_for(settings: Settings, policy_version: str | None) -> Iterator[None]:
+    """Сторонней модели фото уходит только с согласием по политике, которая об этом говорит."""
+    foreign = allows_foreign_models(policy_version)
+    model = settings.vision_model if foreign else settings.vision_model_domestic
+    token = _vision_model.set(model)
+    try:
+        yield
+    finally:
+        _vision_model.reset(token)
 
 
 def models_for(settings: Settings) -> CheckModels:
@@ -200,7 +220,9 @@ class Bot:
 
     @property
     def _models(self) -> CheckModels:
-        return models_for(self._settings)
+        models = models_for(self._settings)
+        vision = _vision_model.get()
+        return models if vision is None else replace(models, vision=vision)
 
     async def handle_update(self, update: MaxUpdate) -> None:
         # один trace_id на все вызовы компонентов по апдейту (антифрод, Прил. 2 п. 5);
@@ -237,7 +259,10 @@ class Bot:
             route = await self._onboarding.route(update)
             if isinstance(route, CheckPhotos):
                 # предмет знает только онбординг (профиль ученика) — без него всё идёт в математику
-                await self._on_photo(chat_id, user_id, route.urls, route.subject, route.student_id)
+                with _vision_for(self._settings, route.policy_version):
+                    await self._on_photo(
+                        chat_id, user_id, route.urls, route.subject, route.student_id
+                    )
                 return
             if route == "handled":
                 return
@@ -251,7 +276,9 @@ class Bot:
             await self._max.send_message(chat_id, WELCOME)
         elif update.update_type == "message_created" and update.message is not None:
             if update.message.image_urls:
-                await self._on_photo(chat_id, user_id, update.message.image_urls)
+                # без онбординга согласия нет: фото читает GigaChat
+                with _vision_for(self._settings, None):
+                    await self._on_photo(chat_id, user_id, update.message.image_urls)
             elif update.message.body and update.message.body.text:
                 await self._on_text(chat_id, user_id, update.message.body.text)
         elif update.update_type == "message_callback" and update.callback is not None:

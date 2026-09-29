@@ -51,13 +51,21 @@ class CheckPhotos:
     urls: list[str]
     subject: str = "math"
     student_id: int | None = None  # `student_profiles.id`; None — ребёнок не определён
+    # версия политики согласия за этого ребёнка: по ней бот решает, можно ли передать фото
+    # сторонней модели (`policy.allows_foreign_models`)
+    policy_version: str | None = None
 
 
 def _photos_of(urls: list[str], child: StudentProfile | None) -> CheckPhotos:
     """Математика — предмет по умолчанию: профиль без предмета до проверки не доходит."""
     if child is None:
         return CheckPhotos(urls)
-    return CheckPhotos(urls, subject=child.subject or "math", student_id=child.id)
+    return CheckPhotos(
+        urls,
+        subject=child.subject or "math",
+        student_id=child.id,
+        policy_version=child.consent_policy,
+    )
 
 
 Route = Literal["handled", "pass"] | CheckPhotos

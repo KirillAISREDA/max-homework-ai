@@ -1,6 +1,7 @@
 """Сценарии онбординга целиком через маршрутизатор (спецификация §4, §12, §15)."""
 
 from pathlib import Path
+from unittest.mock import ANY
 
 from hwcheck.bot import notifier
 from hwcheck.bot.fsm import ChatState
@@ -59,7 +60,9 @@ async def test_student_journey_until_parent_consents(tmp_path: Path) -> None:
     assert account is not None
     profile = await kit.repo.own_profile(account.id)
     assert profile is not None
-    photos = CheckPhotos(["https://files/2.jpg"], subject="math", student_id=profile.id)
+    photos = CheckPhotos(
+        ["https://files/2.jpg"], subject="math", student_id=profile.id, policy_version=ANY
+    )
     assert await ob.route(photo(1, "https://files/2.jpg")) == photos
     assert await ob.route(text(1, "4F7K-92QD")) == "pass"  # у ученика с родителем — просто текст
 
@@ -137,7 +140,9 @@ async def test_parent_with_two_young_children(tmp_path: Path) -> None:
         await ob.route(press(2, payload))
     assert kit.last(2)[0] == texts.INSTRUCTION_PARENT
     [second_grade] = await _young_children_of(kit, 2)
-    assert await ob.route(photo(2, "u1")) == CheckPhotos(["u1"], student_id=second_grade)
+    assert await ob.route(photo(2, "u1")) == CheckPhotos(
+        ["u1"], student_id=second_grade, policy_version=ANY
+    )
 
     for payload in ("ob:addchild", "ob:pgrade:4", "ob:subject:math", "ob:consent"):
         await ob.route(press(2, payload))
@@ -145,9 +150,13 @@ async def test_parent_with_two_young_children(tmp_path: Path) -> None:
     question, buttons = kit.last(2)
     assert question == texts.WHOSE_HOMEWORK
     _, fourth_grade = await _young_children_of(kit, 2)
-    chosen = CheckPhotos(["u2"], student_id=fourth_grade)  # учёт — на выбранного ребёнка
+    chosen = CheckPhotos(
+        ["u2"], student_id=fourth_grade, policy_version=ANY
+    )  # учёт — на выбранного ребёнка
     assert await ob.route(press(2, payloads(buttons)[1])) == chosen
-    assert await ob.route(photo(2, "u3")) == CheckPhotos(["u3"], student_id=fourth_grade)
+    assert await ob.route(photo(2, "u3")) == CheckPhotos(
+        ["u3"], student_id=fourth_grade, policy_version=ANY
+    )
     # в журнал — только действие: id профиля и метки ссылок связали бы хэш родителя с детьми (F7)
     pressed = [e["payload"] for e in kit.events("button_pressed")]
     assert pressed[-1] == "ob:whose"
@@ -177,7 +186,9 @@ async def test_parent_keeps_checking_consented_child_while_adding_another(
     blocked_before = len(kit.events("photo_blocked_no_consent"))
 
     consented, _unfinished = await _young_children_of(kit, 2)
-    assert await ob.route(photo(2, "u")) == CheckPhotos(["u"], student_id=consented)
+    assert await ob.route(photo(2, "u")) == CheckPhotos(
+        ["u"], student_id=consented, policy_version=ANY
+    )
     assert len(kit.events("photo_blocked_no_consent")) == blocked_before
 
     await kit.ctx.dialogs.set(chat(2), ChatState(phase="tutoring"))
@@ -204,7 +215,7 @@ async def test_whose_homework_while_adding_third_child(tmp_path: Path) -> None:
     question, buttons = kit.last(2)
     assert question == texts.WHOSE_HOMEWORK
     first = (await _young_children_of(kit, 2))[0]
-    photos = CheckPhotos(["u1", "u2"], student_id=first)
+    photos = CheckPhotos(["u1", "u2"], student_id=first, policy_version=ANY)
     assert await ob.route(press(2, payloads(buttons)[0])) == photos
 
 
@@ -224,14 +235,14 @@ async def test_photos_carry_subject_of_the_profile(tmp_path: Path) -> None:
     ob = Onboarding(kit.ctx)
     profile = await ready_student(kit, user_id=1)
     await kit.repo.set_subject(profile.id, "russian")
-    own = CheckPhotos(["u1"], subject="russian", student_id=profile.id)
+    own = CheckPhotos(["u1"], subject="russian", student_id=profile.id, policy_version=ANY)
     assert await ob.route(photo(1, "u1")) == own
 
     for payload in ("ob:role:parent", "ob:pgrade:2", "ob:subject:math", "ob:consent"):
         await ob.route(press(2, payload))
     [child] = await _young_children_of(kit, 2)
     await kit.repo.set_subject(child, "russian")
-    young = CheckPhotos(["u2"], subject="russian", student_id=child)
+    young = CheckPhotos(["u2"], subject="russian", student_id=child, policy_version=ANY)
     assert await ob.route(photo(2, "u2")) == young
 
 
@@ -248,11 +259,11 @@ async def test_whose_homework_answer_carries_that_child_subject(tmp_path: Path) 
 
     assert await ob.route(photo(2, "u")) == "handled"
     _question, buttons = kit.last(2)
-    chosen = CheckPhotos(["u"], subject="russian", student_id=second)
+    chosen = CheckPhotos(["u"], subject="russian", student_id=second, policy_version=ANY)
     assert await ob.route(press(2, f"ob:whose:{second}")) == chosen
     assert payloads(buttons)[1] == f"ob:whose:{second}"
     # выбор помнится: следующее фото уходит с предметом выбранного ребёнка, без вопроса
-    remembered = CheckPhotos(["u2"], subject="russian", student_id=second)
+    remembered = CheckPhotos(["u2"], subject="russian", student_id=second, policy_version=ANY)
     assert await ob.route(photo(2, "u2")) == remembered
 
 
@@ -320,7 +331,9 @@ async def test_parent_first_then_child_joins_by_link(tmp_path: Path) -> None:
     assert child is not None
     joined = await kit.repo.own_profile(child.id)
     assert joined is not None
-    assert await ob.route(photo(3, "u")) == CheckPhotos(["u"], subject="math", student_id=joined.id)
+    assert await ob.route(photo(3, "u")) == CheckPhotos(
+        ["u"], subject="math", student_id=joined.id, policy_version=ANY
+    )
 
     await ob.route(text(2, "как там ребёнок?"))
     assert "• 7 класс — свой MAX" in kit.last(2)[0]
