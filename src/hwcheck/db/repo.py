@@ -588,7 +588,8 @@ class PgProfileRepository:
     async def code_attempt(
         self, user_hash: str, now: datetime, *, limit: int, window: timedelta
     ) -> bool:
-        # апдейты обрабатываются последовательно (runner.py) — гонки попыток одного пользователя нет
+        # счёт и запись — без блокировки: попытки одного пользователя не пересекаются. Код вводят
+        # текстом в личном диалоге, а апдейты одного чата идут строго по очереди (bot/dispatch.py)
         async with self._pool.acquire() as conn, conn.transaction():
             await conn.execute(
                 "DELETE FROM login_attempts WHERE user_hash = $1 AND attempted_at <= $2",

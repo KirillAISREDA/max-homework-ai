@@ -1,5 +1,7 @@
+import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 from conftest import FakeLLMClient
 from hwcheck.pipeline.solver import FileCache, solve_task
@@ -54,3 +56,27 @@ async def test_invalid_ref_not_cached(tmp_path: Path) -> None:
     solved, llm_result = await solve_task(FakeLLMClient([GOOD]), "задание", model="m", cache=cache)
     assert solved.ref_ok is True
     assert llm_result is not None
+
+
+async def test_same_task_solved_by_two_chats_at_once(tmp_path: Path) -> None:
+    """Два чата с одним заданием одновременно (класс делает одну домашку): оба промахиваются
+    мимо кэша и оба получают эталон; запись в кэш целая — она идёт без ожиданий внутри, во
+    временный файл с заменой."""
+
+    class SlowClient(FakeLLMClient):
+        async def chat(self, messages: Any, *, model: str, temperature: float = 0.1) -> Any:
+            await asyncio.sleep(0)  # второй чат успевает проверить кэш до первой записи
+            return await super().chat(messages, model=model, temperature=temperature)
+
+    cache = FileCache(tmp_path)
+    client = SlowClient([GOOD, GOOD])
+
+    results = await asyncio.gather(
+        solve_task(client, "задание", model="m", cache=cache),
+        solve_task(client, "задание", model="m", cache=cache),
+    )
+
+    assert [(solved.ref_ok, solved.from_cache) for solved, _ in results] == [(True, False)] * 2
+    assert [path.suffix for path in tmp_path.iterdir()] == [".json"]  # временных файлов нет
+    third, llm_result = await solve_task(FakeLLMClient([]), "задание", model="m", cache=cache)
+    assert third.from_cache is True and llm_result is None
