@@ -22,7 +22,8 @@ def allows_foreign_models(version: str | None) -> bool:
 
     Нет согласия или версия записана непонятно — не покрывает: фото читает GigaChat.
     """
-    match = re.fullmatch(r"v(\d+)", version or "", flags=re.ASCII)
+    # номер версии короткий: строка из тысяч цифр — не версия, и `int` на ней падает
+    match = re.fullmatch(r"v(\d{1,4})", version or "", flags=re.ASCII)
     return match is not None and int(match.group(1)) >= FOREIGN_MODELS_SINCE
 
 
