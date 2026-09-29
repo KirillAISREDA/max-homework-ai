@@ -57,5 +57,5 @@ def school_year(day: date) -> int:
 
 
 def current_grade(grade: int, grade_year: int, today: date) -> int:
-    """Класс сегодня: указанный класс плюс прошедшие учебные годы; больше 9 — выпускник Домашки."""
+    """Класс сегодня: указанный класс плюс прошедшие учебные годы; больше 9 — выпускник."""
     return grade + (school_year(today) - grade_year)

@@ -1,6 +1,7 @@
 """Тексты и клавиатуры онбординга, политика сообщениями MAX (спецификация §4, §10.3)."""
 
 import re
+from pathlib import Path
 
 import pytest
 
@@ -49,13 +50,13 @@ def all_texts() -> list[str]:
 
 
 def test_hello_is_short_fork_that_says_what_domashka_is() -> None:
-    assert "Домашка" in texts.HELLO and "фото" in texts.HELLO and "ошибк" in texts.HELLO
+    assert "ДомашкаИИ" in texts.HELLO and "фото" in texts.HELLO and "ошибк" in texts.HELLO
     assert texts.HELLO.endswith("Кто ты?") and len(texts.HELLO) <= 120
 
 
 def test_student_intro_says_where_he_is_and_what_bot_does() -> None:
     intro = texts.STUDENT_INTRO
-    assert intro.startswith("Ты в Домашке")
+    assert intro.startswith("Ты в ДомашкаИИ")
     for meaning in ("тетрадь", "за минуту", "где ошибка", "не подсказываю", "самому"):
         assert meaning in intro, meaning
     assert "пара вопросов" in intro and "разрешение родителя" in intro  # что дальше
@@ -66,7 +67,7 @@ def test_student_intro_says_where_he_is_and_what_bot_does() -> None:
 
 def test_parent_intro_says_where_he_is_and_what_bot_does() -> None:
     intro = texts.PARENT_INTRO
-    assert intro.startswith("Вы в Домашке")
+    assert intro.startswith("Вы в ДомашкаИИ")
     for meaning in (
         "Вам не нужно каждый вечер проверять домашку и вспоминать школьную программу",
         "за минуту находит ошибки",
@@ -101,7 +102,7 @@ def test_linked_sides_learn_what_domashka_is() -> None:
     child = texts.CHILD_LINKED
     assert child.split("\n\n") == [
         "👋 Привет!",
-        "Родитель подключил тебя к **Домашке** 🪄",
+        "Родитель подключил тебя к **ДомашкаИИ** 🪄",
         "📷 Это бот, который проверяет домашку по фото.",
         "Фотографируешь тетрадь по математике — и за минуту узнаёшь:\n"
         "✅ что решено верно\n"
@@ -339,3 +340,25 @@ def test_summaries_are_promised_only_to_parent_of_older_child() -> None:
     assert forward.endswith("Перешлите ребёнку сообщение ниже 👇")  # ссылка — следующим сообщением
     assert texts.forward_to_child(notify=False) == texts.FORWARD_TO_CHILD
     assert promise not in texts.INSTRUCTION_PARENT
+
+
+def test_product_is_called_by_its_full_name_everywhere() -> None:
+    """Продукт называется «ДомашкаИИ» (решение Кирилла 29.09): не «Домашка» и не «Домашке».
+    Слово «домашка» со строчной буквы — домашняя работа, его правило не касается."""
+    short_name = re.compile(r"Домашк(?!аИИ)")
+    for value in [*all_texts(), *policy_messages()]:
+        assert not short_name.search(value), value
+    # тексты есть и вне texts.py (сводка, итоги родителю, промпты моделей, карточки правил):
+    # смотрим исходники. Предложение, которое начинается словом «Домашка» о домашней работе,
+    # тест тоже остановит — его проще перестроить, чем учить тест отличать одно от другого
+    root = Path(__file__).resolve().parents[1]
+    sources = [
+        *(root / "src").rglob("*.py"),
+        *(root / "prompts").rglob("*.md"),
+        *(root / "assets" / "kb").rglob("*.json"),
+    ]
+    assert len(sources) > 50 and any(path.suffix == ".json" for path in sources)
+    for path in sources:
+        found = short_name.search(path.read_text(encoding="utf-8"))
+        assert found is None, f"{path.relative_to(root)}: {found.group() if found else ''}"
+    assert "ДомашкаИИ" in texts.HELLO and "**ДомашкаИИ**" in texts.CONSENT_SUMMARY
