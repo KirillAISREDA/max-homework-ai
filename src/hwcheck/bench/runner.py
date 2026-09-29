@@ -25,7 +25,14 @@ from hwcheck.bench.metrics import (
     score_lines,
     tally_verdicts,
 )
-from hwcheck.bot.check import CheckModels, RecognizedPhoto, check_task, recognize_photo, split_pages
+from hwcheck.bot.check import (
+    DEFAULT_VISION_PROMPT,
+    CheckModels,
+    RecognizedPhoto,
+    check_task,
+    recognize_photo,
+    split_pages,
+)
 from hwcheck.bot.pages import attach_conditions
 
 
@@ -34,11 +41,15 @@ class BenchConfig(BaseModel):
     vision_model: str
     structure_model: str
     solver_model: str
+    vision_prompt: str = DEFAULT_VISION_PROMPT  # prompts/vision/<версия>.md под модель чтения
 
     @property
     def models(self) -> CheckModels:
         return CheckModels(
-            vision=self.vision_model, structure=self.structure_model, solver=self.solver_model
+            vision=self.vision_model,
+            structure=self.structure_model,
+            solver=self.solver_model,
+            vision_prompt=self.vision_prompt,
         )
 
 

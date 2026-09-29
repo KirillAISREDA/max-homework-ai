@@ -21,13 +21,16 @@ import time
 from collections.abc import Callable, Coroutine, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hwcheck.bot.dispatch import DispatchLimits, UpdateDispatcher
 from hwcheck.bot.handlers import RETRY
 from hwcheck.bot.max_api import Buttons
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.events import read_events
+
+if TYPE_CHECKING:
+    from hwcheck.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -477,6 +480,20 @@ def render_report(
     return "\n".join(lines)
 
 
+def as_consented(settings: Settings) -> Settings:
+    """Настройки, с которыми страницы теста читает модель прода её промптом.
+
+    Страницы теста — открытый датасет, не работы детей. Боту без онбординга согласие
+    неизвестно, и он взял бы отечественную модель — подменяем её в копии настроек.
+    """
+    return settings.model_copy(
+        update={
+            "vision_model_domestic": settings.vision_model,
+            "vision_prompt_domestic": settings.vision_prompt,
+        }
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m hwcheck.loadtest",
@@ -506,10 +523,7 @@ async def _run_cli(args: argparse.Namespace) -> str:
     from hwcheck.llm.router import make_llm
     from hwcheck.subjects.registry import SubjectDeps
 
-    settings = load_settings()
-    # страницы теста — открытый датасет, не работы детей: их читает модель прода. Боту без
-    # онбординга согласие неизвестно, и он взял бы отечественную модель — подменяем её
-    settings = settings.model_copy(update={"vision_model_domestic": settings.vision_model})
+    settings = as_consented(load_settings())
     files = sorted(
         p for p in args.photos.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png")
     )
@@ -540,10 +554,10 @@ async def _run_cli(args: argparse.Namespace) -> str:
             drain_timeout_s=args.drain_timeout,
         )
     note = (
-        f"чтение фото {settings.vision_model}, разбор {settings.tutor_model}, эталон "
-        f"{settings.solver_model}; одновременных обработок {concurrency}, "
-        f"вызовов шлюза {settings.llm_gateway_concurrency}; страниц {len(files)}, кэш эталонов "
-        f"выключен; "
+        f"чтение фото {settings.vision_model} (промпт {settings.vision_prompt}), "
+        f"разбор {settings.tutor_model}, эталон {settings.solver_model}; "
+        f"одновременных обработок {concurrency}, вызовов шлюза "
+        f"{settings.llm_gateway_concurrency}; страниц {len(files)}, кэш эталонов выключен; "
         f"ожидание ответов после шага {args.drain_timeout:g} с"
     )
     return render_report(results, settings_note=note, peak_memory_mb=peak_memory_mb())

@@ -1,5 +1,9 @@
-from pydantic import Field
+import re
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from hwcheck.prompts import PROMPTS_DIR
 
 
 class Settings(BaseSettings):
@@ -77,6 +81,21 @@ class Settings(BaseSettings):
     # чтение фото, когда согласие родителя не покрывает передачу сторонней модели (политика до
     # v2) или согласия нет (бот без онбординга): фото остаётся у GigaChat
     vision_model_domestic: str = "GigaChat-2-Max"
+    # промпт транскрипции под модель чтения (prompts/vision/<версия>.md): v3 — под GigaChat,
+    # сторонним моделям шлюза — свой, например VISION_PROMPT=v4-gemini
+    vision_prompt: str = "v3"
+    vision_prompt_domestic: str = "v3"
+
+    @field_validator("vision_prompt", "vision_prompt_domestic")
+    @classmethod
+    def _vision_prompt_exists(cls, version: str) -> str:
+        """Опечатка в версии всплыла бы на первом фото ребёнка — останавливаем бота при старте."""
+        # версия — имя файла: только строчные буквы, цифры и дефис, без путей и расширений
+        known = re.fullmatch(r"[a-z0-9][a-z0-9-]{0,40}", version, flags=re.ASCII) is not None
+        if not known or not (PROMPTS_DIR / "vision" / f"{version}.md").is_file():
+            raise ValueError(f"нет промпта prompts/vision/{version}.md")
+        return version
+
     solver_model: str = "GigaChat-2-Max"
     tutor_model: str = "GigaChat-2-Pro"
     lite_model: str = "GigaChat-2"

@@ -109,7 +109,7 @@ def _vision_for(
     """Сторонней модели фото уходит только с согласием по политике, которая об этом говорит;
     иначе проверке ничего не назначено, и фото читает модель из `models_for`."""
     foreign = allows_foreign_models(policy_version)
-    return vision_override(settings.vision_model if foreign else None)
+    return vision_override(settings.vision_model if foreign else None, settings.vision_prompt)
 
 
 def models_for(settings: Settings) -> CheckModels:
@@ -122,6 +122,7 @@ def models_for(settings: Settings) -> CheckModels:
         vision=settings.vision_model_domestic,
         structure=settings.tutor_model,
         solver=settings.solver_model,
+        vision_prompt=settings.vision_prompt_domestic,
     )
 
 

@@ -37,6 +37,9 @@ logger = logging.getLogger(__name__)
 RefStatus = Literal["no_condition", "solver_failed", "ref_not_verified", "ok"]
 
 
+DEFAULT_VISION_PROMPT = "v3"  # писался под GigaChat; сторонним моделям — свой `v4-<модель>`
+
+
 @dataclass(frozen=True)
 class CheckModels:
     # транскрипция фото, когда проверке не назначена другая (`vision_override`). В боте это
@@ -44,17 +47,21 @@ class CheckModels:
     vision: str
     structure: str  # разбор транскрипции на задания
     solver: str  # эталонное решение
+    # версия промпта транскрипции (`prompts/vision/<версия>.md`) для модели `vision`: промпт
+    # следует за моделью, а не за проверкой (стенд 28.09: v3 недобирает на сторонних моделях)
+    vision_prompt: str = DEFAULT_VISION_PROMPT
 
 
-# модель чтения фото, назначенная текущей проверке (в боте — согласием родителя). Контекст, а
-# не поле: проверки разных чатов идут параллельно, у каждой своя
-_vision_override: ContextVar[str | None] = ContextVar("vision_override", default=None)
+# модель чтения фото и её промпт, назначенные текущей проверке (в боте — согласием родителя).
+# Контекст, а не поле: проверки разных чатов идут параллельно, у каждой своя
+_vision_override: ContextVar[tuple[str, str] | None] = ContextVar("vision_override", default=None)
 
 
 @contextlib.contextmanager
-def vision_override(model: str | None) -> Iterator[None]:
-    """Фото внутри блока читает `model`; None — модель из `CheckModels.vision`."""
-    token = _vision_override.set(model)
+def vision_override(model: str | None, prompt: str = DEFAULT_VISION_PROMPT) -> Iterator[None]:
+    """Фото внутри блока читает `model` промптом `prompt`; None — модель и промпт из
+    `CheckModels`."""
+    token = _vision_override.set((model, prompt) if model else None)
     try:
         yield
     finally:
@@ -64,7 +71,14 @@ def vision_override(model: str | None) -> Iterator[None]:
 def vision_of(models: CheckModels) -> str:
     """Модель чтения фото этой проверки. Каждый, кто отправляет фото модели, берёт её отсюда:
     чтение `models.vision` напрямую обходит согласие родителя (ревью 29.09)."""
-    return _vision_override.get() or models.vision
+    override = _vision_override.get()
+    return override[0] if override else models.vision
+
+
+def vision_prompt_of(models: CheckModels) -> str:
+    """Версия промпта транскрипции для модели из `vision_of`: та же, что назначена проверке."""
+    override = _vision_override.get()
+    return override[1] if override else models.vision_prompt
 
 
 @dataclass
@@ -96,7 +110,11 @@ async def recognize_photo(
     llm: VisionAndChatClient, image: bytes, models: CheckModels
 ) -> RecognizedPhoto:
     rec = await recognize_page_two_stage(
-        llm, image, vision_model=vision_of(models), structure_model=models.structure
+        llm,
+        image,
+        vision_model=vision_of(models),
+        structure_model=models.structure,
+        transcribe_version=vision_prompt_of(models),
     )
     page = mark_written_numbers(_split_task_columns(rec.page), rec.raw) if rec.page else None
     return RecognizedPhoto(page=page, role=page_role(page), rec=rec)
