@@ -19,6 +19,7 @@ from hwcheck.db.kb import PgKnowledgeBase
 from hwcheck.db.pool import create_pool
 from hwcheck.eval.offline import run_offline_eval
 from hwcheck.events import EventLog, read_events, summarize_events
+from hwcheck.families import families_report, render_families_report
 from hwcheck.kb_cli import load_rules_into, load_words, review
 from hwcheck.llm import ChatMessage
 from hwcheck.llm.base import LLMClient
@@ -82,20 +83,24 @@ def main(argv: list[str] | None = None) -> None:
 
     rep = sub.add_parser(
         "report",
-        help="Сводка вердиктов по журналу событий; `report cost` — стоимость вызовов модели",
+        help="Сводка вердиктов по журналу событий; `report cost` — стоимость вызовов модели; "
+        "`report families` — семьи, прошедшие сценарий",
     )
     # не подкоманда argparse: `hwcheck report var/events.jsonl` из runbook обязан работать как
     # раньше, а подкоманда забрала бы путь себе
     rep.add_argument(
         "target",
         nargs="*",
-        metavar="[cost] [events]",
-        help="путь к журналу (по умолчанию var/events.jsonl); cost — отчёт о стоимости",
+        metavar="[cost | families] [events]",
+        help="путь к журналу (по умолчанию var/events.jsonl); cost — отчёт о стоимости; "
+        "families — семьи, приславшие домашку и дошедшие до верного ответа",
     )
-    rep.add_argument("--env", default="prod", help="cost: среда prod | test | dev | all")
-    rep.add_argument("--since", default=None, help="cost: с даты YYYY-MM-DD (по Москве)")
+    rep.add_argument("--env", default="prod", help="cost, families: среда prod | test | dev | all")
+    rep.add_argument("--since", default=None, help="cost, families: с даты YYYY-MM-DD (по Москве)")
     rep.add_argument("--pricing", type=Path, default=DEFAULT_PRICING, help="cost: файл тарифов")
-    rep.add_argument("--json", action="store_true", help="cost: выгрузка JSON вместо таблицы")
+    rep.add_argument(
+        "--json", action="store_true", help="cost, families: выгрузка JSON вместо таблицы"
+    )
 
     add_bench_parser(sub)
 
@@ -142,14 +147,17 @@ class ReportArgumentsError(Exception):
     """Отчёт не построить из-за аргументов: сообщение показывает argparse, без трассировки."""
 
 
+REPORTS = ("cost", "families")
+
+
 def _report(args: argparse.Namespace) -> str:
     target: list[str] = args.target
-    cost = bool(target) and target[0] == "cost"
-    paths = target[1:] if cost else target
+    kind = target[0] if target and target[0] in REPORTS else None
+    paths = target[1:] if kind else target
     if len(paths) > 1:
-        raise ReportArgumentsError("журнал событий один: report [cost] [events]")
+        raise ReportArgumentsError("журнал событий один: report [cost | families] [events]")
     events = Path(paths[0]) if paths else Path("var/events.jsonl")
-    if not cost:
+    if kind is None:
         return json.dumps(summarize_events(read_events(events)), ensure_ascii=False, indent=2)
     try:
         since = date.fromisoformat(args.since) if args.since else None
@@ -157,6 +165,11 @@ def _report(args: argparse.Namespace) -> str:
         raise ReportArgumentsError(
             f"--since: ожидается дата YYYY-MM-DD, получено {args.since!r}"
         ) from exc
+    env = None if args.env == "all" else args.env
+    if kind == "families":
+        _require_journal(events)
+        families = families_report(read_events(events), env=env, since=since)
+        return families.model_dump_json(indent=2) if args.json else render_families_report(families)
     try:
         pricing = load_pricing(args.pricing)
     except (OSError, ValueError) as exc:
@@ -164,15 +177,17 @@ def _report(args: argparse.Namespace) -> str:
         raise ReportArgumentsError(
             f"--pricing: файл тарифов не прочитан ({type(exc).__name__}): {args.pricing}"
         ) from exc
-    if not events.is_file():
-        # нет файла и «вызовов модели не было» — разные ответы: пустой отчёт скрыл бы опечатку
-        raise ReportArgumentsError(f"журнал событий не найден: {events}")
-    report = cost_report(
-        read_events(events), pricing, env=None if args.env == "all" else args.env, since=since
-    )
+    _require_journal(events)
+    report = cost_report(read_events(events), pricing, env=env, since=since)
     if args.json:
         return report.model_dump_json(indent=2)
     return render_cost_report(report)
+
+
+def _require_journal(events: Path) -> None:
+    if not events.is_file():
+        # нет файла и «событий не было» — разные ответы: пустой отчёт скрыл бы опечатку в пути
+        raise ReportArgumentsError(f"журнал событий не найден: {events}")
 
 
 LOG_MAX_BYTES = 5_000_000

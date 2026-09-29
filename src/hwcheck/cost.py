@@ -171,9 +171,9 @@ def cost_report(
 ) -> CostReport:
     """Отчёт по среде `env` (None — все среды) с даты `since` (день по московскому времени)."""
     rows = list(rows)
-    selected, skipped = _select(rows, env, since)
+    selected, skipped = select_rows(rows, env, since)
     # источник пользователя — из всей истории среды: он мог прийти до начала периода
-    history = selected if since is None else _select(rows, env, None)[0]
+    history = selected if since is None else select_rows(rows, env, None)[0]
     calls = [row for row in selected if row.get("type") == LLM_EVENT]
     start = _data_start(selected, calls)
     # без llm_call оценивать нечего, но обращения по событиям компонентов посчитать можно
@@ -189,8 +189,8 @@ def cost_report(
         pricing_tariff=pricing.tariff,
         pricing_source=pricing.source,
         pricing_checked_at=pricing.checked_at,
-        data_from=_moscow(min(row["ts"] for row in calls)) if calls else None,
-        data_to=_moscow(max(row["ts"] for row in calls)) if calls else None,
+        data_from=moscow_time(min(row["ts"] for row in calls)) if calls else None,
+        data_to=moscow_time(max(row["ts"] for row in calls)) if calls else None,
         checks_before_data=_count_checks(before if calls else selected),
         skipped_rows=skipped,
         malformed_calls=sum(1 for c in priced if c.malformed),
@@ -255,7 +255,7 @@ def _unpriced(calls: Iterable["_PricedCall"]) -> int:
     return sum(1 for call in calls if call.cost is None)
 
 
-def _select(rows: Iterable[Row], env: str | None, since: date | None) -> tuple[list[Row], int]:
+def select_rows(rows: Iterable[Row], env: str | None, since: date | None) -> tuple[list[Row], int]:
     """Строки среды и периода и число строк без времени (у них не узнать ни дня, ни порядка)."""
     since_ts = (
         datetime(since.year, since.month, since.day, tzinfo=MSK).timestamp() if since else None
@@ -445,7 +445,7 @@ def _repeats_llm_call(row: Row) -> bool:
     return row["component"] in STEP_SUMMARY_COMPONENTS and row.get("from_cache") is not True
 
 
-def _moscow(ts: float) -> str:
+def moscow_time(ts: float) -> str:
     return datetime.fromtimestamp(ts, MSK).isoformat(timespec="seconds")
 
 
