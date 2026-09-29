@@ -5,6 +5,7 @@
 нашла задания. Лишние vision-вызовы тратятся только на проблемных фото.
 """
 
+import asyncio
 import re
 from dataclasses import dataclass
 from typing import Protocol
@@ -48,14 +49,19 @@ async def recognize_page(
     prompt_version: str | None = None,
 ) -> RecognizedPage:
     """`prompt_version` — только для журнала вызовов: сюда приходит уже текст промпта."""
-    normalized = normalize_image(image)
+    # в потоке: декодирование и сжатие фото остановили бы обработку всех чатов
+    normalized = await asyncio.to_thread(normalize_image, image)
     tokens_in = tokens_out = 0
     latency = 0.0
     fallback: tuple[VisionPage, int, str] | None = None
     last_raw = ""
 
     for attempts, degrees in enumerate(ORIENTATIONS, start=1):
-        data = normalized if degrees == 0 else rotate_image(normalized, degrees)
+        data = (
+            normalized
+            if degrees == 0
+            else await asyncio.to_thread(rotate_image, normalized, degrees)
+        )
         # после нормализации байты всегда JPEG — исходное имя (.png и т.п.)
         # дало бы неверный Content-Type при загрузке
         with llm_step("vision", prompt_version):
@@ -126,7 +132,8 @@ async def recognize_page_two_stage(
 ) -> RecognizedPage:
     transcribe_prompt = load_prompt("vision", transcribe_version)
     structure_prompt = load_prompt("vision_structure", structure_version)
-    normalized = normalize_image(image)
+    # в потоке: декодирование и сжатие фото остановили бы обработку всех чатов
+    normalized = await asyncio.to_thread(normalize_image, image)
     tokens_in = tokens_out = 0
     latency = 0.0
     last_raw = ""
@@ -135,7 +142,11 @@ async def recognize_page_two_stage(
     best: tuple[VisionPage, int, str] | None = None
 
     for attempts, degrees in enumerate(ORIENTATIONS, start=1):
-        data = normalized if degrees == 0 else rotate_image(normalized, degrees)
+        data = (
+            normalized
+            if degrees == 0
+            else await asyncio.to_thread(rotate_image, normalized, degrees)
+        )
         with llm_step("vision", transcribe_version):
             result = await client.analyze_image(
                 data, prompt=transcribe_prompt, model=vision_model, filename="page.jpg"

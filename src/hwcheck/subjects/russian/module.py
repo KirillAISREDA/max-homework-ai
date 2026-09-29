@@ -8,6 +8,7 @@ recognize — vision решает роль и читает печатный уч
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -86,7 +87,7 @@ class RussianModule:
                                usage=usage, rotation=rotation)  # fmt: skip
         # OCR читает тот же кадр, в котором vision узнал тетрадь: страницу, снятую боком, он иначе
         # читает как мусор, а координаты слов не совпали бы с сохранённым фото (живой прогон 18.09)
-        words = await self._ocr_words(_rotated(image, rotation))
+        words = await self._ocr_words(await asyncio.to_thread(_rotated, image, rotation))
         if words is None:
             return SubjectPage(subject=self.code, role="notebook", tasks=[], failure="ocr_failed",
                                usage=usage, rotation=rotation)  # fmt: skip

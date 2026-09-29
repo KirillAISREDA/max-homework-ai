@@ -1,5 +1,6 @@
 """Журнал событий: trace_id и отделение тестового трафика (антифрод, Положение п. 5.4.1)."""
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -110,3 +111,28 @@ def test_explicit_user_of_event_is_not_replaced_by_context(tmp_path: Path) -> No
         log.log("notify_sent", user_id=43)
         log.log("bot_started")
     assert [e["user"] for e in read_events(path)] == [anonymize(43), None]
+
+
+async def test_events_of_parallel_tasks_are_whole_lines_with_own_trace(tmp_path: Path) -> None:
+    """Параллельные обработки пишут в один файл из одного цикла событий: строка пишется целиком
+    за один вызов без ожиданий внутри, а trace_id и пользователь у каждой задачи свои."""
+    path = tmp_path / "events.jsonl"
+    log = EventLog(path, "prod")
+    long_field = "я" * 20_000  # строка длиннее буфера записи: по частям она бы перемешалась
+
+    async def one_update(user_id: int) -> str:
+        with trace(user_id=user_id) as trace_id:
+            for step in range(5):
+                await asyncio.sleep(0)  # другие задачи вклиниваются между событиями
+                log.log("step", user_id=current_user_id(), n=step, payload=long_field)
+        return trace_id
+
+    trace_ids = await asyncio.gather(*(one_update(user_id) for user_id in range(1, 21)))
+
+    events = read_events(path)  # json.loads упал бы на перемешанной строке
+    assert len(events) == 100
+    assert len(set(trace_ids)) == 20
+    for user_id, trace_id in zip(range(1, 21), trace_ids, strict=True):
+        own = [e for e in events if e["trace_id"] == trace_id]
+        assert [e["n"] for e in own] == [0, 1, 2, 3, 4]
+        assert {e["user"] for e in own} == {anonymize(user_id)}

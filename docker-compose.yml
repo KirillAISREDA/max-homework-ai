@@ -6,7 +6,8 @@ services:
     image: max-homework-ai-bot
     container_name: homework-bot
     restart: unless-stopped
-    # SIGTERM: раннер дообрабатывает уже полученный батч (альбом — до пары минут) и выходит
+    # SIGTERM: раннер дообрабатывает принятые апдейты (до SHUTDOWN_TIMEOUT_S = 100 с) и выходит;
+    # запас 30 с — на отмену не успевших обработок и закрытие клиентов
     stop_grace_period: 150s
     env_file: .env
     environment:
@@ -39,8 +40,8 @@ services:
           # +~170 МБ: словарь русского (spylls) грузится в память при старте, до polling —
           # только когда русский доступен в каталоге предметов (`bot/subjects.py`)
           memory: 1g
-    # marker пишется после каждого GET /updates (long poll ≤30 с); обработка альбома
-    # из 4 фото может занять минуту-две — потому окно 5 минут
+    # marker пишется после каждого GET /updates (long poll ≤30 с). Опрос обработки не ждёт, но
+    # встаёт при перегрузке (UPDATE_QUEUE_LIMIT) — потому окно 5 минут
     healthcheck:
       test: ["CMD-SHELL", "find /app/var/max_marker.txt -mmin -5 | grep -q ."]
       interval: 60s

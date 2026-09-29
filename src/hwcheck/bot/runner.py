@@ -1,12 +1,13 @@
 """Polling-раннер (GET /updates, marker).
 
-Обрабатывает апдейты последовательно: на пилоте один тестер, а PERS-тариф
-GigaChat всё равно даёт 1 поток. Webhook и параллельная обработка — когда polling
-перестанет справляться.
+Раннер только принимает апдейты и отдаёт их диспетчеру (`bot/dispatch.py`): разные чаты
+обрабатываются параллельно, один чат — по порядку; опрос MAX обработки не ждёт. Пределы —
+`UPDATE_CONCURRENCY`, `UPDATE_QUEUE_LIMIT`. Webhook — когда polling перестанет справляться.
 
-Остановка: SIGTERM (docker stop) → простаивающий long poll отменяется сразу, а уже
-полученный батч дообрабатывается (marker к нему уже сдвинут — иначе сообщения
-потеряются). SIGINT (Ctrl+C локально) — как раньше, KeyboardInterrupt.
+Остановка: SIGTERM (docker stop) → простаивающий long poll отменяется сразу, новые апдейты не
+принимаются, а уже принятые дообрабатываются (marker к ним уже сдвинут — иначе сообщения
+потеряются), но не дольше `SHUTDOWN_TIMEOUT_S`: что не успело — отменяется с записью в лог.
+SIGINT (Ctrl+C локально) — как раньше, KeyboardInterrupt: обработки отменяются сразу.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import contextlib
 import logging
 import signal
 import time
+from collections.abc import Coroutine
 from pathlib import Path
 from types import FrameType
 from typing import Any
@@ -23,6 +25,7 @@ from typing import Any
 import asyncpg
 from redis.asyncio import Redis
 
+from hwcheck.bot.dispatch import DispatchLimits, UpdateDispatcher
 from hwcheck.bot.fsm import InMemoryStateStore, RedisStateStore, StateStore
 from hwcheck.bot.handlers import SOLVER_CACHE_DIR, Bot, models_for
 from hwcheck.bot.max_api import MaxClient
@@ -52,6 +55,8 @@ from hwcheck.subjects.russian.gaps import HunspellDictionary
 
 logger = logging.getLogger(__name__)
 
+POLL_RETRY_PAUSE_S = 5.0
+
 
 def _load_marker(path: Path) -> int | None:
     try:
@@ -73,7 +78,7 @@ def _install_stop_handler(stop: asyncio.Event, loop: asyncio.AbstractEventLoop) 
     # пока loop спит в select(); прямой stop.set() его не разбудит до конца long poll —
     # call_soon_threadsafe пишет в self-pipe и будит loop сразу.
     def _on_term(signum: int, frame: FrameType | None) -> None:
-        logger.info("SIGTERM: finishing current batch, then exit")
+        logger.info("SIGTERM: finishing accepted updates, then exit")
         loop.call_soon_threadsafe(stop.set)
 
     signal.signal(signal.SIGTERM, _on_term)
@@ -124,38 +129,96 @@ def load_dictionary() -> HunspellDictionary | None:
     return dictionary
 
 
+def dispatch_limits(settings: Settings) -> DispatchLimits:
+    return DispatchLimits(
+        concurrency=settings.update_concurrency,
+        queue_limit=settings.update_queue_limit,
+        shutdown_timeout_s=settings.shutdown_timeout_s,
+    )
+
+
+async def _unless_stopped[T](
+    work: Coroutine[Any, Any, T], stop_wait: asyncio.Future[Any]
+) -> asyncio.Future[T] | None:
+    """Законченная работа или None, если остановка пришла раньше (работа отменена).
+
+    Закончились обе разом — работа важнее: батч уже получен, и MAX его второй раз не отдаст.
+    """
+    task = asyncio.ensure_future(work)
+    try:
+        await asyncio.wait({task, stop_wait}, return_when=asyncio.FIRST_COMPLETED)
+    except BaseException:
+        task.cancel()  # отменили сам раннер (Ctrl+C): запрос к MAX не должен его пережить
+        raise
+    if task.done():
+        return task
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    return None
+
+
 async def _poll_loop(
-    max_client: MaxClient, bot: Bot, marker_path: Path, stop: asyncio.Event
+    max_client: MaxClient,
+    bot: Bot,
+    marker_path: Path,
+    stop: asyncio.Event,
+    limits: DispatchLimits | None = None,
 ) -> None:
-    marker = _load_marker(marker_path)
+    """Принимает апдейты, пока нет остановки; затем дообрабатывает принятые.
+
+    Marker сохраняется сразу после получения батча, до обработки — доставка «не больше одного
+    раза»: апдейт, принятый перед падением процесса, после рестарта повторно не придёт, даже
+    если обработать его не успели. Так бот не отвечает дважды и не платит за проверку дважды;
+    цена — потеря принятых апдейтов при падении и при остановке дольше `SHUTDOWN_TIMEOUT_S`.
+    Сохранять marker после обработки («не меньше одного раза») — отдельное решение: ему нужна
+    идемпотентная обработка.
+    """
+    dispatcher = UpdateDispatcher(bot.handle_update, limits or DispatchLimits())
     stop_wait = asyncio.ensure_future(stop.wait())
     try:
-        while not stop.is_set():
-            poll = asyncio.ensure_future(max_client.get_updates(marker))
-            await asyncio.wait({poll, stop_wait}, return_when=asyncio.FIRST_COMPLETED)
-            if not poll.done():
-                # остановка во время простоя: marker не сдвинут, апдейты придут после рестарта
-                poll.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await poll
-                break
-            try:
-                updates, marker = poll.result()
-                _save_marker(marker_path, marker)
-            except Exception:
-                logger.exception("get_updates failed, retry in 5s")
-                await asyncio.sleep(5)
-                continue
-            for update in updates:
-                try:
-                    await bot.handle_update(update)
-                except Exception:
-                    # один сбойный апдейт не должен ронять цикл
-                    logger.exception("update failed: %s", update.update_type)
+        await _receive(max_client, dispatcher, marker_path, stop, stop_wait)
+        await dispatcher.drain()
     finally:
         stop_wait.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await stop_wait
+        # после штатной остановки отменять уже нечего; при исключении и Ctrl+C — всё принятое
+        await dispatcher.abort()
+
+
+async def _receive(
+    max_client: MaxClient,
+    dispatcher: UpdateDispatcher,
+    marker_path: Path,
+    stop: asyncio.Event,
+    stop_wait: asyncio.Future[Any],
+) -> None:
+    marker = _load_marker(marker_path)
+    while True:
+        # очереди полны — апдейты ждут на стороне MAX, а не копятся в памяти бота
+        await _unless_stopped(dispatcher.wait_for_capacity(), stop_wait)
+        if stop.is_set():
+            # и когда место появилось одновременно с остановкой: новый батч уже не берём
+            break
+        poll = await _unless_stopped(max_client.get_updates(marker), stop_wait)
+        if poll is None:
+            # остановка во время простоя: marker не сдвинут, апдейты придут после рестарта
+            break
+        try:
+            updates, marker = poll.result()
+        except Exception:
+            logger.exception("get_updates failed, retry in %g s", POLL_RETRY_PAUSE_S)
+            await _unless_stopped(asyncio.sleep(POLL_RETRY_PAUSE_S), stop_wait)
+            continue
+        try:
+            _save_marker(marker_path, marker)
+        except OSError:
+            # батч уже получен: бросить его из-за диска — потерять сообщения. После рестарта
+            # MAX отдаст его ещё раз (marker на диске старый) — повтор лучше тишины
+            logger.exception("marker not saved")
+        for update in updates:
+            dispatcher.submit(update)
 
 
 def configure_ids(settings: Settings) -> None:
@@ -307,5 +370,13 @@ async def run_polling(settings: Settings) -> None:
             subjects=subjects,
             findings=PgFindingsRepository(pool) if pool is not None else None,
         )
-        await _poll_loop(max_client, bot, marker_path, stop)
+        limits = dispatch_limits(settings)
+        logger.info(
+            "updates: up to %d at once, backlog limit %d, shutdown timeout %g s",
+            limits.concurrency,
+            limits.queue_limit,
+            limits.shutdown_timeout_s,
+        )
+        # клиенты и пул закрываются после выхода из цикла: к этому моменту обработок уже нет
+        await _poll_loop(max_client, bot, marker_path, stop, limits)
     logger.info("bot stopped")

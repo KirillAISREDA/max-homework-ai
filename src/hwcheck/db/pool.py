@@ -17,7 +17,13 @@ async def create_pool(
     """База недоступна или миграция упала — исключение: бот не стартует (health контейнера),
     а не работает без профилей и согласий."""
     pool = await asyncpg.create_pool(
-        dsn, min_size=1, max_size=5, command_timeout=10, server_settings=server_settings
+        # не меньше одновременных обработок апдейтов (`UPDATE_CONCURRENCY`): иначе параллельные
+        # чаты ждали бы соединения друг за другом
+        dsn,
+        min_size=1,
+        max_size=10,
+        command_timeout=10,
+        server_settings=server_settings,
     )
     try:
         async with pool.acquire() as conn:

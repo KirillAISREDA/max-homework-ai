@@ -7,10 +7,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from typing import Literal
+from weakref import WeakValueDictionary
 
 from hwcheck.bot.invites import parse_code, parse_source, parse_start_payload
 from hwcheck.bot.models import MaxUpdate
@@ -93,6 +95,8 @@ class Onboarding:
         self._parents = ParentSteps(ctx, self._subjects)
         self._linking = Linking(ctx, self._subjects)
         self._renewal = ConsentRenewal(ctx)
+        # замок живёт, пока его кто-то держит или ждёт: словарь не растёт с числом пользователей
+        self._user_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         # тот же контекст, что у шагов: бот берёт notifier отсюда, без онбординга его нет
         self.notifier = ParentNotifier(ctx)
         self._actions: dict[str, Action] = {
@@ -124,6 +128,12 @@ class Onboarding:
                 await self._ctx.max.answer_callback(update.callback.callback_id)
             return "handled"
         actor = Actor.of(chat_id, user_id)
+        # состояние онбординга ключуется пользователем, а очередь диспетчера — чатом: апдейты
+        # одного пользователя из разных чатов затёрли бы записи друг друга
+        async with self._user_locks.setdefault(actor.user_hash, asyncio.Lock()):
+            return await self._route(update, actor)
+
+    async def _route(self, update: MaxUpdate, actor: Actor) -> Route:
         position = await self._position(await self._ctx.repo.get_account(actor.user_hash))
         if update.update_type == "bot_started":
             return await self._on_start(actor, position, update.payload)
