@@ -41,9 +41,9 @@ CANCEL_GRACE_S = 10.0
 
 @dataclass(frozen=True)
 class DispatchLimits:
-    concurrency: int = 16  # одновременных обработок; 1 — по одному, как до диспетчера
-    queue_limit: int = 500  # необработанных апдейтов, после которых опрос MAX ждёт
-    shutdown_timeout_s: float = 120.0  # срок дообработки при остановке
+    concurrency: int = 8  # одновременных обработок; 1 — по одному, как до диспетчера
+    queue_limit: int = 100  # необработанных апдейтов, после которых опрос MAX ждёт
+    shutdown_timeout_s: float = 100.0  # срок дообработки при остановке
 
     def __post_init__(self) -> None:
         if self.concurrency < 1:

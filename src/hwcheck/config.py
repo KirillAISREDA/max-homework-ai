@@ -63,13 +63,13 @@ class Settings(BaseSettings):
 
     # параллельная обработка апдейтов (bot/dispatch.py): разные чаты — одновременно, один чат —
     # по порядку. 1 — по одному в порядке прихода, как до диспетчера (аварийный выключатель)
-    update_concurrency: int = Field(default=16, ge=1)
+    update_concurrency: int = Field(default=8, ge=1)
     # необработанных апдейтов больше — опрос MAX ждёт, пока очередь не разгрузится наполовину:
     # при всплеске апдейты копятся на стороне MAX, а не в памяти бота
-    update_queue_limit: int = Field(default=500, ge=1)
+    update_queue_limit: int = Field(default=100, ge=1)
     # остановка (SIGTERM): столько секунд на дообработку принятых апдейтов, дальше — отмена.
     # Меньше stop_grace_period в docker-compose.yml (150 с), иначе Docker убьёт бота раньше
-    shutdown_timeout_s: float = Field(default=120.0, ge=0)
+    shutdown_timeout_s: float = Field(default=100.0, ge=0)
 
     # Роутинг по моделям (арх. §4): Max — vision и сложная математика, Pro — тьютор,
     # Lite — короткие реплики. Идентификаторы сверять с актуальной линейкой GigaChat.
