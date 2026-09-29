@@ -89,6 +89,11 @@ class Kit:
     def texts(self, user_id: int) -> list[str]:
         return [text for chat_id, text, _ in self.max.sent if chat_id == chat(user_id)]
 
+    def formats(self, user_id: int) -> list[str | None]:
+        """Разметка каждого сообщения пользователю в чат, по порядку."""
+        sent = zip(self.max.sent, self.max.formats, strict=True)
+        return [fmt for message, fmt in sent if message[0] == chat(user_id)]
+
     def last_format(self, user_id: int) -> str | None:
         """Разметка последнего сообщения пользователю в чат."""
         sent = zip(self.max.sent, self.max.formats, strict=True)
