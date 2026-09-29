@@ -177,7 +177,7 @@ async def test_batch_is_processed_even_if_marker_is_not_saved(
 
 def test_limits_come_from_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     assert dispatch_limits(Settings(_env_file=None)) == DispatchLimits(
-        concurrency=16, queue_limit=500, shutdown_timeout_s=120.0
+        concurrency=8, queue_limit=100, shutdown_timeout_s=100.0
     )
     monkeypatch.setenv("UPDATE_CONCURRENCY", "1")
     monkeypatch.setenv("UPDATE_QUEUE_LIMIT", "50")
@@ -230,7 +230,7 @@ async def test_runner_gives_poll_loop_the_limits_from_settings(
 
     await runner.run_polling(settings)
 
-    assert captured[-1] == DispatchLimits(concurrency=4, queue_limit=500, shutdown_timeout_s=120.0)
+    assert captured[-1] == DispatchLimits(concurrency=4, queue_limit=100, shutdown_timeout_s=100.0)
 
 
 # --- события параллельных чатов: у каждого свой trace_id и свой пользователь ---

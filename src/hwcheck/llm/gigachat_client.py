@@ -16,6 +16,9 @@ from gigachat import GigaChat
 from hwcheck.config import Settings
 from hwcheck.llm.base import ChatMessage, LLMResult
 
+# удаление загруженного фото — вспомогательный шаг: дольше ждать его незачем
+CLEANUP_TIMEOUT_S = 5.0
+
 
 class GigaChatClient:
     def __init__(self, settings: Settings) -> None:
@@ -78,8 +81,9 @@ class GigaChatClient:
         finally:
             # 152-ФЗ: фото тетради не должно оставаться в хранилище GigaChat.
             # Ошибка удаления не важнее основного результата/ошибки.
+            # срок: при остановке бота зависшее удаление пережило бы закрытие клиентов
             with contextlib.suppress(Exception):
-                async with self._semaphore:
+                async with asyncio.timeout(CLEANUP_TIMEOUT_S), self._semaphore:
                     await self._client.adelete_file(uploaded.id_)
         result.latency_s = time.perf_counter() - t0  # включая upload файла
         return result

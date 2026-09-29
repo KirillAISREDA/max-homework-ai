@@ -6,7 +6,7 @@ services:
     image: max-homework-ai-bot
     container_name: homework-bot
     restart: unless-stopped
-    # SIGTERM: раннер дообрабатывает принятые апдейты (до SHUTDOWN_TIMEOUT_S = 120 с) и выходит;
+    # SIGTERM: раннер дообрабатывает принятые апдейты (до SHUTDOWN_TIMEOUT_S = 100 с) и выходит;
     # запас 30 с — на отмену не успевших обработок и закрытие клиентов
     stop_grace_period: 150s
     env_file: .env
