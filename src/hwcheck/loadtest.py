@@ -309,49 +309,54 @@ async def run_load(
     events_path: Path,
     limits: DispatchLimits | None = None,
     users: VirtualUsers | None = None,
+    drain_timeout_s: float = DRAIN_TIMEOUT_S,
 ) -> list[StepResult]:
     users = users or VirtualUsers(load_max)
-    run = _Run()
     queued: dict[int, float] = {}
 
-    async def timed(update: MaxUpdate) -> None:
-        chat_id = update.effective_chat_id
-        assert chat_id is not None
-        started, failed = time.monotonic(), False
-        try:
-            await handler(update)
-        except Exception:
-            failed = True
-            logger.exception("load: update failed")
-        failed = load_max.take_failure(chat_id) or failed
-        now = time.monotonic()
-        run.samples.append(Sample(_kind(update), queued.pop(chat_id), started, now, not failed))
-        users.done(chat_id)
+    def timed_into(run: _Run) -> Handler:
+        async def timed(update: MaxUpdate) -> None:
+            chat_id = update.effective_chat_id
+            assert chat_id is not None
+            started, failed = time.monotonic(), False
+            try:
+                await handler(update)
+            except Exception:
+                failed = True
+                logger.exception("load: update failed")
+            failed = load_max.take_failure(chat_id) or failed
+            now = time.monotonic()
+            run.samples.append(Sample(_kind(update), queued.pop(chat_id), started, now, not failed))
+            users.done(chat_id)
 
-    dispatcher = UpdateDispatcher(timed, limits or DispatchLimits())
+        return timed
+
     results = []
-    try:
-        for step in steps:
-            run.samples, run.sent, run.peak = [], 0, 0
-            began = time.time()
+    for step in steps:
+        # у шага свой диспетчер: что бот не разобрал за срок, отменяется и считается «без
+        # ответа», а не доезжает в замеры следующего шага
+        run = _Run()
+        dispatcher = UpdateDispatcher(timed_into(run), limits or DispatchLimits())
+        began = time.time()
+        try:
             await _send(step, dispatcher, users, queued, run)
-            await _drain(dispatcher)
-            calls = [e for e in read_events(events_path) if e.get("type") == "llm_call"]
-            results.append(
-                summarize_step(
-                    step,
-                    run.samples,
-                    calls,
-                    began,
-                    time.time(),
-                    sent=run.sent,
-                    peak=run.peak,
-                    families=users.count,
-                )  # fmt: skip
-            )
-            logger.info("load: шаг %g/с — %d из %d", step.rps, len(run.samples), run.sent)
-    finally:
-        await dispatcher.abort()
+            await _drain(dispatcher, drain_timeout_s)
+        finally:
+            await dispatcher.abort()
+        calls = [e for e in read_events(events_path) if e.get("type") == "llm_call"]
+        results.append(
+            summarize_step(
+                step,
+                list(run.samples),
+                calls,
+                began,
+                time.time(),
+                sent=run.sent,
+                peak=run.peak,
+                families=users.count,
+            )  # fmt: skip
+        )
+        logger.info("load: шаг %g/с — %d из %d", step.rps, len(run.samples), run.sent)
     return results
 
 
@@ -378,17 +383,29 @@ async def _send(
         run.peak = max(run.peak, dispatcher.pending)
 
 
-async def _drain(dispatcher: UpdateDispatcher) -> None:
-    deadline = time.monotonic() + DRAIN_TIMEOUT_S
+async def _drain(dispatcher: UpdateDispatcher, timeout_s: float) -> None:
+    deadline = time.monotonic() + timeout_s
     while dispatcher.pending and time.monotonic() < deadline:
         await asyncio.sleep(0.01)
+
+
+def peak_memory_mb() -> float | None:
+    """Пик памяти процесса; на Windows модуля `resource` нет — замера нет."""
+    if sys.platform == "win32":
+        return None
+    import resource
+
+    # Linux отдаёт килобайты
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 
 def _seconds(value: float | None) -> str:
     return "—" if value is None else f"{value:.1f}".replace(".", ",")
 
 
-def render_report(results: Sequence[StepResult], *, settings_note: str) -> str:
+def render_report(
+    results: Sequence[StepResult], *, settings_note: str, peak_memory_mb: float | None = None
+) -> str:
     head = (
         "| Сообщений в секунду | Длительность, с | Отправлено | Обработано | Сбоев | Без ответа "
         "| Обработано в секунду | Фото: p50 / p95 / макс, с | Кнопка: p50 / p95, с "
@@ -419,6 +436,8 @@ def render_report(results: Sequence[StepResult], *, settings_note: str) -> str:
             f"{r.cost:.0f}",
         ]
         lines.append("| " + " | ".join(cells) + " |")
+    if peak_memory_mb is not None:
+        lines += ["", f"Пик памяти процесса: {peak_memory_mb:.0f} МБ"]
     return "\n".join(lines)
 
 
@@ -432,17 +451,24 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--events", type=Path, default=Path("var/loadtest/events.jsonl"))
     parser.add_argument("--out", type=Path, default=Path("var/loadtest/report.md"))
     parser.add_argument("--tutor-answers", type=int, default=2, help="Ответов тьютору на разбор")
+    parser.add_argument(
+        "--concurrency", type=int, help="Одновременных обработок (по умолчанию — как у бота)"
+    )
+    parser.add_argument(
+        "--drain-timeout", type=float, default=DRAIN_TIMEOUT_S, help="Ждать ответов после шага, с"
+    )
     return parser
 
 
 async def _run_cli(args: argparse.Namespace) -> str:
     # импорт здесь: модуль замеров не должен тянуть бота и клиентов моделей при разборе отчёта
     from hwcheck.bot.fsm import InMemoryStateStore
-    from hwcheck.bot.handlers import Bot
+    from hwcheck.bot.handlers import Bot, models_for
     from hwcheck.config import load_settings
     from hwcheck.events import EventLog
     from hwcheck.llm.journal import JournaledLLM
     from hwcheck.llm.router import make_llm
+    from hwcheck.subjects.registry import SubjectDeps
 
     settings = load_settings()
     # страницы теста — открытый датасет, не работы детей: их читает модель прода. Боту без
@@ -454,14 +480,19 @@ async def _run_cli(args: argparse.Namespace) -> str:
     load_max = LoadMax([path.read_bytes() for path in files])
     # своя среда: записи теста не попадают ни в prod, ни в test журнала бота
     events = EventLog(args.events, "loadtest")
-    limits = DispatchLimits(concurrency=settings.update_concurrency, queue_limit=1_000_000)
+    concurrency = args.concurrency or settings.update_concurrency
+    limits = DispatchLimits(concurrency=concurrency, queue_limit=1_000_000)
     async with make_llm(settings) as router:
+        llm = JournaledLLM(router, events)
         bot = Bot(
             load_max,  # type: ignore[arg-type]
-            JournaledLLM(router, events),
+            llm,
             InMemoryStateStore(),
             events,
             settings,
+            # без кэша эталонов: страниц теста мало, а у живых семей домашки разные —
+            # с кэшем нагрузка на модель была бы заниженной
+            subjects=SubjectDeps(llm, models_for(settings), None),
         )
         results = await run_load(
             bot.handle_update,
@@ -470,13 +501,16 @@ async def _run_cli(args: argparse.Namespace) -> str:
             events_path=args.events,
             limits=limits,
             users=VirtualUsers(load_max, tutor_answers=args.tutor_answers),
+            drain_timeout_s=args.drain_timeout,
         )
     note = (
         f"чтение фото {settings.vision_model}, разбор {settings.tutor_model}, эталон "
-        f"{settings.solver_model}; одновременных обработок {settings.update_concurrency}, "
-        f"вызовов шлюза {settings.llm_gateway_concurrency}; страниц {len(files)}"
+        f"{settings.solver_model}; одновременных обработок {concurrency}, "
+        f"вызовов шлюза {settings.llm_gateway_concurrency}; страниц {len(files)}, кэш эталонов "
+        f"выключен; "
+        f"ожидание ответов после шага {args.drain_timeout:g} с"
     )
-    return render_report(results, settings_note=note)
+    return render_report(results, settings_note=note, peak_memory_mb=peak_memory_mb())
 
 
 def main(argv: Sequence[str] | None = None) -> None:

@@ -1,5 +1,6 @@
 """Нагрузочный тест: поток сообщений виртуальных семей, замеры по шагам нагрузки."""
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -158,3 +159,35 @@ async def test_run_load_sends_at_rate_and_waits_for_answers(tmp_path: Path) -> N
     assert all(r.completed == r.sent and r.failed == 0 and r.unfinished == 0 for r in results)
     assert len(handled) == 20
     assert results[0].llm_calls == 0  # запись журнала до начала шага в него не входит
+
+
+async def test_unanswered_step_does_not_leak_into_the_next(tmp_path: Path) -> None:
+    """Шаг, который бот не успел разобрать, отменяется: хвост не попадает в замеры следующего."""
+    load_max = LoadMax(PHOTOS)
+    slow = True
+
+    async def bot(update: MaxUpdate) -> None:
+        chat_id = update.effective_chat_id
+        assert chat_id is not None
+        if slow:
+            await asyncio.sleep(30)
+        await load_max.send_message(chat_id, "Проверил! 1 из 1 верно.")
+
+    events = tmp_path / "events.jsonl"
+    events.write_text("", encoding="utf-8")
+    steps = [Step(rps=50, seconds=0.1), Step(rps=50, seconds=0.1)]
+    task = asyncio.ensure_future(
+        run_load(bot, load_max, steps, events_path=events, drain_timeout_s=0.2)
+    )
+    await asyncio.sleep(0.25)
+    slow = False  # второй шаг бот разбирает сразу
+    first, second = await task
+    assert (first.sent, first.completed, first.unfinished) == (5, 0, 5)
+    assert (second.sent, second.completed, second.unfinished) == (5, 5, 0)
+
+
+def test_report_names_peak_memory() -> None:
+    step = summarize_step(Step(1, 60), [sample("photo", 0, 0, 20)], [], 0.0, 60.0, sent=1, peak=1)
+    text = render_report([step], settings_note="x", peak_memory_mb=412.4)
+    assert "Пик памяти процесса: 412 МБ" in text
+    assert "Пик памяти" not in render_report([step], settings_note="x")
