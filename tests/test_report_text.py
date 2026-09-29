@@ -15,6 +15,7 @@ from hwcheck.bot.report_text import (
     render_report,
     request_period,
 )
+from hwcheck.bot.summary import MAX_MESSAGE_CHARS, message_length
 from hwcheck.db.repo import HomeworkCounts
 from hwcheck.db.reports import SubjectTotals
 
@@ -282,3 +283,11 @@ def test_long_report_is_cut_by_children_and_says_how_many_are_hidden() -> None:
     assert 0 < len(shown) < 10
     assert shown == children[: len(shown)]  # показаны первые по порядку, блок — целиком
     assert text.endswith(f"Не показано детей: {10 - len(shown)} — отчёт не поместился в сообщение.")
+
+
+def test_report_length_is_counted_the_way_the_bot_counts_other_messages() -> None:
+    """Эмодзи в UTF-16 занимает два элемента: длина считается как в сводке проверки, иначе
+    отчёт с эмодзи прошёл бы свою проверку и не прошёл бы предел MAX."""
+    children = [busy_child(n) for n in range(1, 11)]
+    text = render_report(WEEK, children, sends_himself=False)
+    assert len(text) < message_length(text) <= MAX_MESSAGE_CHARS

@@ -4,13 +4,13 @@
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from hwcheck.bot.report import REPORT_FAILED, ParentReporter
+from hwcheck.bot.report import REPORT_COOLDOWN, REPORT_FAILED, ParentReporter
 from hwcheck.db.repo import Account, HomeworkCounts
 from hwcheck.db.reports import SubjectTotals
 from onboarding_kit import Kit, actor, make_kit, ready_student
@@ -263,3 +263,63 @@ async def test_journal_has_no_max_id_and_no_profile_id(tmp_path: Path) -> None:
         written = json.dumps({k: v for k, v in row.items() if k != "ts"}, ensure_ascii=False)
         for secret in (PARENT, CHILD, older.id, younger, parent.id):
             assert str(secret) not in written
+
+
+async def test_repeated_press_does_not_build_the_report_again(tmp_path: Path) -> None:
+    """Кнопку легко нажать дважды, а можно и жать без остановки: каждое нажатие — запрос к базе
+    и сообщение. Повтор раньше паузы — без запроса и без ответа, отчёт выше в чате."""
+    kit = make_family_kit(tmp_path)
+    child = await ready_student(kit, CHILD, 7, parent_id=PARENT)
+    await check(kit, child.id, 3, 3, 0, 0)
+    reporter = ParentReporter(kit.ctx, kit.repo)
+    parent = await parent_of(kit)
+
+    await reporter.on_request(actor(PARENT), parent)
+    sent = len(kit.texts(PARENT))
+    kit.clock.now += REPORT_COOLDOWN - timedelta(seconds=1)
+    await reporter.on_request(actor(PARENT), parent)
+    assert len(kit.texts(PARENT)) == sent
+    assert len(kit.events("parent_report_sent")) == 1
+    [skipped] = kit.events("parent_report_skipped")
+    assert skipped["reason"] == "cooldown" and skipped["component"] == "report"
+
+    kit.clock.now += timedelta(seconds=1)
+    await reporter.on_request(actor(PARENT), parent)
+    assert len(kit.texts(PARENT)) == sent + 1
+    assert len(kit.events("parent_report_sent")) == 2
+
+
+async def test_pause_of_one_parent_does_not_delay_another(tmp_path: Path) -> None:
+    kit = make_family_kit(tmp_path)
+    await ready_student(kit, CHILD, 7, parent_id=PARENT)
+    await young_child(kit, 3)
+    reporter = ParentReporter(kit.ctx, kit.repo)
+
+    await reporter.on_request(actor(PARENT), await parent_of(kit))
+    await reporter.on_request(actor(YOUNG_PARENT), await parent_of(kit, YOUNG_PARENT))
+    assert len(kit.events("parent_report_sent")) == 2
+
+
+async def test_failed_report_can_be_requested_again_at_once(tmp_path: Path) -> None:
+    """Пауза — после отправленного отчёта: после сбоя родитель пробует снова сразу."""
+    kit = make_family_kit(tmp_path)
+    await ready_student(kit, CHILD, 7, parent_id=PARENT)
+    broken = ParentReporter(kit.ctx, BrokenReports())
+    parent = await parent_of(kit)
+
+    await broken.on_request(actor(PARENT), parent)
+    await broken.on_request(actor(PARENT), parent)
+    assert len(kit.events("parent_report_failed")) == 2
+    assert kit.events("parent_report_skipped") == []
+
+
+async def test_pause_marks_do_not_pile_up(tmp_path: Path) -> None:
+    kit = make_family_kit(tmp_path)
+    await ready_student(kit, CHILD, 7, parent_id=PARENT)
+    await young_child(kit, 3)
+    reporter = ParentReporter(kit.ctx, kit.repo)
+
+    await reporter.on_request(actor(PARENT), await parent_of(kit))
+    kit.clock.now += REPORT_COOLDOWN
+    await reporter.on_request(actor(YOUNG_PARENT), await parent_of(kit, YOUNG_PARENT))
+    assert list(reporter._recent) == [actor(YOUNG_PARENT).user_hash]

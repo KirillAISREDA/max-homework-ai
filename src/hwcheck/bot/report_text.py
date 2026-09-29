@@ -17,7 +17,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from hwcheck.bot.notifier import plural
 from hwcheck.bot.onboarding.context import MSK
 from hwcheck.bot.subjects import subject_by_code
-from hwcheck.bot.summary import MAX_MESSAGE_CHARS
+from hwcheck.bot.summary import MAX_MESSAGE_CHARS, message_length
 from hwcheck.db.reports import SubjectTotals
 
 REPORT_DAYS = 7
@@ -120,7 +120,8 @@ def _fit(header: str, blocks: Sequence[str]) -> str:
         if shown < len(blocks):
             parts.append(HIDDEN_CHILDREN.format(n=len(blocks) - shown))
         text = "\n\n".join(parts)
-        if len(text) < MAX_MESSAGE_CHARS or shown == 0:
+        # длина — как в сводке проверки: эмодзи занимает два элемента UTF-16
+        if message_length(text) <= MAX_MESSAGE_CHARS or shown == 0:
             return text
         shown -= 1
 
