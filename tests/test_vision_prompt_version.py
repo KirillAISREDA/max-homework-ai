@@ -2,6 +2,7 @@
 шлюза получает свой (`v4-<модель>`). Версия задаётся конфигурацией стенда и настройками бота и
 переезжает вместе с моделью, назначенной проверке по согласию родителя (`vision_override`)."""
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -128,3 +129,40 @@ def test_load_test_reads_pages_with_the_prompt_of_the_foreign_model() -> None:
     )
     models = models_for(as_consented(settings))
     assert (models.vision, models.vision_prompt) == (FOREIGN, "v4-gemini")
+
+
+@pytest.mark.parametrize("version", ["v9-missing", "../vision_structure/v1", ""])
+def test_bench_config_refuses_unknown_prompt_version(version: str) -> None:
+    """Иначе стенд молча прочитал бы фото чужим промптом и выдал цифры, которым нельзя верить."""
+    with pytest.raises(ValueError, match="prompts/vision"):
+        BenchConfig(
+            name="x",
+            vision_model="v",
+            structure_model="s",
+            solver_model="m",
+            vision_prompt=version,
+        )
+
+
+async def test_concurrent_checks_keep_their_own_model_and_prompt() -> None:
+    """Проверки разных чатов идут одновременно: согласие одной семьи не назначает модель другой."""
+    models = CheckModels(vision=DOMESTIC, structure="s", solver="m")
+    inside = asyncio.Event()
+    release = asyncio.Event()
+
+    async def consented() -> tuple[str, str]:
+        with vision_override(FOREIGN, prompt="v4-gemini"):
+            inside.set()
+            await release.wait()
+            return vision_of(models), vision_prompt_of(models)
+
+    async def without_consent() -> tuple[str, str]:
+        await inside.wait()  # соседняя проверка уже назначила себе стороннюю модель
+        seen = vision_of(models), vision_prompt_of(models)
+        release.set()
+        return seen
+
+    assert await asyncio.gather(consented(), without_consent()) == [
+        (FOREIGN, "v4-gemini"),
+        (DOMESTIC, "v3"),
+    ]

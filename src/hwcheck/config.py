@@ -1,9 +1,7 @@
-import re
-
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from hwcheck.prompts import PROMPTS_DIR
+from hwcheck.prompts import require_prompt
 
 
 class Settings(BaseSettings):
@@ -89,12 +87,8 @@ class Settings(BaseSettings):
     @field_validator("vision_prompt", "vision_prompt_domestic")
     @classmethod
     def _vision_prompt_exists(cls, version: str) -> str:
-        """Опечатка в версии всплыла бы на первом фото ребёнка — останавливаем бота при старте."""
-        # версия — имя файла: только строчные буквы, цифры и дефис, без путей и расширений
-        known = re.fullmatch(r"[a-z0-9][a-z0-9-]{0,40}", version, flags=re.ASCII) is not None
-        if not known or not (PROMPTS_DIR / "vision" / f"{version}.md").is_file():
-            raise ValueError(f"нет промпта prompts/vision/{version}.md")
-        return version
+        """Опечатка в версии всплыла бы на первом фото ребёнка — бот не стартует."""
+        return require_prompt("vision", version)
 
     solver_model: str = "GigaChat-2-Max"
     tutor_model: str = "GigaChat-2-Pro"

@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from hwcheck.bench.client import BenchClient, BudgetExceeded
 from hwcheck.bench.golden import GoldenCase
@@ -34,6 +34,7 @@ from hwcheck.bot.check import (
     split_pages,
 )
 from hwcheck.bot.pages import attach_conditions
+from hwcheck.prompts import require_prompt
 
 
 class BenchConfig(BaseModel):
@@ -42,6 +43,11 @@ class BenchConfig(BaseModel):
     structure_model: str
     solver_model: str
     vision_prompt: str = DEFAULT_VISION_PROMPT  # prompts/vision/<версия>.md под модель чтения
+
+    @field_validator("vision_prompt")
+    @classmethod
+    def _vision_prompt_exists(cls, version: str) -> str:
+        return require_prompt("vision", version)
 
     @property
     def models(self) -> CheckModels:

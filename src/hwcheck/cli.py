@@ -261,6 +261,7 @@ async def _run(args: argparse.Namespace) -> None:
                         args.image.read_bytes(),
                         vision_model=settings.vision_model,
                         structure_model=settings.tutor_model,
+                        transcribe_version=settings.vision_prompt,
                     )
                 else:
                     prompt = load_prompt("vision", args.prompt_version)
