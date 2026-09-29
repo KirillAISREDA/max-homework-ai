@@ -13,6 +13,9 @@ from redis.asyncio import Redis
 logger = logging.getLogger(__name__)
 
 ONBOARDING_TTL_S = 24 * 3600
+# отметки о просьбе обновить согласие живут дольше суток: напоминание — раз в несколько дней
+# (renewal.REMIND_EVERY), а семья пишет боту не каждый день
+RENEWAL_TTL_S = 4 * 24 * 3600
 
 
 class OnboardingState(BaseModel):
@@ -21,6 +24,8 @@ class OnboardingState(BaseModel):
     pending_at: float | None = None  # когда пришло первое из этих фото
     child_id: int | None = None  # ребёнок 1–4 класса, выбранный для текущей домашки
     child_chosen_at: float | None = None
+    # когда родителя просили обновить согласие: id профиля ребёнка → время (renewal.py)
+    renewal_asked: dict[str, float] = Field(default_factory=dict)
 
 
 class OnboardingStateStore(Protocol):
@@ -59,4 +64,7 @@ class RedisOnboardingStateStore:
             return OnboardingState()
 
     async def set(self, user_hash: str, state: OnboardingState) -> None:
-        await self._client.set(f"onb:{user_hash}", state.model_dump_json(), ex=self._ttl_s)
+        # остальное состояние от долгой жизни не страдает: у фото и выбранного ребёнка своя
+        # проверка свежести по времени, у приглашения — срок в базе
+        ttl = max(self._ttl_s, RENEWAL_TTL_S) if state.renewal_asked else self._ttl_s
+        await self._client.set(f"onb:{user_hash}", state.model_dump_json(), ex=ttl)

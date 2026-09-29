@@ -176,7 +176,9 @@ def test_policy_fits_max_messages() -> None:
 
 def test_consent_summary_names_transfer_and_version() -> None:
     summary = texts.CONSENT_SUMMARY
-    assert "GigaChat API (ПАО Сбербанк)" in summary and POLICY_VERSION in summary
+    assert "GigaChat (ПАО Сбербанк)" in summary and POLICY_VERSION in summary
+    # передача фото за рубеж названа до нажатия «Согласен», а не только в полном тексте
+    assert "Gemini (Google, США)" in summary and "за пределы России" in summary
     text = texts.consent_text(texts.CHILD_ASKS_CONSENT.format(grade=7))
     assert text.startswith("Ваш ребёнок (7 класс)") and len(text) <= MAX_MESSAGE_LEN
     intros = [
@@ -193,7 +195,8 @@ def test_consent_summary_promises_only_what_exists() -> None:
     assert "меню" not in texts.CONSENT_SUMMARY
     assert "Как отозвать: написать оператору — контакт в полном тексте." in lines
     assert lines[-2:] == [
-        "Нажимая «Согласен», вы подтверждаете, что вы родитель или законный представитель ребёнка.",
+        "Нажимая «Согласен», вы подтверждаете, что вы родитель или законный представитель "
+        "ребёнка, и соглашаетесь на эту передачу.",
         f"Полный текст — кнопка «Полный текст» (политика {POLICY_VERSION}).",
     ]
 

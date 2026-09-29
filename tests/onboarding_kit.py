@@ -14,6 +14,7 @@ from hwcheck.bot.invites import new_invite
 from hwcheck.bot.max_api import Buttons
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.onboarding.context import Actor, OnboardingContext
+from hwcheck.bot.onboarding.policy import POLICY_VERSION
 from hwcheck.bot.onboarding.state import InMemoryOnboardingStateStore
 from hwcheck.crypto import UserIdCipher, new_user_id_key
 from hwcheck.db.memory import InMemoryProfileRepository
@@ -193,7 +194,12 @@ def code_of(message: str) -> str:
 
 
 async def ready_student(
-    kit: Kit, user_id: int = 1, grade: int = 7, *, parent_id: int | None = None
+    kit: Kit,
+    user_id: int = 1,
+    grade: int = 7,
+    *,
+    parent_id: int | None = None,
+    policy: str = POLICY_VERSION,  # согласие по действующей политике; прежняя — явно
 ) -> StudentProfile:
     """Ученик с предметом и подключённым родителем (родитель — user_id + 100, если не задан)."""
     me, parent = actor(user_id), actor(parent_id or user_id + 100)
@@ -205,7 +211,7 @@ async def ready_student(
     invite = new_invite("student_invites_parent")
     await kit.repo.create_invite(invite, profile.user_id, kit.clock.now + timedelta(days=7))
     outcome = await kit.repo.accept_parent_invite(
-        invite.token_hash, parent.user_hash, kit.ctx.encrypted_id(parent), "v0", kit.clock.now
+        invite.token_hash, parent.user_hash, kit.ctx.encrypted_id(parent), policy, kit.clock.now
     )
     assert outcome.profile is not None
     return outcome.profile

@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from hwcheck.bot.check import CheckModels
+from hwcheck.bot.check import CheckModels, vision_of
 from hwcheck.ocr_client import OcrClient, OcrError
 from hwcheck.pipeline.normalize import normalize_image, rotate_image
 from hwcheck.pipeline.solver import RefSolution
@@ -75,7 +75,9 @@ class RussianModule:
         self._dictionary = dictionary
 
     async def recognize(self, image: bytes) -> SubjectPage:
-        page, usage, rotation = await recognize_page(self._llm, image, model=self._models.vision)
+        # модель — по согласию родителя на эту проверку, а не та, с которой создан модуль
+        model = vision_of(self._models)
+        page, usage, rotation = await recognize_page(self._llm, image, model=model)
         if page.role == "textbook":
             return SubjectPage(subject=self.code, role="textbook", usage=usage, rotation=rotation,
                                tasks=textbook_tasks(page, None))  # fmt: skip

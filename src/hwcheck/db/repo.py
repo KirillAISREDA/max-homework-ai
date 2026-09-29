@@ -45,6 +45,9 @@ class StudentProfile:
     grade_year: int
     subject: str | None
     has_consent: bool
+    # версия политики действующего согласия; None — согласия нет. От неё зависит, можно ли
+    # передавать фото сторонней модели (bot/onboarding/policy.py)
+    consent_policy: str | None = None
 
     @property
     def sent_by_parent(self) -> bool:
@@ -132,6 +135,20 @@ class ProfileRepository(Protocol):
         """Согласие на ребёнка 1–4 класса; активное уже есть — False."""
         ...
 
+    async def renew_consent(
+        self,
+        profile_id: int,
+        parent_user_id: int,
+        parent_hash: str,
+        policy_version: str,
+        now: datetime,
+    ) -> str | None:
+        """Новое согласие вместо действующего: прежнее отзывается и остаётся записью.
+
+        Возвращает версию прежнего согласия; None — менять нечего: согласия нет, оно уже по
+        этой версии, или ребёнок не этого родителя."""
+        ...
+
     async def create_invite(
         self,
         invite: NewInvite,
@@ -200,7 +217,9 @@ class ProfileRepository(Protocol):
 _PROFILE = (
     "SELECT p.id, p.user_id, p.parent_user_id, p.grade, p.grade_year, p.subject, "
     "EXISTS (SELECT 1 FROM consents c WHERE c.student_profile_id = p.id "
-    "AND c.revoked_at IS NULL) AS has_consent FROM student_profiles p"
+    "AND c.revoked_at IS NULL) AS has_consent, "
+    "(SELECT c.policy_version FROM consents c WHERE c.student_profile_id = p.id "
+    "AND c.revoked_at IS NULL LIMIT 1) AS consent_policy FROM student_profiles p"
 )
 # класс ссылки ученика — из его профиля, ссылки родителя — из самой ссылки
 _INVITE = (
@@ -240,6 +259,7 @@ def _profile(row: asyncpg.Record) -> StudentProfile:
         grade_year=row["grade_year"],
         subject=row["subject"],
         has_consent=row["has_consent"],
+        consent_policy=row["consent_policy"],
     )
 
 
@@ -404,6 +424,34 @@ class PgProfileRepository:
             now,
         )
         return bool(status == "INSERT 0 1")
+
+    async def renew_consent(
+        self,
+        profile_id: int,
+        parent_user_id: int,
+        parent_hash: str,
+        policy_version: str,
+        now: datetime,
+    ) -> str | None:
+        async with self._pool.acquire() as conn, conn.transaction():
+            # блокировка записи согласия: два нажатия «Согласен» подряд не создадут двух новых
+            active = await conn.fetchrow(
+                "SELECT c.id, c.student_hash, c.policy_version FROM consents c "
+                "JOIN student_profiles p ON p.id = c.student_profile_id "
+                "WHERE c.student_profile_id = $1 AND c.revoked_at IS NULL "
+                "AND p.parent_user_id = $2 FOR UPDATE OF c",
+                profile_id,
+                parent_user_id,
+            )
+            if active is None or active["policy_version"] == policy_version:
+                return None
+            await conn.execute(
+                "UPDATE consents SET revoked_at = $2 WHERE id = $1", active["id"], now
+            )
+            await conn.execute(
+                _CONSENT, parent_hash, profile_id, active["student_hash"], policy_version, now
+            )
+            return str(active["policy_version"])
 
     async def create_invite(
         self,

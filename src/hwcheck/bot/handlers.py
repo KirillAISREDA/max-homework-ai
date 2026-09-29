@@ -17,6 +17,7 @@ from hwcheck.bot.check import (
     recognize_photo,
     split_pages,
     validator_only_grade,
+    vision_override,
 )
 from hwcheck.bot.clarify import (
     MAX_ATTEMPTS,
@@ -34,6 +35,7 @@ from hwcheck.bot.fsm import ChatState, CheckedTask, Clarification, StateStore
 from hwcheck.bot.invites import parse_source
 from hwcheck.bot.max_api import MaxClient
 from hwcheck.bot.models import MaxUpdate
+from hwcheck.bot.onboarding.policy import allows_foreign_models
 from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
 from hwcheck.bot.pages import (
     MAX_PHOTOS,
@@ -101,10 +103,23 @@ REVIEW_DONE = "Эту домашку я уже проверил 👍 Пришл�
 SOLVER_CACHE_DIR = Path(".cache/solver")
 
 
+def _vision_for(
+    settings: Settings, policy_version: str | None
+) -> contextlib.AbstractContextManager[None]:
+    """Сторонней модели фото уходит только с согласием по политике, которая об этом говорит;
+    иначе проверке ничего не назначено, и фото читает модель из `models_for`."""
+    foreign = allows_foreign_models(policy_version)
+    return vision_override(settings.vision_model if foreign else None)
+
+
 def models_for(settings: Settings) -> CheckModels:
-    """Роутинг моделей по шагам (арх. §4) — один источник и для бота, и для раннера."""
+    """Роутинг моделей по шагам (арх. §4) — один источник и для бота, и для раннера.
+
+    Чтение фото — отечественная модель: эти модели собираются один раз при старте и попадают в
+    модули предметов, которые о согласии семьи не знают. Стороннюю модель назначает проверке
+    `_vision_for`, и тот, кто о нём забыл, остаётся на безопасной."""
     return CheckModels(
-        vision=settings.vision_model,
+        vision=settings.vision_model_domestic,
         structure=settings.tutor_model,
         solver=settings.solver_model,
     )
@@ -237,7 +252,10 @@ class Bot:
             route = await self._onboarding.route(update)
             if isinstance(route, CheckPhotos):
                 # предмет знает только онбординг (профиль ученика) — без него всё идёт в математику
-                await self._on_photo(chat_id, user_id, route.urls, route.subject, route.student_id)
+                with _vision_for(self._settings, route.policy_version):
+                    await self._on_photo(
+                        chat_id, user_id, route.urls, route.subject, route.student_id
+                    )
                 return
             if route == "handled":
                 return
@@ -251,7 +269,9 @@ class Bot:
             await self._max.send_message(chat_id, WELCOME)
         elif update.update_type == "message_created" and update.message is not None:
             if update.message.image_urls:
-                await self._on_photo(chat_id, user_id, update.message.image_urls)
+                # без онбординга согласия нет: фото читает GigaChat
+                with _vision_for(self._settings, None):
+                    await self._on_photo(chat_id, user_id, update.message.image_urls)
             elif update.message.body and update.message.body.text:
                 await self._on_text(chat_id, user_id, update.message.body.text)
         elif update.update_type == "message_callback" and update.callback is not None:

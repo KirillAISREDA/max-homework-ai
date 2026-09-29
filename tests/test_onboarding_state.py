@@ -5,7 +5,10 @@ TTL, ключ без id, сброс битого.
 
 import fakeredis
 
+from hwcheck.bot.onboarding.renewal import REMIND_EVERY
 from hwcheck.bot.onboarding.state import (
+    ONBOARDING_TTL_S,
+    RENEWAL_TTL_S,
     InMemoryOnboardingStateStore,
     OnboardingState,
     RedisOnboardingStateStore,
@@ -47,3 +50,17 @@ async def test_in_memory_store() -> None:
     assert await store.get("u") == OnboardingState()
     await store.set("u", sample())
     assert await store.get("u") == sample()
+
+
+async def test_renewal_marks_outlive_the_day() -> None:
+    """Отметка «родителя уже просили обновить согласие» живёт дольше суток: иначе семья,
+    проверяющая домашку раз в день-два, получала бы просьбу при каждой проверке (ревью 29.09)."""
+    client = fakeredis.FakeAsyncRedis()
+    store = RedisOnboardingStateStore(client)
+    await store.set("plain", sample())
+    marked = sample().model_copy(update={"renewal_asked": {"5": 1_789_300_000.0}})
+    await store.set("asked", marked)
+
+    assert await client.ttl("onb:plain") <= ONBOARDING_TTL_S
+    assert await client.ttl("onb:asked") > REMIND_EVERY.total_seconds()
+    assert REMIND_EVERY.total_seconds() < RENEWAL_TTL_S
