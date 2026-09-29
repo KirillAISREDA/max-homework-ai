@@ -1,4 +1,5 @@
-"""Текст отчёта родителю за 7 дней: период по московскому времени, блоки детей, счётчики.
+"""Текст отчёта родителю — по запросу (за 7 дней) и раз в неделю: период по московскому
+времени, блоки детей, счётчики, выключатель рассылки.
 
 В отчёте — класс, предмет и счётчики: ни текста заданий, ни ответов, ни фото, ни имени. Сравнений
 детей между собой, рейтингов и призов в нём нет.
@@ -13,7 +14,10 @@ from hwcheck.bot.report_text import (
     Period,
     period_label,
     render_report,
+    render_weekly,
     request_period,
+    weekly_keyboard,
+    weekly_switched,
 )
 from hwcheck.bot.summary import MAX_MESSAGE_CHARS, message_length
 from hwcheck.db.repo import HomeworkCounts
@@ -291,3 +295,98 @@ def test_report_length_is_counted_the_way_the_bot_counts_other_messages() -> Non
     children = [busy_child(n) for n in range(1, 11)]
     text = render_report(WEEK, children, sends_himself=False)
     assert len(text) < message_length(text) <= MAX_MESSAGE_CHARS
+
+
+# --- отчёт раз в неделю ---
+
+# неделя до воскресенья 04.10.2026 18:00 мск
+SUNDAY_WEEK = Period(
+    start=datetime(2026, 9, 27, 15, 0, tzinfo=UTC),
+    end=datetime(2026, 10, 4, 15, 0, tzinfo=UTC),
+    first_day=date(2026, 9, 27),
+    last_day=date(2026, 10, 4),
+)
+
+
+def test_weekly_report_has_its_own_header_and_the_same_blocks() -> None:
+    children = [
+        child("Ребёнок (7 класс)", totals(4, 23, 18, 3, 2, resolved=2)),
+        child("Ребёнок (3 класс)"),
+    ]
+    weekly = render_weekly(SUNDAY_WEEK, children)
+    assert weekly == (
+        "📈 Отчёт за неделю: 27 сентября – 4 октября\n"
+        "\n"
+        "Ребёнок (7 класс)\n"
+        "Математика — 4 домашки, 23 задания:\n"
+        "• верно — 18\n"
+        "• с ошибкой — 3, из них разобрал с подсказками — 2\n"
+        "• стоит перепроверить — 2\n"
+        "\n"
+        "Ребёнок (3 класс)\n"
+        "Проверок за эти дни не было."
+    )
+    on_request = render_report(SUNDAY_WEEK, children, sends_himself=False)
+    assert on_request.split("\n", 1)[1] == weekly.split("\n", 1)[1]  # блоки — одни и те же
+    assert on_request.startswith("📈 Отчёт за 7 дней: ")  # заголовок по запросу — прежний
+
+
+def test_week_without_homework_is_one_short_line() -> None:
+    expected = (
+        "📈 Отчёт за неделю: 27 сентября – 4 октября\n"
+        "\n"
+        "На этой неделе домашку на проверку не присылали."
+    )
+    assert render_weekly(SUNDAY_WEEK, [child("Ребёнок (7 класс)")]) == expected
+    assert render_weekly(SUNDAY_WEEK, []) == expected
+
+
+def test_long_weekly_report_is_cut_the_same_way() -> None:
+    children = [busy_child(n) for n in range(1, 11)]
+    text = render_weekly(SUNDAY_WEEK, children)
+    assert message_length(text) <= MAX_MESSAGE_CHARS
+    shown = [item for item in children if f"{item.label}\n" in text]
+    assert 0 < len(shown) < 10
+    assert text.endswith(f"Не показано детей: {10 - len(shown)} — отчёт не поместился в сообщение.")
+
+
+def test_weekly_report_has_no_markup_ratings_or_prizes() -> None:
+    children = [
+        child("Ребёнок 1 (7 класс)", totals(4, 23, 18, 3, 2, resolved=2)),
+        child("Ребёнок 2 (7 класс)", totals(2, 9, 9)),
+    ]
+    texts = [render_weekly(SUNDAY_WEEK, children), render_weekly(SUNDAY_WEEK, [])]
+    texts += [weekly_switched(day, enabled=on) for day in range(7) for on in (True, False)]
+    for text in texts:
+        for mark in ("**", "__", "`", "<b>", "#"):
+            assert mark not in text
+        for word in ("рейтинг", "лучше", "хуже", "приз", "подряд", "место"):
+            assert word not in text.lower()
+
+
+@pytest.mark.parametrize(
+    ("weekday", "days"),
+    [
+        (0, "по понедельникам"),
+        (1, "по вторникам"),
+        (2, "по средам"),
+        (3, "по четвергам"),
+        (4, "по пятницам"),
+        (5, "по субботам"),
+        (6, "по воскресеньям"),
+    ],
+)
+def test_weekly_switch_names_the_day(weekday: int, days: str) -> None:
+    assert weekly_keyboard(weekday, enabled=True) == [
+        [{"type": "callback", "text": f"Не присылать {days}", "payload": "ob:weekly:off"}]
+    ]
+    assert weekly_keyboard(weekday, enabled=False) == [
+        [{"type": "callback", "text": f"Присылать {days}", "payload": "ob:weekly:on"}]
+    ]
+    assert weekly_switched(weekday, enabled=True) == (
+        f"Готово! Снова буду присылать отчёт о прогрессе {days}."
+    )
+    assert weekly_switched(weekday, enabled=False) == (
+        f"Хорошо, отчёт {days} больше не присылаю. Отчёт по кнопке «📈 Отчёт о прогрессе» "
+        "остаётся. Вернуть рассылку можно кнопкой ниже."
+    )

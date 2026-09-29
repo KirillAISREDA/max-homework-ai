@@ -18,6 +18,7 @@ import logging
 import signal
 import time
 from collections.abc import Coroutine
+from datetime import datetime
 from pathlib import Path
 from types import FrameType
 from typing import Any
@@ -25,17 +26,25 @@ from typing import Any
 import asyncpg
 from redis.asyncio import Redis
 
-from hwcheck.bot.dispatch import DispatchLimits, UpdateDispatcher
+from hwcheck.bot.dispatch import CANCEL_GRACE_S, DispatchLimits, UpdateDispatcher
 from hwcheck.bot.fsm import InMemoryStateStore, RedisStateStore, StateStore
 from hwcheck.bot.handlers import SOLVER_CACHE_DIR, Bot, models_for
 from hwcheck.bot.max_api import MaxClient
-from hwcheck.bot.onboarding.context import OnboardingContext
+from hwcheck.bot.onboarding.context import MSK, OnboardingContext, utc_now
 from hwcheck.bot.onboarding.policy import POLICY_VERSION, policy_messages
 from hwcheck.bot.onboarding.router import Onboarding
 from hwcheck.bot.onboarding.state import (
     InMemoryOnboardingStateStore,
     OnboardingStateStore,
     RedisOnboardingStateStore,
+)
+from hwcheck.bot.report_schedule import (
+    SEND_TIMEOUT_S,
+    WeeklyReportLoop,
+    WeeklySchedule,
+    deliverable,
+    last_slot,
+    next_slot,
 )
 from hwcheck.bot.subjects import subject_by_code
 from hwcheck.config import Settings
@@ -57,6 +66,10 @@ from hwcheck.subjects.russian.gaps import HunspellDictionary
 logger = logging.getLogger(__name__)
 
 POLL_RETRY_PAUSE_S = 5.0
+# после остановки начатый отчёт успевает уйти (срок отправки и запись отметки), дальше рассылка
+# отменяется. Срок идёт от самой остановки, одновременно с дообработкой апдейтов, и короче неё:
+# к `stop_grace_period` рассылка ничего не добавляет
+WEEKLY_STOP_TIMEOUT_S = SEND_TIMEOUT_S + 5.0
 
 
 def _load_marker(path: Path) -> int | None:
@@ -286,9 +299,10 @@ def make_onboarding(
         events=events,
         cipher=UserIdCipher(settings.user_id_key),
         bot_username=username,
+        weekly_report=settings.weekly_report,
     )
     # отчёт родителю читает ту же базу, что и профили
-    return Onboarding(ctx, PgReportRepository(pool))
+    return Onboarding(ctx, PgReportRepository(pool), weekly_schedule(settings))
 
 
 def log_onboarding_mode(settings: Settings, onboarding: Onboarding | None) -> None:
@@ -296,6 +310,122 @@ def log_onboarding_mode(settings: Settings, onboarding: Onboarding | None) -> No
     logger.info("onboarding: %s", "required" if onboarding is not None else "off")
     if onboarding is None and settings.environment == "prod":
         logger.warning("ONBOARDING_REQUIRED=false в prod: фото проверяются без согласия родителя")
+
+
+def weekly_schedule(settings: Settings) -> WeeklySchedule:
+    """День и час отчёта раз в неделю. Час в тихие часы — бот не стартует: в это время он
+    родителям не пишет, и отчёт уходил бы не в заданный час, а утром."""
+    hour = settings.weekly_report_hour
+    try:
+        return WeeklySchedule(weekday=settings.weekly_report_weekday, hour=hour)
+    except ValueError as exc:
+        # границы дня и часа проверяет `Settings`: сюда доходит только час в тихие часы
+        night, morning = WeeklySchedule().quiet
+        raise SystemExit(
+            f"WEEKLY_REPORT_HOUR={hour}: с {night} до {morning} часов по Москве бот родителям "
+            f"не пишет — задайте час с {morning} до {night - 1}"
+        ) from exc
+
+
+def make_weekly_loop(
+    settings: Settings,
+    onboarding: Onboarding | None,
+    pool: asyncpg.Pool[asyncpg.Record] | None,
+    events: EventLog,
+) -> WeeklyReportLoop | None:
+    """Рассылка отчёта раз в неделю; None — выключена (`WEEKLY_REPORT`) или ей не с чем
+    работать: получатели и отметки недели — в базе, а id MAX родителя шифрует онбординг."""
+    if not settings.weekly_report or onboarding is None or pool is None:
+        return None
+    if onboarding.reporter is None:
+        return None
+    return WeeklyReportLoop(
+        onboarding.reporter,
+        PgReportRepository(pool),
+        events,
+        weekly_schedule(settings),
+        clock=utc_now,
+        pause_s=settings.weekly_report_pause_s,
+    )
+
+
+def _slot_text(slot: datetime) -> str:
+    return slot.astimezone(MSK).strftime("%Y-%m-%d %H:%M MSK")
+
+
+def log_weekly_mode(settings: Settings, weekly: WeeklyReportLoop | None, now: datetime) -> None:
+    """Одна строка при старте: идёт ли рассылка и когда следующий слот. Включена настройкой,
+    но не запущена — предупреждение, а не молчание: родители ждали бы отчёт зря."""
+    if weekly is None:
+        if settings.weekly_report:
+            logger.warning(
+                "weekly report: off — WEEKLY_REPORT=true, но онбординг выключен или нет базы"
+            )
+        else:
+            logger.info("weekly report: off")
+        return
+    schedule = weekly_schedule(settings)
+    line = f"weekly report: on, next slot {_slot_text(next_slot(now, schedule))}"
+    current = last_slot(now, schedule)
+    if now < current + schedule.catchup:
+        # бот стартовал в окне отправки: кому отчёт этой недели не ушёл — уйдёт сейчас (или
+        # утром, если сейчас ночь)
+        waits = "" if deliverable(now, current, schedule) else " after quiet hours"
+        line += f", catching up {_slot_text(current)}{waits}"
+    logger.info(line)
+
+
+async def _stop_weekly(task: asyncio.Task[None]) -> None:
+    """Рассылка не должна пережить раннер: дальше закрываются клиенты MAX и базы."""
+    if task.done():
+        if not task.cancelled() and task.exception() is not None:
+            # цикл ловит сбои сам; сюда доходит только ошибка в нём самом. Бот работает дальше
+            logger.error("weekly report loop crashed: %s", type(task.exception()).__name__)
+        return
+    task.cancel()
+    _done, stuck = await asyncio.wait({task}, timeout=CANCEL_GRACE_S)
+    if stuck:
+        logger.error("weekly report loop still running %g s after cancel", CANCEL_GRACE_S)
+
+
+async def _supervise_weekly(weekly: WeeklyReportLoop, stop: asyncio.Event) -> None:
+    """Рассылка до остановки. После остановки новых отчётов цикл не начинает, а начатый
+    успевает уйти: его отметка уже стоит, и отменённый отчёт был бы потерян."""
+    task = asyncio.create_task(weekly.run(stop))
+    stop_wait = asyncio.ensure_future(stop.wait())
+    try:
+        await asyncio.wait({task, stop_wait}, return_when=asyncio.FIRST_COMPLETED)
+        if not task.done():
+            await asyncio.wait({task}, timeout=WEEKLY_STOP_TIMEOUT_S)
+            if not task.done():
+                logger.warning(
+                    "weekly report loop cancelled: not finished %g s after stop",
+                    WEEKLY_STOP_TIMEOUT_S,
+                )
+    finally:
+        stop_wait.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await stop_wait
+        await _stop_weekly(task)
+
+
+async def _poll_with_weekly(
+    weekly: WeeklyReportLoop | None, stop: asyncio.Event, polling: Coroutine[Any, Any, None]
+) -> None:
+    """Опрос MAX и рядом, отдельной задачей, рассылка отчётов: она не опрашивает MAX и не
+    трогает marker. Возвращается, когда кончились оба."""
+    if weekly is None:
+        await polling
+        return
+    supervisor = asyncio.create_task(_supervise_weekly(weekly, stop))
+    try:
+        await polling
+    finally:
+        if not stop.is_set():
+            # выход по исключению или Ctrl+C: остановки не было, и ждать рассылке нечего
+            supervisor.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await supervisor
 
 
 async def run_polling(settings: Settings) -> None:
@@ -306,6 +436,7 @@ async def run_polling(settings: Settings) -> None:
     except UserIdCipherError as exc:
         raise SystemExit(str(exc)) from exc
     check_onboarding_settings(settings)
+    weekly_schedule(settings)  # час рассылки проверяется до того, как что-то открыто
     events = EventLog(
         Path(settings.events_path), settings.environment, test_users=settings.test_user_hashes
     )
@@ -346,6 +477,8 @@ async def run_polling(settings: Settings) -> None:
             me=me,
         )
         log_onboarding_mode(settings, onboarding)
+        weekly = make_weekly_loop(settings, onboarding, pool, events)
+        log_weekly_mode(settings, weekly, utc_now())
         ocr = None
         if settings.ocr_url:
             # OCR-сервис для языков; пусто — модуль ответит «не смог прочитать тетрадь»
@@ -379,6 +512,8 @@ async def run_polling(settings: Settings) -> None:
             limits.queue_limit,
             limits.shutdown_timeout_s,
         )
-        # клиенты и пул закрываются после выхода из цикла: к этому моменту обработок уже нет
-        await _poll_loop(max_client, bot, marker_path, stop, limits)
+        # клиенты и пул закрываются после выхода из цикла: к этому моменту обработок уже нет,
+        # и рассылка отчётов закончена или отменена
+        polling = _poll_loop(max_client, bot, marker_path, stop, limits)
+        await _poll_with_weekly(weekly, stop, polling)
     logger.info("bot stopped")

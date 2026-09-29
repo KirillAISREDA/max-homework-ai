@@ -1,7 +1,8 @@
 """Хранилище профилей в памяти процесса — для сценарных тестов онбординга.
 
 Повторяет поведение PgProfileRepository, включая исходы гонок; расхождение ловят контрактные тесты
-tests/test_profile_repo.py, которые гоняют обе реализации.
+tests/test_profile_repo.py, которые гоняют обе реализации. Оно же выполняет контракт хранилища
+отчёта родителю (db/reports.py, tests/test_report_repo.py).
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from hwcheck.db.repo import (
     Role,
     StudentProfile,
 )
-from hwcheck.db.reports import SubjectTotals
+from hwcheck.db.reports import SubjectTotals, WeeklyStatus
 
 
 def _utc_now() -> datetime:
@@ -76,6 +77,9 @@ class InMemoryProfileRepository:
         self.waitlist: set[tuple[str, str]] = set()
         self.homeworks: dict[int, Homework] = {}
         self.notify_modes: dict[int, NotifyMode] = {}
+        self.weekly_off: set[int] = set()  # родители, выключившие отчёт раз в неделю
+        # отметки недели: (родитель, слот) → `sending` или чем кончилась отправка
+        self.weekly_reports: dict[tuple[int, datetime], str] = {}
 
     def _next_id(self) -> int:
         self._last_id += 1
@@ -377,6 +381,44 @@ class InMemoryProfileRepository:
             if homework.student_id in own and checked is not None and since <= checked < until:
                 groups.setdefault((homework.student_id, homework.subject), []).append(homework)
         return [_totals(*key, groups[key]) for key in sorted(groups)]
+
+    async def weekly_enabled(self, parent_user_id: int) -> bool:
+        return parent_user_id not in self.weekly_off
+
+    async def set_weekly(self, parent_user_id: int, enabled: bool) -> None:
+        if enabled:
+            self.weekly_off.discard(parent_user_id)
+        else:
+            self.weekly_off.add(parent_user_id)
+
+    def _consented_before(self, parent_user_id: int, slot: datetime) -> bool:
+        own = {p.id for p in self._profiles.values() if p.parent_user_id == parent_user_id}
+        return any(
+            c.profile_id in own and c.revoked_at is None and c.given_at < slot
+            for c in self.consents
+        )
+
+    async def due_parents(self, slot: datetime) -> list[Account]:
+        return [
+            account
+            for account in sorted(self._accounts.values(), key=lambda a: a.id)
+            if account.role == "parent"
+            and account.id not in self.weekly_off
+            and self._consented_before(account.id, slot)
+            and (account.id, slot) not in self.weekly_reports
+        ]
+
+    async def claim_weekly(self, parent_user_id: int, slot: datetime) -> bool:
+        if (parent_user_id, slot) in self.weekly_reports:
+            return False
+        self.weekly_reports[(parent_user_id, slot)] = "sending"
+        return True
+
+    async def finish_weekly(
+        self, parent_user_id: int, slot: datetime, status: WeeklyStatus
+    ) -> None:
+        if (parent_user_id, slot) in self.weekly_reports:
+            self.weekly_reports[(parent_user_id, slot)] = status
 
 
 def _totals(student_id: int, subject: str, homeworks: list[Homework]) -> SubjectTotals:

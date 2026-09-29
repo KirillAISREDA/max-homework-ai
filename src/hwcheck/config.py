@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     # Меньше stop_grace_period в docker-compose.yml (150 с), иначе Docker убьёт бота раньше
     shutdown_timeout_s: float = Field(default=100.0, ge=0)
 
+    # отчёт родителю раз в неделю (bot/report_schedule.py); false — аварийный выключатель:
+    # рассылки нет, отчёт по кнопке работает. Рассылке нужен онбординг (база и ключи id)
+    weekly_report: bool = False
+    # день и час рассылки по московскому времени: 0 — понедельник, 6 — воскресенье. Час — не в
+    # тихие часы (с 22 до 9 бот родителям не пишет): с таким часом бот не стартует
+    weekly_report_weekday: int = Field(default=6, ge=0, le=6)
+    weekly_report_hour: int = Field(default=18, ge=0, le=23)
+    # пауза между родителями в рассылке, секунды: общий предел рассылки у MAX неизвестен
+    weekly_report_pause_s: float = Field(default=0.5, ge=0)
+
     # Роутинг по моделям (арх. §4): Max — vision и сложная математика, Pro — тьютор,
     # Lite — короткие реплики. Идентификаторы сверять с актуальной линейкой GigaChat.
     vision_model: str = "GigaChat-2-Max"

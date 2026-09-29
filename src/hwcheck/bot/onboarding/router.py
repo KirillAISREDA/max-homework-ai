@@ -26,6 +26,7 @@ from hwcheck.bot.onboarding.renewal import ConsentRenewal
 from hwcheck.bot.onboarding.student import StudentSteps
 from hwcheck.bot.onboarding.subject import SubjectStep
 from hwcheck.bot.report import ParentReporter
+from hwcheck.bot.report_schedule import WeeklySchedule
 from hwcheck.bot.subjects import PARENT_SENDS_UP_TO_GRADE
 from hwcheck.db.repo import Account, StudentProfile
 from hwcheck.db.reports import ReportRepository
@@ -92,7 +93,12 @@ Action = Callable[[Actor, Position, str], Awaitable[Route | None]]
 
 
 class Onboarding:
-    def __init__(self, ctx: OnboardingContext, reports: ReportRepository | None = None) -> None:
+    def __init__(
+        self,
+        ctx: OnboardingContext,
+        reports: ReportRepository | None = None,
+        schedule: WeeklySchedule | None = None,
+    ) -> None:
         self._ctx = ctx
         # без хранилища отчёта кнопки «Отчёт о прогрессе» нет нигде, а её payload — не действие
         has_report = reports is not None
@@ -101,7 +107,9 @@ class Onboarding:
         self._parents = ParentSteps(ctx, self._subjects, report=has_report)
         self._linking = Linking(ctx, self._subjects)
         self._renewal = ConsentRenewal(ctx)
-        self._reporter = ParentReporter(ctx, reports) if reports is not None else None
+        # отчёт один на кнопки и на рассылку раз в неделю (bot/runner.py берёт его отсюда):
+        # выключатель под отчётом и в ответ на нажатие называет один и тот же день
+        self.reporter = ParentReporter(ctx, reports, schedule) if reports is not None else None
         # замок живёт, пока его кто-то держит или ждёт: словарь не растёт с числом пользователей
         self._user_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         # тот же контекст, что у шагов: бот берёт notifier отсюда, без онбординга его нет
@@ -123,6 +131,7 @@ class Onboarding:
             "notify": self._notify,
             "renew": self._renew,
             "report": self._report,
+            "weekly": self._weekly,
         }
 
     async def route(self, update: MaxUpdate) -> Route:
@@ -386,9 +395,20 @@ class Onboarding:
         # кнопку мог нажать кто угодно, как и выключатель итогов: отчёт получает только родитель
         # и только о своих детях — их хранилище ищет по аккаунту нажавшего
         account = position.account
-        if self._reporter is None or account is None or account.role != "parent":
+        if self.reporter is None or account is None or account.role != "parent":
             return None
-        await self._reporter.on_request(actor, account)
+        await self.reporter.on_request(actor, account)
+        return "handled"
+
+    async def _weekly(self, actor: Actor, position: Position, arg: str) -> Route | None:
+        # выключатель под отчётом раз в неделю — как выключатель итогов: нажать мог кто угодно,
+        # а меняет его только родитель и только себе
+        account = position.account
+        if self.reporter is None or account is None or account.role != "parent":
+            return None
+        if arg not in ("on", "off"):
+            return None
+        await self.reporter.switch_weekly(actor, account, enabled=arg == "on")
         return "handled"
 
 

@@ -78,7 +78,8 @@ class Linking:
         intro = texts.CHILD_ASKS_CONSENT.format(grade=invite.grade)
         tag = _tag(invite.token_hash)
         buttons = texts.consent_keyboard(f"ob:accept:{tag}", f"ob:decline:{tag}")
-        await ctx.reply(actor, texts.consent_text(intro), buttons, fmt=texts.CONSENT_FORMAT)
+        text = texts.consent_text(intro, weekly=ctx.weekly_report)
+        await ctx.reply(actor, text, buttons, fmt=texts.CONSENT_FORMAT)
 
     async def _precheck(
         self, account: Account | None, invite: Invite | None, kind: InviteKind

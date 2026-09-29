@@ -174,3 +174,17 @@ async def test_parent_with_summaries_off_is_not_promised_them(tmp_path: Path) ->
     await kit.repo.set_notify_mode(account.id, "off")
     await parents(kit).invite_child(me, account, 7)
     assert kit.texts(2)[-2] == texts.FORWARD_TO_CHILD
+
+
+async def test_consent_screen_follows_the_weekly_report_setting(tmp_path: Path) -> None:
+    """Что обещает экран согласия, решает настройка рассылки, а не текст по умолчанию."""
+    kit = make_kit(tmp_path)
+    await parents(kit).ask_consent(actor(2))
+    assert texts.CONSENT_REPORT_ON_REQUEST in kit.last(2)[0]
+    assert texts.CONSENT_REPORT not in kit.last(2)[0]
+
+    weekly = make_kit(tmp_path / "weekly", weekly_report=True)
+    await parents(weekly).ask_consent(actor(2))
+    assert texts.CONSENT_REPORT in weekly.last(2)[0]
+    await parents(weekly).choose_grade(actor(3), None, 7)
+    assert texts.CONSENT_REPORT in weekly.last(3)[0]

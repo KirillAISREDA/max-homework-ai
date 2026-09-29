@@ -34,7 +34,7 @@
 | Error Classifier | 1–3 (только для ошибок) | GigaChat Pro | 1 000 |
 | Tutor: диалог | 8–12 | GigaChat Pro (Lite для простых реплик) | 1 500–2 500 |
 | Exercise Generator | 1–3 | GigaChat Pro | 800 |
-| Parent Report | 1/неделя/ученик | GigaChat Pro | 2 000 |
+| Parent Report | 0 (собирает код из счётчиков проверок) | — | — |
 
 Итого ≈ **20–30 LLM-вызовов и 40–60 тыс. токенов на одну домашнюю работу**.
 При 1 000 работ в день: **25–30 тыс. вызовов, 40–60 млн токенов в сутки**. Это главная статья затрат и главный объект оптимизации (кэш, роутинг по моделям, детерминированная валидация вместо повторных вызовов).
@@ -59,7 +59,7 @@ flowchart TB
         API[Core API<br/>users, homework, sessions, limits]
         ORCH[AI Orchestrator Workers<br/>очередь заданий]
         SM[Student Model Service]
-        REP[Report Scheduler<br/>weekly cron]
+        REP[Report Scheduler<br/>задача в процессе бота]
         ADM[Admin / Review UI]
     end
 
@@ -88,7 +88,8 @@ flowchart TB
     ORCH --> GMAX & GPRO & GLITE
     ORCH --> PG & S3
     ORCH --> SM --> PG
-    REP --> SM & GPRO
+    REP --> PG
+    REP -- отчёт родителю --> GW
     ORCH -- push результат --> GW --> BOT
     ADM --> PG & S3
     K8S -. events .-> CH
@@ -136,7 +137,7 @@ Python-воркеры (например `arq`/`Celery` поверх Managed Redi
 | **Comparator + Error Classifier** | Находит шаг расхождения, классифицирует по таксономии (`calc_error`, `strategy_error`, `condition_misread`, `slip`, …) | Pro, JSON-режим | `confidence < 0.6` → error_type = `unclear`, тьютор задаёт уточняющий вопрос |
 | **Tutor** | Ведёт диалог по tutoring policy (уровни подсказок 0→3), не выдаёт ответ до уровня 3 | Pro; Lite для коротких «да/нет»-реплик | Жёсткие правила в коде: ответ вставляется в промпт только на уровне 3 |
 | **Exercise Generator** | Генерирует похожую задачу + эталон, эталон проверяется Validator'ом | Pro | Задача без валидного эталона отбрасывается, берётся из пула |
-| **Parent Report** | По структурированной истории (не по фото) пишет краткий отчёт | Pro | Шаблон-фолбэк из статистики без LLM |
+| **Parent Report** | Собирает отчёт родителю из счётчиков проверок (таблица `homeworks`), не по фото: `bot/report.py`, `bot/report_text.py` | без LLM | В отчёте только дети с действующим согласием; неделя без домашек — одно короткое сообщение или ничего |
 
 ### 3.4. Student Model Service
 Детерминированный, без LLM в критическом пути.
@@ -146,7 +147,12 @@ Python-воркеры (например `arq`/`Celery` поверх Managed Redi
 - Позже заменяется на BKT/Bayesian без смены контракта.
 
 ### 3.5. Report Scheduler
-CronJob в Kubernetes (воскресенье 18:00) → для каждого активного ученика собирает статистику → Parent Report → пуш родителю через MAX Gateway.
+Задача asyncio внутри процесса бота (`bot/report_schedule.py`), без CronJob, отдельного контейнера и очереди. Раз в минуту смотрит, наступил ли час рассылки (по умолчанию воскресенье 18:00 по Москве), и пишет родителям, у которых есть ребёнок с действующим согласием и нет отметки этой недели. Отчёт собирает код из счётчиков проверок — модель не вызывается, текст отчёта не хранится.
+
+- **Не больше одного раза:** отметка недели (`weekly_reports`) ставится в PostgreSQL до отправки — после рестарта отчёт не уходит второй раз; повторов нет.
+- **Догоняющая отправка:** бот лежал в час рассылки — отчёт уйдёт позже, но не позже чем через 27 часов и не с 22:00 до 09:00 по Москве; дальше неделя пропускается.
+- **Изоляция:** сбой рассылки — событие в журнале, а не сбой бота; рассылка не опрашивает MAX и не трогает marker; при остановке бота начатый отчёт доводится до конца, остальные остаются на следующий старт.
+- Включается настройкой `WEEKLY_REPORT`; подробности — `docs/deploy.md`, «Отчёт родителю раз в неделю». Отчёт по запросу (кнопка «📈 Отчёт о прогрессе») от рассылки не зависит.
 
 ### 3.6. Предметные модули (`src/hwcheck/subjects/`)
 Каркас предметов (спецификация `docs/superpowers/specs/2026-09-16-subjects-framework-design.md`): предмет — это модуль с четырьмя шагами `recognize → resolve_reference → check → start_tutoring` и общими типами `SubjectPage`, `Reference`, `Finding`, `TaskResult`. Бот не знает, какой предмет проверяет: он берёт модуль по коду из реестра (`subjects/registry.py`) и работает с находками, а не с математическим `GradeResult`. Математика — первый модуль (`subjects/math/module.py`), обёртка над существующим пайплайном без изменения поведения.
@@ -192,7 +198,7 @@ CronJob в Kubernetes (воскресенье 18:00) → для каждого �
 | Core API | Deployment | 2 реплики | HPA 2–6 |
 | AI Workers | Deployment | 4 реплики × concurrency 10 (IO-bound) | HPA по длине очереди (KEDA) до 12 |
 | Student Model | Deployment | 1–2 реплики | 2 |
-| Report | CronJob | — | — |
+| Report | задача в процессе бота | — | — |
 | Admin UI | Deployment | 1 реплика | 1 |
 | БД | Evolution Managed PostgreSQL | 2 vCPU / 8 GB, master + replica, PITR-бэкапы | вертикально до 4–8 vCPU |
 | Очередь / кэш | Evolution Managed Redis | Master/Replica, 4 GB | Cluster |
@@ -223,7 +229,7 @@ error_analyses(id, exercise_id, topic, skill, error_type, confidence, explanatio
 tutoring_sessions(id, exercise_id, state, hint_level, messages_jsonb, resolved, created_at)
 drills(id, session_id, task_text, ref_answer, student_answer, correct)
 skill_states(student_id, subject, topic, skill, success_rate, attempts, last_seen, streak)
-parent_reports(id, student_id, period_start, period_end, summary, recommendations, created_at)
+weekly_reports(parent_user_id, period_end, status, claimed_at, finished_at)  -- отметка недели; текст отчёта не хранится
 events(id, user_id, type, payload_jsonb, ts)            -- продуктовая аналитика
 review_queue(id, exercise_id, reason, resolved_by, resolution, created_at)
 prompt_cache(hash, step, result_jsonb, created_at)      -- можно вынести в Redis

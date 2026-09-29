@@ -98,6 +98,10 @@ CONSENT_ABOUT = (
     "Сервис **не решает задания за ребёнка** — он проверяет решение, находит ошибки и "
     "подсказывает, как их исправить."
 )
+# обещание — только о том, что работает (ревью 29.09): рассылка раз в неделю включается
+# настройкой `WEEKLY_REPORT`, и пока она выключена, экран согласия обещает отчёт по запросу
+CONSENT_REPORT = "📈 Раз в неделю или по вашему запросу вы сможете получать отчёт о прогрессе."
+CONSENT_REPORT_ON_REQUEST = "📈 По вашему запросу вы сможете получать отчёт о прогрессе."
 CONSENT_DATA = (
     "🔒 **Что обрабатываем:**\n"
     "• класс и выбранный предмет\n"
@@ -112,7 +116,16 @@ CONSENT_ACCEPT = (
     "данных.\n\n"
     f"📄 Подробнее — **«Полный текст»** (политика {POLICY_VERSION})."
 )
-CONSENT_SUMMARY = "\n\n".join((CONSENT_ABOUT, CONSENT_DATA, CONSENT_ACCEPT))
+
+
+def consent_summary(*, weekly: bool) -> str:
+    """`weekly` — рассылка отчёта раз в неделю включена."""
+    report = CONSENT_REPORT if weekly else CONSENT_REPORT_ON_REQUEST
+    return "\n\n".join((CONSENT_ABOUT, report, CONSENT_DATA, CONSENT_ACCEPT))
+
+
+# текст Кирилла целиком — с включённой рассылкой
+CONSENT_SUMMARY = consent_summary(weekly=True)
 CONSENT_FORMAT: TextFormat = "markdown"
 # что такое сервис, говорит экран согласия; здесь — чего там нет: как проходит проверка
 CHILD_ASKS_CONSENT = (
@@ -187,8 +200,10 @@ def bot_link(username: str) -> str:
     return f"https://max.ru/{username}"
 
 
-def consent_text(intro: str) -> str:
-    return f"{intro}\n\n{CONSENT_SUMMARY}"
+def consent_text(intro: str, *, weekly: bool = False) -> str:
+    """Экран согласия. `weekly` — рассылка отчёта раз в неделю включена: без неё экран
+    обещает только отчёт по запросу."""
+    return f"{intro}\n\n{consent_summary(weekly=weekly)}"
 
 
 def consent_thanks(*, notify: bool) -> str:
