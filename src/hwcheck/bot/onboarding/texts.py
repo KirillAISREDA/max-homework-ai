@@ -98,6 +98,9 @@ CONSENT_ABOUT = (
     "Сервис **не решает задания за ребёнка** — он проверяет решение, находит ошибки и "
     "подсказывает, как их исправить."
 )
+# отчёт есть и по кнопке, и раз в неделю (bot/report.py): обещание не зависит от настройки
+# рассылки — по запросу отчёт работает всегда
+CONSENT_REPORT = "📈 Раз в неделю или по вашему запросу вы сможете получать отчёт о прогрессе."
 CONSENT_DATA = (
     "🔒 **Что обрабатываем:**\n"
     "• класс и выбранный предмет\n"
@@ -112,7 +115,7 @@ CONSENT_ACCEPT = (
     "данных.\n\n"
     f"📄 Подробнее — **«Полный текст»** (политика {POLICY_VERSION})."
 )
-CONSENT_SUMMARY = "\n\n".join((CONSENT_ABOUT, CONSENT_DATA, CONSENT_ACCEPT))
+CONSENT_SUMMARY = "\n\n".join((CONSENT_ABOUT, CONSENT_REPORT, CONSENT_DATA, CONSENT_ACCEPT))
 CONSENT_FORMAT: TextFormat = "markdown"
 # что такое сервис, говорит экран согласия; здесь — чего там нет: как проходит проверка
 CHILD_ASKS_CONSENT = (

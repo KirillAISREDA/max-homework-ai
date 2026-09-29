@@ -16,7 +16,7 @@ from hwcheck.bot.max_api import Buttons, MaxClient, TextFormat
 from hwcheck.bot.onboarding.state import OnboardingStateStore
 from hwcheck.bot.subjects import school_year
 from hwcheck.crypto import UserIdCipher
-from hwcheck.db.repo import ProfileRepository
+from hwcheck.db.repo import Account, ProfileRepository
 from hwcheck.events import EventLog, anonymize
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,21 @@ class OnboardingContext:
     def log(self, event: str, actor: Actor, *, user_initiated: bool = True, **fields: Any) -> None:
         self.events.log(event, user_id=actor.user_id, user_initiated=user_initiated, **fields)
 
+    def log_account(self, event: str, account: Account, **fields: Any) -> None:
+        """Событие без автора: рассылку по расписанию никто не нажимал, событие — о получателе.
+
+        Id MAX расшифровывается здесь и уходит только в журнал, а тот пишет хэш и сам узнаёт
+        тестера (`TEST_USERS`) — как в событиях нажатий. Дальше контекста id не идёт."""
+        user_id = self.cipher.decrypt(account.user_id_enc)
+        self.events.log(event, user_id=user_id, user_initiated=False, **fields)
+
+    async def send_to(
+        self, user_id_enc: bytes, text: str, *, buttons: Buttons | None = None
+    ) -> None:
+        """Сообщение по шифротексту id MAX: расшифровка — только здесь, в момент отправки. Не
+        дошло — исключение: что с ним делать, решает вызывающий."""
+        await self.max.send_to_user(self.cipher.decrypt(user_id_enc), text, buttons=buttons)
+
     async def notify(
         self,
         actor: Actor,
@@ -100,7 +115,7 @@ class OnboardingContext:
         """Сообщение второй стороне связки. Не дошло (бот заблокирован) — событие notify_failed,
         а не сбой апдейта: у автора действие уже выполнено (§9.4, §11). Возвращает, дошло ли."""
         try:
-            await self.max.send_to_user(self.cipher.decrypt(user_id_enc), text, buttons=buttons)
+            await self.send_to(user_id_enc, text, buttons=buttons)
         except Exception as exc:
             logger.warning("notify failed: %s (%s)", kind, type(exc).__name__)
             self.log(

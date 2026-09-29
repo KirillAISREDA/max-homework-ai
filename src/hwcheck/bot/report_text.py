@@ -1,4 +1,5 @@
-"""Текст отчёта родителю о проверках за период — чистые функции, без базы и сети.
+"""Текст отчёта родителю о проверках за период — чистые функции, без базы и сети. Отчёт по
+запросу и отчёт раз в неделю собираются из одних и тех же блоков детей.
 
 Отчёт собирается кодом из счётчиков, модель в нём не участвует. В тексте — класс, предмет и
 числа: ни текста заданий, ни ответов, ни фото, ни имени (152-ФЗ). Детей между собой отчёт не
@@ -14,6 +15,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 
+from hwcheck.bot.max_api import Buttons, callback_button
 from hwcheck.bot.notifier import plural
 from hwcheck.bot.onboarding.context import MSK
 from hwcheck.bot.subjects import subject_by_code
@@ -31,6 +33,20 @@ MONTHS_GENITIVE = (
     "января", "февраля", "марта", "апреля", "мая", "июня",
     "июля", "августа", "сентября", "октября", "ноября", "декабря",
 )  # fmt: skip
+
+# отчёт раз в неделю (bot/report_schedule.py): неделя — 7 суток до часа рассылки
+WEEKLY_HEADER = "📈 Отчёт за неделю: {period}"
+WEEKLY_EMPTY = "На этой неделе домашку на проверку не присылали."
+# «присылать по воскресеньям»: день рассылки задаёт настройка, по индексу — с понедельника
+WEEKDAYS_DATIVE = (
+    "по понедельникам", "по вторникам", "по средам", "по четвергам",
+    "по пятницам", "по субботам", "по воскресеньям",
+)  # fmt: skip
+WEEKLY_SWITCHED_OFF = (
+    "Хорошо, отчёт {days} больше не присылаю. Отчёт по кнопке «📈 Отчёт о прогрессе» остаётся. "
+    "Вернуть рассылку можно кнопкой ниже."
+)
+WEEKLY_SWITCHED_ON = "Готово! Снова буду присылать отчёт о прогрессе {days}."
 
 
 @dataclass(frozen=True)
@@ -134,3 +150,27 @@ def render_report(period: Period, children: Sequence[ChildReport], *, sends_hims
         waiting = WAITING_FOR_PARENT if sends_himself else WAITING_FOR_CHILD
         return f"{header}\n\n{NO_CHECKS} {waiting}"
     return _fit(header, [_child_block(child) for child in children])
+
+
+def render_weekly(period: Period, children: Sequence[ChildReport]) -> str:
+    """Отчёт раз в неделю: свой заголовок и те же блоки детей, что по запросу. Домашек за
+    неделю не было — одна строка: отчёта родитель не просил, и объяснять ему, как пользоваться
+    ботом, незачем. Слать ли такую строку вообще, решает рассылка (bot/report.py)."""
+    header = WEEKLY_HEADER.format(period=period_label(period.first_day, period.last_day))
+    if not any(child.subjects for child in children):
+        return f"{header}\n\n{WEEKLY_EMPTY}"
+    return _fit(header, [_child_block(child) for child in children])
+
+
+def weekly_keyboard(weekday: int, *, enabled: bool) -> Buttons:
+    """Под отчётом раз в неделю — выключатель; под подтверждением отключения — кнопка
+    «обратно». Аргумент payload — только `on` / `off`: выключатель меняет нажавший и себе."""
+    days = WEEKDAYS_DATIVE[weekday]
+    if enabled:
+        return [[callback_button(f"Не присылать {days}", "ob:weekly:off")]]
+    return [[callback_button(f"Присылать {days}", "ob:weekly:on")]]
+
+
+def weekly_switched(weekday: int, *, enabled: bool) -> str:
+    text = WEEKLY_SWITCHED_ON if enabled else WEEKLY_SWITCHED_OFF
+    return text.format(days=WEEKDAYS_DATIVE[weekday])

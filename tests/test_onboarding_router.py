@@ -9,6 +9,7 @@ from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.onboarding import texts
 from hwcheck.bot.onboarding.policy import policy_messages
 from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
+from hwcheck.bot.report_schedule import WeeklySchedule
 from hwcheck.db.repo import HomeworkCounts
 from onboarding_kit import (
     Kit,
@@ -540,6 +541,136 @@ async def test_without_report_storage_there_is_no_button_and_no_action(tmp_path:
     assert kit.last(101)[1] == notifier.switch_keyboard(enabled=True)
     assert payloads(kit.last(101)[1]) == ["ob:notify:off"]
     assert kit.events("parent_report_sent") == [] and kit.events("parent_report_failed") == []
+
+
+WEEKLY_OFF = [
+    [{"type": "callback", "text": "Не присылать по воскресеньям", "payload": "ob:weekly:off"}]
+]
+WEEKLY_ON = [[{"type": "callback", "text": "Присылать по воскресеньям", "payload": "ob:weekly:on"}]]
+
+
+async def test_parent_switches_weekly_report_off_and_back(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx, kit.repo)
+    await ready_student(kit, user_id=1)
+    parent = await kit.repo.get_account(actor(101).user_hash)
+    assert parent is not None
+    await kit.repo.set_notify_mode(parent.id, "off")
+
+    assert await ob.route(press(101, "ob:weekly:off")) == "handled"
+    assert not await kit.repo.weekly_enabled(parent.id)
+    text_off, buttons = kit.last(101)
+    assert text_off.startswith("Хорошо, отчёт по воскресеньям больше не присылаю.")
+    assert buttons == WEEKLY_ON
+    assert await ob.route(press(101, "ob:weekly:off")) == "handled"  # второе нажатие
+    assert not await kit.repo.weekly_enabled(parent.id)
+
+    assert await ob.route(press(101, "ob:weekly:on")) == "handled"
+    assert await kit.repo.weekly_enabled(parent.id)
+    assert kit.last(101) == (
+        "Готово! Снова буду присылать отчёт о прогрессе по воскресеньям.",
+        WEEKLY_OFF,
+    )
+    assert [e["enabled"] for e in kit.events("weekly_report_set")] == [False, False, True]
+    assert {e["user"] for e in kit.events("weekly_report_set")} == {actor(101).user_hash}
+    assert kit.max.callbacks == ["cb-ob:weekly:off", "cb-ob:weekly:off", "cb-ob:weekly:on"]
+    assert kit.events("button_pressed")[-1]["payload"] == "ob:weekly"
+    # выключатель отчёта — свой: итоги как были выключены, так и остались, и наоборот
+    assert await kit.repo.notify_mode(parent.id) == "off"
+    await ob.route(press(101, "ob:notify:on"))
+    await ob.route(press(101, "ob:weekly:off"))
+    assert await kit.repo.notify_mode(parent.id) == "instant"
+    await ob.route(press(101, "ob:notify:off"))
+    assert not await kit.repo.weekly_enabled(parent.id)
+
+
+async def test_weekly_switch_follows_the_day_of_the_schedule(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx, kit.repo, WeeklySchedule(weekday=4, hour=17))
+    await ready_student(kit, user_id=1)
+
+    await ob.route(press(101, "ob:weekly:off"))
+    text_off, buttons = kit.last(101)
+    assert text_off.startswith("Хорошо, отчёт по пятницам больше не присылаю.")
+    assert [b["text"] for row in buttons or [] for b in row] == ["Присылать по пятницам"]
+    assert payloads(buttons) == ["ob:weekly:on"]
+
+
+async def test_report_on_request_works_with_weekly_report_switched_off(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx, kit.repo)
+    child = await ready_student(kit, user_id=1)
+    await kit.repo.add_homework(child.id, "math", HomeworkCounts(3, 3, 0, 0))
+
+    await ob.route(press(101, "ob:weekly:off"))
+    assert await ob.route(press(101, "ob:report")) == "handled"
+    assert kit.last(101)[0].startswith(REPORT_HEADER)
+
+
+async def test_only_parent_switches_own_weekly_report(tmp_path: Path) -> None:
+    """Payload недоверенный: ребёнок (или посторонний) не выключит отчёт родителю."""
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx, kit.repo)
+    await ready_student(kit, user_id=1)
+    parent = await kit.repo.get_account(actor(101).user_hash)
+    assert parent is not None
+
+    for payload in ("ob:weekly:off", "ob:weekly:on"):
+        assert await ob.route(press(1, payload)) == "handled"  # ребёнок переслал себе кнопку
+        assert kit.last(1) == (texts.INSTRUCTION_STUDENT, None)
+        assert await ob.route(press(9, payload)) == "handled"  # посторонний без аккаунта
+        assert kit.last(9) == (texts.HELLO, texts.role_keyboard())
+    assert await kit.repo.get_account(actor(9).user_hash) is None
+    assert await kit.repo.weekly_enabled(parent.id)
+    assert kit.events("weekly_report_set") == []
+
+
+async def test_foreign_weekly_payloads_change_nothing(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx, kit.repo)
+    await ready_student(kit, user_id=1)
+    parent = await kit.repo.get_account(actor(101).user_hash)
+    assert parent is not None
+    other = await kit.repo.get_or_create_account(actor(7).user_hash, b"x", "parent")
+
+    foreign = (
+        "ob:weekly",
+        "ob:weekly:",
+        "ob:weekly:garbage",
+        "ob:weekly:off:1",
+        "ob:weekly:OFF",
+        f"ob:weekly:off:{other.id}",
+        f"ob:weekly:{other.id}",
+        "ob:weekly:off ",
+        "ob:weekly::off",
+        "ob:Weekly:off",
+    )
+    for payload in foreign:
+        assert await ob.route(press(101, payload)) == "handled", payload
+        assert kit.last(101)[0].startswith(texts.PARENT_STATUS_HEADER), payload
+    assert await kit.repo.weekly_enabled(parent.id)
+    assert kit.events("weekly_report_set") == []
+    # в журнал — только действие: чужой аргумент туда не попадает
+    assert all(e["payload"].count(":") == 1 for e in kit.events("button_pressed"))
+
+    # выключает родитель только себе: в payload нет ничьих id
+    await ob.route(press(101, "ob:weekly:off"))
+    assert not await kit.repo.weekly_enabled(parent.id)
+    assert await kit.repo.weekly_enabled(other.id)
+
+
+async def test_without_report_storage_weekly_switch_is_not_an_action(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path)
+    ob = Onboarding(kit.ctx)
+    await ready_student(kit, user_id=1)
+    parent = await kit.repo.get_account(actor(101).user_hash)
+    assert parent is not None
+
+    assert await ob.route(press(101, "ob:weekly:off")) == "handled"  # как неизвестное действие
+    assert kit.last(101)[0].startswith(texts.PARENT_STATUS_HEADER)
+    assert await kit.repo.weekly_enabled(parent.id)
+    assert kit.events("weekly_report_set") == []
+    assert ob.reporter is None
 
 
 async def test_start_writes_traffic_source(tmp_path: Path) -> None:

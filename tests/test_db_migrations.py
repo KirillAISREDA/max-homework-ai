@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from pathlib import Path
 
 import asyncpg
@@ -26,6 +27,7 @@ TABLES = {
     "schema_migrations", "users", "student_profiles", "parent_settings", "consents", "invites",
     "homeworks", "subject_waitlist", "login_attempts",
     "kb_pages", "kb_tasks", "kb_answers", "kb_rules", "kb_words", "findings",
+    "weekly_reports",
 }  # fmt: skip
 
 
@@ -56,7 +58,7 @@ async def test_migrations_create_schema_once(schema: str) -> None:
     try:
         assert await apply_migrations(conn) == [
             "001_onboarding.sql", "002_children.sql", "003_knowledge_base.sql",
-            "004_notify_instant.sql",
+            "004_notify_instant.sql", "005_weekly_report.sql",
         ]  # fmt: skip
         assert await apply_migrations(conn) == []
         rows = await conn.fetch(
@@ -162,7 +164,7 @@ async def test_create_pool_applies_migrations(schema: str) -> None:
     pool = await create_pool(database_url(), server_settings={"search_path": schema})
     try:
         async with pool.acquire() as conn:
-            assert await conn.fetchval("SELECT count(*) FROM schema_migrations") == 4
+            assert await conn.fetchval("SELECT count(*) FROM schema_migrations") == 5
     finally:
         await pool.close()
 
@@ -212,6 +214,83 @@ async def test_notify_mode_becomes_instant(schema: str, tmp_path: Path) -> None:
         await conn.execute(change, newcomer, "digest")  # сводка появится позже
         with pytest.raises(asyncpg.CheckViolationError):
             await conn.execute(change, newcomer, "weekly")
+    finally:
+        await conn.close()
+
+
+async def test_weekly_report_is_on_for_parents_who_already_have_settings(
+    schema: str, tmp_path: Path
+) -> None:
+    """005: родитель, успевший выключить итоги, про отчёт раз в неделю ещё не решал — отчёт у
+    него включён, а его выбор по итогам остаётся как был."""
+    names = sorted(path.name for path in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql"))
+    before, migration = names[:4], "005_weekly_report.sql"
+    assert names[4] == migration
+    for name in before:
+        (tmp_path / name).write_text(
+            (MIGRATIONS_DIR / name).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    parent = (
+        "INSERT INTO users (max_user_hash, max_user_id_enc, role) "
+        "VALUES ($1, 'x', 'parent') RETURNING id"
+    )
+    settings = (
+        "SELECT u.max_user_hash, s.notify_mode, s.weekly_report FROM parent_settings s "
+        "JOIN users u ON u.id = s.user_id"
+    )
+    conn = await connect(schema)
+    try:
+        assert await apply_migrations(conn, tmp_path) == before
+        silent, usual = [await conn.fetchval(parent, name) for name in ("p1", "p2")]
+        chosen = "INSERT INTO parent_settings (user_id, notify_mode) VALUES ($1, $2)"
+        await conn.execute(chosen, silent, "off")
+        await conn.execute(chosen, usual, "instant")
+
+        (tmp_path / migration).write_text(
+            (MIGRATIONS_DIR / migration).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        assert await apply_migrations(conn, tmp_path) == [migration]
+        rows = {row["max_user_hash"]: tuple(row)[1:] for row in await conn.fetch(settings)}
+        assert rows == {"p1": ("off", True), "p2": ("instant", True)}
+
+        newcomer = await conn.fetchval(parent, "p3")
+        await conn.execute("INSERT INTO parent_settings (user_id) VALUES ($1)", newcomer)
+        rows = {row["max_user_hash"]: tuple(row)[1:] for row in await conn.fetch(settings)}
+        assert rows["p3"] == ("instant", True)
+    finally:
+        await conn.close()
+
+
+async def test_weekly_report_marks(schema: str) -> None:
+    """Отметка недели: одна на родителя и слот, статус — из списка, вместе с аккаунтом
+    удаляется (удаление данных по запросу — docs/deploy.md)."""
+    mark = "INSERT INTO weekly_reports (parent_user_id, period_end) VALUES ($1, $2)"
+    conn = await connect(schema)
+    try:
+        await apply_migrations(conn)
+        parent = await conn.fetchval(
+            "INSERT INTO users (max_user_hash, max_user_id_enc, role) "
+            "VALUES ('p1', 'x', 'parent') RETURNING id"
+        )
+        slot = await conn.fetchval("SELECT timestamptz '2026-10-04 18:00+03'")
+        await conn.execute(mark, parent, slot)
+        row = await conn.fetchrow("SELECT * FROM weekly_reports")
+        assert row is not None
+        assert (row["status"], row["finished_at"]) == ("sending", None)
+        assert row["claimed_at"] is not None and row["period_end"] == slot
+        with pytest.raises(asyncpg.UniqueViolationError):  # неделя отмечается один раз
+            await conn.execute(mark, parent, slot)
+        await conn.execute(mark, parent, slot + timedelta(days=7))
+        change = "UPDATE weekly_reports SET status = $1 WHERE period_end = $2"
+        for status in ("sent", "failed", "skipped", "sending"):
+            await conn.execute(change, status, slot)
+        with pytest.raises(asyncpg.CheckViolationError):
+            await conn.execute(change, "retry", slot)
+        with pytest.raises(asyncpg.ForeignKeyViolationError):  # отметка — только у аккаунта
+            await conn.execute(mark, parent + 100, slot)
+
+        await conn.execute("DELETE FROM users WHERE id = $1", parent)
+        assert await conn.fetchval("SELECT count(*) FROM weekly_reports") == 0
     finally:
         await conn.close()
 
