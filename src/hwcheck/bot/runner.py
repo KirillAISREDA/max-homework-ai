@@ -44,6 +44,7 @@ from hwcheck.db.findings import PgFindingsRepository
 from hwcheck.db.kb import PgKnowledgeBase
 from hwcheck.db.pool import create_pool
 from hwcheck.db.repo import PgProfileRepository
+from hwcheck.db.reports import PgReportRepository
 from hwcheck.events import EventLog, set_id_hash_key
 from hwcheck.llm.journal import JournaledLLM
 from hwcheck.llm.router import make_llm
@@ -286,7 +287,8 @@ def make_onboarding(
         cipher=UserIdCipher(settings.user_id_key),
         bot_username=username,
     )
-    return Onboarding(ctx)
+    # отчёт родителю читает ту же базу, что и профили
+    return Onboarding(ctx, PgReportRepository(pool))
 
 
 def log_onboarding_mode(settings: Settings, onboarding: Onboarding | None) -> None:

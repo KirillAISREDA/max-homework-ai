@@ -6,8 +6,9 @@ tests/test_profile_repo.py, которые гоняют обе реализац�
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from hwcheck.bot.invites import InviteKind, NewInvite
 from hwcheck.db.repo import (
@@ -22,6 +23,11 @@ from hwcheck.db.repo import (
     Role,
     StudentProfile,
 )
+from hwcheck.db.reports import SubjectTotals
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 @dataclass
@@ -58,7 +64,9 @@ class _Consent:
 
 
 class InMemoryProfileRepository:
-    def __init__(self) -> None:
+    def __init__(self, clock: Callable[[], datetime] = _utc_now) -> None:
+        # время проверки домашки в базе ставит `now()`; здесь — часы, которые тест двигает сам
+        self._clock = clock
         self._accounts: dict[str, Account] = {}
         self._profiles: dict[int, _Profile] = {}
         self._invites: dict[str, _Invite] = {}
@@ -333,7 +341,14 @@ class InMemoryProfileRepository:
     ) -> Homework | None:
         if student_id not in self._profiles:
             return None
-        homework = Homework(self._next_id(), student_id, subject, counts, errors_resolved=0)
+        homework = Homework(
+            self._next_id(),
+            student_id,
+            subject,
+            counts,
+            errors_resolved=0,
+            created_at=self._clock(),
+        )
         self.homeworks[homework.id] = homework
         return homework
 
@@ -350,3 +365,26 @@ class InMemoryProfileRepository:
 
     async def set_notify_mode(self, parent_user_id: int, mode: NotifyMode) -> None:
         self.notify_modes[parent_user_id] = mode
+
+    async def totals(
+        self, parent_user_id: int, since: datetime, until: datetime
+    ) -> list[SubjectTotals]:
+        """Контракт `ReportRepository` (db/reports.py): итоги по детям родителя за период."""
+        own = {p.id for p in self._profiles.values() if p.parent_user_id == parent_user_id}
+        groups: dict[tuple[int, str], list[Homework]] = {}
+        for homework in self.homeworks.values():
+            checked = homework.created_at
+            if homework.student_id in own and checked is not None and since <= checked < until:
+                groups.setdefault((homework.student_id, homework.subject), []).append(homework)
+        return [_totals(*key, groups[key]) for key in sorted(groups)]
+
+
+def _totals(student_id: int, subject: str, homeworks: list[Homework]) -> SubjectTotals:
+    counts = HomeworkCounts(
+        total=sum(h.counts.total for h in homeworks),
+        correct=sum(h.counts.correct for h in homeworks),
+        wrong=sum(h.counts.wrong for h in homeworks),
+        uncertain=sum(h.counts.uncertain for h in homeworks),
+    )
+    resolved = sum(h.errors_resolved for h in homeworks)
+    return SubjectTotals(student_id, subject, len(homeworks), counts, errors_resolved=resolved)

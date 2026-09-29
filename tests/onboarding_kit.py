@@ -101,8 +101,9 @@ class Kit:
 
 def make_kit(tmp_path: Path) -> Kit:
     fake = FakeMax()
-    repo = InMemoryProfileRepository()
     clock = Clock()
+    # часы общие с контекстом: домашка записывается временем сценария и попадает в период отчёта
+    repo = InMemoryProfileRepository(clock)
     events_path = tmp_path / "events.jsonl"
     ctx = OnboardingContext(
         max=fake,  # type: ignore[arg-type]

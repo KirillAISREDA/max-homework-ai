@@ -40,9 +40,14 @@ def notebook(lines: list[tuple[int, str]]) -> VisionPage:
 
 
 def make_bot(
-    tmp_path: Path, lines: list[tuple[int, str]] | None = ONE_ERROR, *, onboarding: bool = True
+    tmp_path: Path,
+    lines: list[tuple[int, str]] | None = ONE_ERROR,
+    *,
+    onboarding: bool = True,
+    reports: bool = False,
 ) -> tuple[Bot, Kit]:
-    """`lines=None` — распознавание не подменено: без LLM проверка падает (`check_failed`)."""
+    """`lines=None` — распознавание не подменено: без LLM проверка падает (`check_failed`).
+    `reports` — у онбординга есть хранилище отчёта родителю, как в prod."""
     kit = make_kit(tmp_path)
     bot = Bot(
         kit.max,  # type: ignore[arg-type]
@@ -50,7 +55,7 @@ def make_bot(
         kit.ctx.dialogs,
         kit.ctx.events,
         Settings(_env_file=None),
-        onboarding=Onboarding(kit.ctx) if onboarding else None,
+        onboarding=Onboarding(kit.ctx, kit.repo if reports else None) if onboarding else None,
     )
     if lines is not None:
         page = notebook(lines)
@@ -106,6 +111,35 @@ async def test_parent_is_told_after_child_summary(tmp_path: Path) -> None:
     assert (sent["kind"], sent["component"]) == ("homework_checked", "notifier")
     # в журнале — обезличенный инициатор (ребёнок), id MAX родителя туда не попадает
     assert sent["user"] == actor(CHILD).user_hash and sent["user_initiated"] is False
+    assert "update_failed" not in event_types(kit)
+
+
+async def test_notification_offers_report_and_report_counts_the_check(tmp_path: Path) -> None:
+    """Под итогом — вторая строка «Отчёт о прогрессе»; проверка из итога входит в отчёт."""
+    bot, kit = make_bot(tmp_path, reports=True)
+    await ready_student(kit)
+    await bot.handle_update(photo(CHILD, "https://files/1.jpg"))
+
+    keyboard = switch_keyboard(enabled=True, report=True)
+    assert kit.max.to_users == [(PARENT, CHECKED, keyboard)]
+    assert [[button["payload"] for button in row] for row in keyboard] == [
+        ["ob:notify:off"],
+        ["ob:report"],
+    ]
+
+    await bot.handle_update(press(PARENT, "ob:report"))
+    report, buttons = kit.last(PARENT)
+    assert report == (
+        "📈 Отчёт за 7 дней: 10–16 сентября\n"
+        "\n"
+        "Ребёнок (7 класс)\n"
+        "Математика — 1 домашка, 4 задания:\n"
+        "• верно — 3\n"
+        "• с ошибкой — 1"
+    )
+    assert buttons is None
+    for leaked in ("2 + 2", "= 5", "№19"):  # ни решений, ни номеров заданий
+        assert leaked not in report
     assert "update_failed" not in event_types(kit)
 
 

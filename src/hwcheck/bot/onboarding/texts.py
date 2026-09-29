@@ -289,6 +289,20 @@ def add_child_keyboard() -> Buttons:
     return [[callback_button("Добавить ребёнка", "ob:addchild")]]
 
 
+# отчёт родителю по запросу (bot/report.py)
+REPORT_BUTTON = "📈 Отчёт о прогрессе"
+
+
+def report_row() -> list[dict[str, str]]:
+    """Строка с кнопкой отчёта. Аргумента у payload нет: отчёт — всегда о детях нажавшего."""
+    return [callback_button(REPORT_BUTTON, "ob:report")]
+
+
+def status_keyboard(*, report: bool) -> Buttons:
+    """Под списком детей; `report` — есть дети, о которых можно отчитаться."""
+    return [*add_child_keyboard(), report_row()] if report else add_child_keyboard()
+
+
 def whose_keyboard(children: Sequence[StudentProfile]) -> Buttons:
     """Дети 1–4 класса по классу; одинаковый класс — «ребёнок N» по порядку добавления."""
     total = Counter(child.grade for child in children)

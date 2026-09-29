@@ -92,6 +92,8 @@ class Homework:
     subject: str
     counts: HomeworkCounts
     errors_resolved: int  # разборов, дошедших до верного ответа
+    # когда проверена: по времени домашка попадает в период отчёта родителю (db/reports.py)
+    created_at: datetime | None = None
 
 
 class ProfileRepository(Protocol):
@@ -234,7 +236,7 @@ _CONSENT = (
 
 _HOMEWORK = (
     "id, student_id, subject, tasks_total, tasks_correct, tasks_wrong, tasks_uncertain, "
-    "errors_resolved"
+    "errors_resolved, created_at"
 )
 
 # type-выражение ленивое: PoolConnectionProxy не параметризуется во время выполнения
@@ -276,6 +278,7 @@ def _homework(row: asyncpg.Record) -> Homework:
         subject=row["subject"],
         counts=counts,
         errors_resolved=row["errors_resolved"],
+        created_at=row["created_at"],
     )
 
 

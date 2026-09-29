@@ -100,6 +100,35 @@ async def test_status_lists_children_and_waiting_links(tmp_path: Path) -> None:
     assert kit.last(9) == (texts.PARENT_GRADE, texts.grade_keyboard("pgrade"))
 
 
+async def test_status_offers_report_only_when_there_are_children(tmp_path: Path) -> None:
+    """Кнопка отчёта — под списком детей; пока ребёнок не открыл ссылку, отчитываться не о ком."""
+    kit = make_kit(tmp_path)
+    steps = ParentSteps(kit.ctx, SubjectStep(kit.ctx), report=True)
+    me = actor(2)
+    await steps.invite_child(me, None, 7)
+    waiting = await kit.repo.get_account(me.user_hash)
+    assert waiting is not None
+    await steps.show_status(me, waiting)
+    assert kit.last(2) == (texts.parent_status([], [7]), texts.add_child_keyboard())
+
+    account, child = await young_child(kit, 2)
+    await steps.show_status(me, account)
+    status, buttons = kit.last(2)
+    assert status == texts.parent_status([child], [7])
+    assert buttons == [
+        [{"type": "callback", "text": "Добавить ребёнка", "payload": "ob:addchild"}],
+        [{"type": "callback", "text": "📈 Отчёт о прогрессе", "payload": "ob:report"}],
+    ]
+
+    # хранилища отчёта нет (`report=False`) — кнопки нет и при детях
+    await parents(kit).show_status(me, account)
+    assert kit.last(2) == (texts.parent_status([child], [7]), texts.add_child_keyboard())
+
+    lonely = await kit.repo.get_or_create_account("p9", b"x", "parent")
+    await steps.show_status(actor(9), lonely)
+    assert kit.last(9) == (texts.PARENT_GRADE, texts.grade_keyboard("pgrade"))
+
+
 async def test_photo_goes_to_check_with_one_young_child(tmp_path: Path) -> None:
     kit = make_kit(tmp_path)
     older = await kit.repo.get_or_create_account(actor(3).user_hash, b"x", "parent")
