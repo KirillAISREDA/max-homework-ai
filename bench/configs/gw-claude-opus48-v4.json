@@ -1,0 +1,1 @@
+{"name": "gw-claude-opus48-v4", "vision_model": "gw:claude-opus-4.8", "structure_model": "gw:gigachat-2-max", "solver_model": "gw:gigachat-2-max", "vision_prompt": "v4-claude"}
