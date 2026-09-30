@@ -31,7 +31,7 @@ ItemStatus = Literal["error", "doubt", "ok", "unknown"]
 _ITEM_GROUPS: tuple[tuple[ItemStatus, str], ...] = (
     ("doubt", "Под вопросом"),
     ("ok", "Верно"),
-    ("unknown", "Не проверил"),
+    ("unknown", "Не смог проверить"),
 )
 
 
@@ -65,14 +65,9 @@ def verdict_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str
     if strength == "verified":
         error = next(f for f in findings if f.is_error)
         button = [callback_button(f"Разобрать {lower(label)}", f"tutor:{index}")]
-        wrong = [f"{name})" for name, status in items if status == "error"]
+        wrong = [name for name, status in items if status == "error"]
         if wrong and error.kind == "arithmetic":
-            head = (
-                f"есть ошибка в пункте {wrong[0]}"
-                if len(wrong) == 1
-                else f"есть ошибки в пунктах {', '.join(wrong)}"
-            )
-            return f"{label} — {head} ❌{_other_items(items)}", button
+            return f"{label} — {_error_head(wrong)} ❌{_other_items(items)}", button
         return f"{label} — есть ошибка{_where(item, error)} ❌", button
     if strength == "candidate":
         candidates = [f for f in findings if f.strength == "candidate" and f.confirmed is None]
@@ -175,27 +170,36 @@ def _where(item: CheckedTask, finding: Finding) -> str:
 
 
 def _items(item: CheckedTask) -> list[tuple[str, ItemStatus]]:
-    """Итог по пунктам задания; строки без метки после пункта — его действия. Пустой список —
-    пунктов меньше двух или метка повторилась (тогда пункты не различить)."""
+    """Итог по пунктам задания; строки без метки после пункта — его действия, пустые строки не в
+    счёт. Если у задания есть буквенные пункты, «1)», «2)» — действия внутри пункта, а не пункты.
+
+    Пустой список (строка задания — без пунктов): пунктов меньше двух, метка повторилась или
+    ошибка стоит до первого пункта — иначе сводка её не назвала бы (ревью).
+    """
     if item.grade is None:
         return []
+    checks = [c for c in item.grade.line_checks if c.line.strip()]
+    labels = [line_label(c.line) for c in checks]
+    lettered = any(label is not None and label.isalpha() for label in labels)
     groups: dict[str, list[LineCheck]] = {}
     current: str | None = None
-    for check in item.grade.line_checks:
-        label = line_label(check.line)
-        if label is not None:
+    for check, label in zip(checks, labels, strict=True):
+        if label is not None and (label.isalpha() or not lettered):
             if label in groups:
                 return []
             current = label
             groups[label] = []
         if current is not None:
             groups[current].append(check)
+        elif check.status == "mismatch":
+            return []
     if len(groups) < 2:
         return []
-    return [(label, _item_status(checks)) for label, checks in groups.items()]
+    return [(label, _item_status(group)) for label, group in groups.items()]
 
 
 def _item_status(checks: list[LineCheck]) -> ItemStatus:
+    # `misread`-строка всегда `skipped` (pipeline/reading.py), с расхождением она не совпадает
     if any(c.status == "mismatch" for c in checks):
         return "error"
     if any(c.misread for c in checks):
@@ -205,9 +209,15 @@ def _item_status(checks: list[LineCheck]) -> ItemStatus:
     return "unknown"
 
 
+def _error_head(wrong: list[str]) -> str:
+    if len(wrong) == 1:
+        return f"есть ошибка в пункте {wrong[0]})"
+    return f"есть ошибки в пунктах {', '.join(f'{name})' for name in wrong)}"
+
+
 def _other_items(items: list[tuple[str, ItemStatus]]) -> str:
-    """« Верно: б), в). Не проверил: г).» — без пунктов с ошибкой: они в главной фразе строки.
-    Ни один пункт не проверен — перечислять нечего."""
+    """« Верно: б), в). Не смог проверить: г).» — без пунктов с ошибкой: они в главной фразе
+    строки. Ни один пункт не проверен — перечислять нечего."""
     if all(status == "unknown" for _name, status in items):
         return ""
     parts = []

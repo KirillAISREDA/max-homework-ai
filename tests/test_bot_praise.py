@@ -403,7 +403,8 @@ async def test_clarified_task_gets_fallback_without_model_call(
     await bot.handle_update(text_update("300"))
 
     clarified = "Пересчитал твоё действие — сходится, и ответ верный."
-    assert fake_max.sent[-1][1] == f"№21 — верно ✅ {clarified}"
+    # последний вопрос и разбирать нечего — «что дальше» в том же сообщении
+    assert fake_max.sent[-1][1] == f"№21 — верно ✅ {clarified}\n{NEXT_PHOTO}"
     assert llm.calls == []
     assert (await store.get(7)).tasks[0].praise == clarified
     assert events_of(events_path, "task_clarified")[-1]["verdict"] == "correct"

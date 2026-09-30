@@ -44,7 +44,7 @@ def test_dotted_number_is_written_on_page() -> None:
     assert written_numbers("Домашняя работа\n№ 2.181\na) 9454 - 16452") == {2181}
     assert written_numbers("2.177 Назовите уменьшаемое\n2.178 Запишите разность") == {2177, 2178}
     assert written_numbers("№ 13\n15 * 10 = 150") == {13}
-    assert written_numbers("12.5 + 3 = 15.5") == set()
+    assert written_numbers("12.5 + 3 = 15.5\n12.75 + 1 = 13.75\n12.50\n0.25 кг") == set()
 
 
 def test_dotted_number_keeps_its_label() -> None:
@@ -65,7 +65,7 @@ def test_number_label_is_not_asked_from_the_model() -> None:
 
 def test_error_line_names_the_item_and_the_rest() -> None:
     line, button = task_line(0, checked(ITEMS_2181, condition=CONDITION_2181))
-    assert line == "№2.181 — есть ошибка в пункте а) ❌ Верно: б), в). Не проверил: г)."
+    assert line == "№2.181 — есть ошибка в пункте а) ❌ Верно: б), в). Не смог проверить: г)."
     assert button is not None and button[0]["text"] == "Разобрать №2.181"
 
 
@@ -81,6 +81,22 @@ def test_actions_under_an_item_belong_to_it() -> None:
     assert line == "№2.181 — есть ошибка в пункте а) ❌ Верно: б)."
 
 
+def test_blank_line_does_not_spoil_an_item() -> None:
+    line, _ = task_line(0, checked(["а) 5 + 3 = 8", "", "б) 4 + 4 = 9"]))
+    assert line == "№2.181 — есть ошибка в пункте б) ❌ Верно: а)."
+
+
+def test_numbered_actions_inside_lettered_items_are_not_items() -> None:
+    steps = ["а) 1) 300 - 264 = 36", "2) 16452 : 36 = 456", "б) 90 - 18 = 72"]
+    line, _ = task_line(0, checked(steps))
+    assert line == "№2.181 — есть ошибка в пункте а) ❌ Верно: б)."
+
+
+def test_error_before_the_first_item_is_not_hidden() -> None:
+    line, _ = task_line(0, checked(["5 + 5 = 11", "а) 5 + 3 = 9", "б) 4 + 4 = 8"]))
+    assert line == "№2.181 — есть ошибка в строке «5 + 5 = 11» ❌"
+
+
 def test_error_without_items_quotes_the_line() -> None:
     line, _ = task_line(0, checked(["700 - 400 = 310"], number=7, label="7"))
     assert line == "№7 — есть ошибка в строке «700 − 400 = 310» ❌"
@@ -93,7 +109,7 @@ def test_uncertain_line_lists_items_too() -> None:
     line, _ = task_line(0, checked(STEPS_2181, condition=CONDITION_2181, label=None))
     assert line == (
         "Задание 2181 — не уверен, что верно прочитал запись 🤔 "
-        "Под вопросом: а), б). Верно: в). Не проверил: г)."
+        "Под вопросом: а), б). Верно: в). Не смог проверить: г)."
     )
 
 

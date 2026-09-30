@@ -145,7 +145,7 @@ def _uncertain_reason(checks: list[LineCheck], student_answer: str | None) -> Un
 
 
 def _only_condition(checks: list[LineCheck]) -> bool:
-    """Ребёнок переписал примеры, но не решал: ни «=», ни строки-ответа («а) 75» — это ответ,
+    """На странице только примеры, без решения: ни «=», ни строки-ответа («а) 75» — это ответ,
     а не условие; живая проверка 30.09, №2.183)."""
     lines = [c.line for c in checks if c.line.strip()]
     return bool(lines) and all("=" not in line and BINARY_OPERATOR.search(line) for line in lines)
