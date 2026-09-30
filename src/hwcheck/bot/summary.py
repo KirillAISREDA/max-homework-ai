@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from typing import Literal
 
@@ -204,9 +205,31 @@ def _item_status(checks: list[LineCheck]) -> ItemStatus:
         return "error"
     if any(c.misread for c in checks):
         return "doubt"
-    if all(c.status == "ok" for c in checks):
+    counted = [c for c in checks if not _not_a_computation(c)]
+    if counted and all(c.status == "ok" for c in counted):
         return "ok"
     return "unknown"
+
+
+# «c = 720, d = 382» — значения подстановки, а не вычисление
+_ASSIGNMENTS = re.compile(
+    r"^\s*(?:[а-яёa-z]\)\s*)?[A-Za-zА-Яа-яЁё]\s*=\s*-?\d+(?:\s*[,;]\s*[A-Za-zА-Яа-яЁё]\s*=\s*-?\d+)*"
+    r"\s*[.,;]?\s*$"
+)
+
+
+def _not_a_computation(check: LineCheck) -> bool:
+    """Строка, которой нечего пересчитывать: переписанное условие («n + 6775 при n = 657») или
+    значения подстановки. Пункт из них и верных вычислений — верный (живая проверка 30.09);
+    незаконченное «16452 : 36 =» — вычисление, и пункт с ним не «верный»."""
+    if check.status != "skipped":
+        return False
+    line = check.line
+    return (
+        "=" not in line
+        or re.search(r"(?<![а-яё])при\s", line) is not None
+        or bool(_ASSIGNMENTS.match(line))
+    )
 
 
 def _error_head(wrong: list[str]) -> str:

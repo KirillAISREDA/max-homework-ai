@@ -7,6 +7,7 @@
 
 import contextlib
 import logging
+import re
 from collections.abc import Iterator
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from hwcheck.bot.pages import (
 )
 from hwcheck.llm.base import LLMResult
 from hwcheck.pipeline.grade import GradeResult, check_student_steps, grade, grade_by_lines
+from hwcheck.pipeline.reading import line_label
 from hwcheck.pipeline.schemas import VisionPage, VisionTask
 from hwcheck.pipeline.solver import (
     FileCache,
@@ -120,17 +122,29 @@ async def recognize_photo(
 
 
 def _split_task_columns(page: VisionPage) -> VisionPage:
+    """Строки решения — по одной строке тетради: модель кладёт две строки в один шаг
+    («c = 720, d = 382\\n(720 + 382) − 763 = 339» — живая проверка 30.09), и такой шаг не
+    разбирается целиком; колонки делятся после этого."""
     tasks = [
-        t.model_copy(update={"student_solution_steps": split_columns(t.student_solution_steps)})
+        t.model_copy(
+            update={
+                "student_solution_steps": split_columns(_one_per_line(t.student_solution_steps))
+            }
+        )
         for t in page.tasks
     ]
     return page.model_copy(update={"tasks": tasks})
+
+
+def _one_per_line(steps: list[str]) -> list[str]:
+    return [line for step in steps for line in step.splitlines() if line.strip()]
 
 
 def split_pages(photos: list[RecognizedPhoto], textbook: list[VisionTask]) -> AlbumPages:
     """Учебник даёт условия, тетрадь — решения; условия копятся к уже известным."""
     known = list(textbook)
     notebook_pages: list[list[VisionTask]] = []
+    notebook_transcripts: list[str] = []
     new_textbook: list[VisionTask] = []
     comment: str | None = None
     for photo in photos:
@@ -142,14 +156,90 @@ def split_pages(photos: list[RecognizedPhoto], textbook: list[VisionTask]) -> Al
             known = merge_textbook(known, page.tasks)
         elif photo.role == "notebook":
             notebook_pages.append(page.tasks)
+            notebook_transcripts.append(photo.rec.raw)
         elif page.page_comment:
             comment = page.page_comment
     return AlbumPages(
-        notebook=_attach_continuations(notebook_pages),
+        notebook=_attach_continuations(_join_parts(notebook_pages, notebook_transcripts)),
         textbook=known,
         new_textbook=new_textbook,
         comment=comment,
     )
+
+
+# «(продолжение)» у номера на странице тетради: ребёнок сам пишет, что это то же задание
+_CONTINUED = re.compile(r"продолж", re.IGNORECASE)
+_FIRST_ITEMS = {"а", "1"}
+
+
+def _join_parts(pages: list[list[VisionTask]], transcripts: list[str]) -> list[list[VisionTask]]:
+    """Части одного задания — одно задание (живая проверка 30.09: №2.189 стал «Заданием 1» и
+    «Заданием 2», №2.191 — двумя «№1791» и «Заданием 119»).
+
+    Часть приклеивается к предыдущему заданию альбома, если она:
+    - продолжает пункты: без номера на странице и начинается с пункта «б)», «в)», «2)»…;
+    - с тем же номером со страницы, что и предыдущее задание;
+    - первая на странице с пометкой «продолжение» и без своего номера.
+    Метки пунктов из условия частей переносятся в их первые строки: по ним задание проверяется по
+    пунктам и сводка называет пункт.
+    """
+    flat: list[tuple[int, VisionTask]] = []
+    for page_no, (page, transcript) in enumerate(zip(pages, transcripts, strict=True)):
+        continued_page = _CONTINUED.search(transcript) is not None
+        for position, task in enumerate(page):
+            if flat and _continues(flat[-1][1], task, continued_page and position == 0):
+                flat[-1] = (flat[-1][0], _joined(flat[-1][1], task))
+            else:
+                flat.append((page_no, task))
+    return [[task for page_no, task in flat if page_no == n] for n in range(len(pages))]
+
+
+def _continues(previous: VisionTask, task: VisionTask, continued_page: bool) -> bool:
+    if task.number_on_page:
+        return previous.number_on_page and task.number == previous.number
+    if continued_page:
+        return True
+    item = _leading_item(task)
+    return item is not None and item not in _FIRST_ITEMS and item not in _items_of(previous)
+
+
+def _joined(previous: VisionTask, part: VisionTask) -> VisionTask:
+    item = _leading_item(part)
+    previous_steps = _labelled(previous.student_solution_steps, _leading_item(previous))
+    if item == "б" and previous_steps and line_label(previous_steps[0]) is None:
+        previous_steps = _labelled(previous_steps, "а")  # «б)» продолжает пункт «а)» без метки
+    condition = "\n".join(t for t in (previous.task_text.strip(), part.task_text.strip()) if t)
+    return previous.model_copy(
+        update={
+            "task_text": condition,
+            "student_solution_steps": [
+                *previous_steps,
+                *_labelled(part.student_solution_steps, item),
+            ],
+            "student_answer": part.student_answer or previous.student_answer,
+            "confidence": min(previous.confidence, part.confidence),
+        }
+    )
+
+
+def _leading_item(task: VisionTask) -> str | None:
+    """Пункт, с которого начинается часть: по условию («б) 41942 − z …») или первой строке."""
+    for text in (task.task_text, *task.student_solution_steps[:1]):
+        if text.strip():
+            return line_label(text)
+    return None
+
+
+def _items_of(task: VisionTask) -> set[str]:
+    labels = (line_label(step) for step in task.student_solution_steps)
+    return {label for label in labels if label is not None}
+
+
+def _labelled(steps: list[str], item: str | None) -> list[str]:
+    """Метка пункта в первой строке части, если её там ещё нет."""
+    if item is None or not steps or line_label(steps[0]) is not None:
+        return list(steps)
+    return [f"{item}) {steps[0]}", *steps[1:]]
 
 
 def _attach_continuations(pages: list[list[VisionTask]]) -> list[VisionTask]:

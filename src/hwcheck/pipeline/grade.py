@@ -31,7 +31,7 @@ UncertainReason = Literal[
     "steps_unparseable",  # ни одна строка решения не разобрана
     "column_unreadable",  # деление уголком не прочитано: обрывки вместо записи
     "line_misread",  # расхождение строки — скорее чтение, чем ошибка (pipeline/reading.py)
-    "no_solution",  # в тетради только условие: выражения без «=» и без ответа
+    "no_solution",  # выражения без «=» и без ответа: «запишите разность» или одно условие
 ]
 _UNREADABLE = "неразборчив"
 
@@ -74,9 +74,10 @@ def grade(
     """`condition` — печатное условие задания: помогает перечитать знаки, спутанные OCR."""
     reason: UncertainReason | None = None
     checks = check_student_steps(student_steps, condition=condition)
-    if is_multipart(condition, student_steps):
+    if is_multipart(condition, student_steps) or several_answers(ref.answer):
         # эталон солвера — один ответ на несколько пунктов (живые логи 06.09: «80» на
-        # четыре выражения); сверять с ним нечего, судим по арифметике каждой строки
+        # четыре выражения) или список ответов на несколько подстановок («[339, 7254]»,
+        # живая проверка 30.09); сверять итог не с чем, судим по арифметике каждой строки
         return grade_by_lines(checks, condition=condition)
     if is_long_division(student_steps, condition):
         return _grade_long_division(checks, condition, ref.answer, student_answer)
@@ -145,8 +146,9 @@ def _uncertain_reason(checks: list[LineCheck], student_answer: str | None) -> Un
 
 
 def _only_condition(checks: list[LineCheck]) -> bool:
-    """На странице только примеры, без решения: ни «=», ни строки-ответа («а) 75» — это ответ,
-    а не условие; живая проверка 30.09, №2.183)."""
+    """Выражения без вычислений: ни «=», ни строки-ответа («а) 75» — это ответ). Так выглядит и
+    переписанное условие, и решение задания «запишите разность» (живые проверки 30.09, №2.183 и
+    №2.184) — различить их пересчёт не может."""
     lines = [c.line for c in checks if c.line.strip()]
     return bool(lines) and all("=" not in line and BINARY_OPERATOR.search(line) for line in lines)
 
@@ -161,7 +163,27 @@ def is_multipart(condition: str | None, steps: list[str]) -> bool:
         or len(step_labels) >= 2
         or _listed_expressions(condition) >= 2
         or _listed_equations(condition) >= 2
+        or _substitutions(condition) >= 2
     )
+
+
+# «… при c = 720, d = 382; c = 7112, d = 905» — наборы значений через «;»
+_SUBSTITUTION = re.compile(r"(?<![А-Яа-яЁё])при\s+(.+)", re.IGNORECASE | re.DOTALL)
+# список ответов солвера: «[2181, 20900]», «(316, 377)», «339; 7254»
+_ANSWER_LIST = re.compile(r"^\s*[\[(].*\d.*[,;].*\d.*[\])]\s*$|\d\s*;\s*-?\d", re.DOTALL)
+
+
+def _substitutions(condition: str | None) -> int:
+    """Сколько наборов значений подставить: «n + 6775 при n = 657; 4315» — два."""
+    match = _SUBSTITUTION.search(condition or "")
+    if match is None:
+        return 0
+    return sum(1 for part in match.group(1).split(";") if re.search(r"\d", part))
+
+
+def several_answers(answer: str | None) -> bool:
+    """Эталон — несколько ответов (по одному на подстановку), а не одно число."""
+    return bool(answer) and _ANSWER_LIST.search(answer or "") is not None
 
 
 # разделители примеров в условии и текст-инструкция перед первым из них

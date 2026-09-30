@@ -113,10 +113,11 @@ def test_uncertain_line_lists_items_too() -> None:
     )
 
 
-def test_only_condition_without_solution() -> None:
+def test_expressions_without_computation() -> None:
+    # №2.183 «Запишите сумму»: выражения и есть решение — «решения нет» было бы неправдой (30.09)
     steps = ["а) (24 - 16) + (201 + 14)", "в) (m + 41) + (n - 17)", "б) (x + 86) + 109"]
     line, _ = task_line(0, checked(steps, number=2183, label="2.183"))
-    assert line == "№2.183 — вижу только условие, решения пока нет 🤔"
+    assert line == "№2.183 — вижу выражения без вычислений: такие задания пока не проверяю 🤔"
     answers_only = checked(["а) 75", "б) 72"], number=5, label="5")
     assert task_line(0, answers_only)[0] == "№5 — не смог разобрать решение 🤔"
 
