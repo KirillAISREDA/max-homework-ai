@@ -113,10 +113,11 @@ async def test_unnamed_action_value_is_a_secret_before_level_3() -> None:
 
 async def test_live_dialog_of_30_09_closes_by_code() -> None:
     session = live_session()
-    replies = ["Посмотри на порядок действий.", "Верно!", "Верно, это первое действие.", "Молодец!"]
+    # второе «36» — повтор уже засчитанного действия: следующий уровень подсказки, без похвалы
+    replies = ["Посмотри на порядок действий.", "Верно!", "Теперь раздели 16452 на 36.", "Молодец!"]
     for message, reply in zip(["Помоги найти ошибку", "36", "36", "38995"], replies, strict=True):
         _, session = await tutor_reply(FakeLLMClient([turn(reply)]), session, message, model="m")
-    assert session.resolved and session.hint_level == 1
+    assert session.resolved and session.hint_level == 2
 
 
 # --- похвала ---
@@ -160,3 +161,58 @@ async def test_reaching_level_3_shows_solution_and_keeps_dialog_open() -> None:
     reply, session = await tutor_reply(client, live_session(hint_level=2), "38990", model="m")
     assert (session.hint_level, session.closed) == (3, False)
     assert "38995" in reply
+
+
+# --- ревью ---
+
+
+async def test_repeated_intermediate_value_costs_a_level() -> None:
+    session = live_session(hint_level=1, known_values=["36"])
+    client = FakeLLMClient([turn("Посмотри на деление.")])
+    _, session = await tutor_reply(client, session, "36", model="m")
+    assert (session.hint_level, session.known_values) == (2, ["36"])
+
+
+async def test_repeated_intermediate_after_shown_solution_closes() -> None:
+    session = live_session(hint_level=3, known_values=["36"])
+    reply, session = await tutor_reply(FakeLLMClient([]), session, "36", model="m")
+    assert session.closed and "38995" in reply
+
+
+async def test_intermediate_value_as_recomputed_line() -> None:
+    client = FakeLLMClient([turn("Верно! Теперь деление.")])
+    _, session = await tutor_reply(client, live_session(hint_level=1), "300 - 264 = 36", model="m")
+    assert (session.hint_level, session.known_values) == (1, ["36"])
+
+
+@pytest.mark.parametrize(
+    "hint",
+    [
+        "Проверь, правильно ли ты разделил.",
+        "Верно ли выполнено вычитание?",
+        "Это неверно, посмотри ещё раз.",
+        "Это не верно, посмотри ещё раз.",
+        "Найди верное действие.",
+    ],
+)
+async def test_not_praise_is_not_regenerated(hint: str) -> None:
+    client = FakeLLMClient([turn(hint)])
+    reply, _ = await tutor_reply(client, live_session(hint_level=1), "38000", model="m")
+    assert reply.startswith(hint) and len(client.calls) == 1
+
+
+async def test_closing_reply_names_units_or_points_to_solution() -> None:
+    with_units = live_session(
+        hint_level=3, expected=None, ref=RefSolution(steps=[], answer="300", units="чел.")
+    )
+    reply, _ = await tutor_reply(FakeLLMClient([]), with_units, "310", model="m")
+    assert "Верный ответ: 300 чел." in reply
+    empty = live_session(hint_level=3, expected=None, ref=RefSolution(steps=[], answer=""))
+    reply, session = await tutor_reply(FakeLLMClient([]), empty, "310", model="m")
+    assert session.closed and "Посмотри решение выше" in reply
+
+
+def test_session_from_previous_release_loads() -> None:
+    stored = live_session().model_dump(exclude={"target_line", "known_values", "closed"})
+    session = TutorSession.model_validate(stored)
+    assert (session.target_line, session.known_values, session.closed) == (None, [], False)

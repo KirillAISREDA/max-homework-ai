@@ -14,14 +14,20 @@
 """
 
 import re
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from hwcheck.llm.base import ChatMessage, LLMClient, StructuredOutputError, chat_structured
 from hwcheck.llm.journal import llm_step
 from hwcheck.pipeline.classifier import ErrorAnalysis
-from hwcheck.pipeline.mathparse import VARIABLE, action_values, parse_line, parse_value
+from hwcheck.pipeline.mathparse import (
+    VARIABLE,
+    action_values,
+    parse_line,
+    parse_value,
+    school_notation,
+)
 from hwcheck.pipeline.reading import line_label
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.validator import compare_answers
@@ -32,24 +38,26 @@ PROMPT_VERSION = "v2"  # математика: подсказка без воп�
 WORD_PROMPT_VERSION = "v1"  # русский: разбор орфограммы
 
 _NUMBER_TOKEN = re.compile(r"\d+\s+\d+\s*/\s*\d+|\d+\s*/\s*\d+|\d+[.,]\d+|\d+")
-# похвала итога; «неверно», «правильно ли», «верно ли» — не похвала
+# похвала итога; «неверно», «не верно», «верное», «правильно ли», «верно ли» — не похвала
 _PRAISE = re.compile(
-    r"(?<![а-яё])(?:молод(?:ец|чина)|правильно|верно|отлично|умни(?:ца|чка)|так держать|здорово)"
-    r"(?!\s+ли\b)",
+    r"(?<![а-яё])(?<!не )"
+    r"(?:молод(?:ец|чина)|правильно|верно|отлично|умни(?:ца|чка)|так держать|здорово)"
+    r"(?![а-яё])(?!\s+ли\b)",
     re.IGNORECASE,
 )
 
 SAFE_REDIRECT = "Давай не будем спешить с готовым ответом 🙂 Пересчитай этот шаг ещё раз."
 SAFE_PRAISE_REDIRECT = "Пока не сходится 🙂 Посмотри на свою запись ещё раз."
 SAFE_RETRY = "Хм, у меня небольшая заминка 🙂"
-_LEAK_STOP = (
-    "СТОП: в реплике есть число из решения, а уровень подсказки ещё не 3. "
-    "Переформулируй подсказку, не называя ни одного числа, которого нет в записи ученика."
-)
-_PRAISE_STOP = (
-    "СТОП: ответ ученика не верный, а в реплике похвала. Переформулируй подсказку без похвалы "
-    "и не говори, что задание решено."
-)
+Violation = Literal["leak", "praise"]
+# что сказать модели при перегенерации и чем заменить реплику, если и она нарушает правило
+_STOP: dict[Violation, str] = {
+    "leak": "СТОП: в реплике есть число из решения, а уровень подсказки ещё не 3. "
+    "Переформулируй подсказку, не называя ни одного числа, которого нет в записи ученика.",
+    "praise": "СТОП: ответ ученика не верный, а в реплике похвала. Переформулируй подсказку без "
+    "похвалы и не говори, что задание решено.",
+}
+_SAFE: dict[Violation, str] = {"leak": SAFE_REDIRECT, "praise": SAFE_PRAISE_REDIRECT}
 
 
 class TutorTurn(BaseModel):
@@ -168,13 +176,7 @@ def target_question(session: TutorSession) -> str:
     variable = VARIABLE.search(line)
     if variable is not None:
         return f"Чему равно {variable.group(1)}? Напиши ответ числом."
-    left = line.split("=", 1)[0].strip()
-    return f"Сколько будет {school_notation(left)}? Напиши ответ числом."
-
-
-def school_notation(expression: str) -> str:
-    """Выражение, как его пишут в школе: «700 − 400», «601 · 143». Только для текста ребёнку."""
-    return expression.replace("*", "·").replace("-", "−")
+    return f"Сколько будет {school_notation(_left_part(line).strip())}? Напиши ответ числом."
 
 
 def _close(session: TutorSession, student_message: str) -> tuple[str, TutorSession]:
@@ -217,31 +219,27 @@ async def _guard(
     Одна попытка перегенерации, затем безопасная заглушка."""
     secrets = _secret_values(session) if check_leak else set()
 
-    def problem(text: str) -> str | None:
+    def violation(text: str) -> Violation | None:
         if _leaks(text, secrets):
-            return _LEAK_STOP
+            return "leak"  # утечка важнее: её заглушка и не хвалит
         if check_praise and _PRAISE.search(text):
-            return _PRAISE_STOP
+            return "praise"
         return None
 
-    first = problem(reply)
+    first = violation(reply)
     if first is None:
         return reply
     retry_messages = [
         *messages,
         ChatMessage(role="assistant", content=reply),
-        ChatMessage(role="user", content=first),
+        ChatMessage(role="user", content=_STOP[first]),
     ]
     try:
         turn, _ = await chat_structured(client, retry_messages, TutorTurn, model=model)
     except StructuredOutputError:
-        return _safe(first)
-    second = problem(turn.reply)
-    return turn.reply if second is None else _safe(second)
-
-
-def _safe(stop: str) -> str:
-    return SAFE_REDIRECT if stop == _LEAK_STOP else SAFE_PRAISE_REDIRECT
+        return _SAFE[first]
+    second = violation(turn.reply)
+    return turn.reply if second is None else _SAFE[second]
 
 
 def _action_step(message: str, session: TutorSession) -> Any | None:
@@ -251,8 +249,19 @@ def _action_step(message: str, session: TutorSession) -> Any | None:
     value = _typed_value(message)
     if value is None:
         return None
-    left = session.target_line.split("=", 1)[0]
-    return next((v for v in action_values(left) if compare_answers(str(v), str(value))), None)
+    left = _left_part(session.target_line)
+    step = next((v for v in action_values(left) if _same(v, value)), None)
+    if step is None or any(_same(step, parse_value(known)) for known in session.known_values):
+        return None  # повтор уже названного действия — как любая неверная реплика (ревью)
+    return step
+
+
+def _left_part(line: str) -> str:
+    return line.split("=", 1)[0]
+
+
+def _same(value: Any, other: Any) -> bool:
+    return other is not None and compare_answers(str(value), str(other)) is True
 
 
 def _typed_value(message: str) -> Any | None:
@@ -266,14 +275,8 @@ def _typed_value(message: str) -> Any | None:
 
 def _solves(message: str, target: str) -> bool:
     """«72» или пересчитанная строка «90 - 18 = 72» — обе формы закрывают разбор."""
-    if compare_answers(message, target) is True:
-        return True
-    parsed = parse_line(message)
-    return (
-        parsed is not None
-        and parsed.consistent
-        and compare_answers(str(parsed.values[-1]), target) is True
-    )
+    value = _typed_value(message)
+    return value is not None and compare_answers(str(value), target) is True
 
 
 def _numeric_values(text: str) -> set[Any]:
@@ -304,7 +307,7 @@ def _secret_values(session: TutorSession) -> set[Any]:
         if parsed is not None:
             secrets.add(parsed.values[-1])
     if session.target_line is not None:
-        secrets |= set(action_values(session.target_line.split("=", 1)[0]))
+        secrets |= set(action_values(_left_part(session.target_line)))
     return secrets - known
 
 

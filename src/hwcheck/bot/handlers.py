@@ -101,7 +101,7 @@ SUBJECT_UNAVAILABLE = "Проверка по этому предмету пок�
 NOTHING_TO_TUTOR = "Здесь нечего разбирать — ошибка не подтверждена 🙂"
 REVIEW_HINT = "Выбери задание для разбора 👇 Или пришли фото новой домашки 📸"
 REVIEW_DONE = "Эту домашку я уже проверил 👍 Пришли фото следующей — проверю 📸"
-TUTORING_DONE = "Разобрали все ошибки 👍 Пришли фото следующего задания — проверю 📸"
+TUTORING_DONE = "Со всеми ошибками разобрались 👍 Пришли фото следующего задания — проверю 📸"
 SOLVER_CACHE_DIR = Path(".cache/solver")
 
 
@@ -997,13 +997,15 @@ class Bot:
         elif session.closed:
             # решение показано, ответ снова неверный: разбор закрыл код — это не «исправил сам»,
             # поэтому ни error_fixed, ни сообщения родителю о разобранной ошибке
-            shown = state.tutoring_index
+            shown = list(state.shown_indices)
+            if state.tutoring_index is not None:
+                shown.append(state.tutoring_index)
             state = state.model_copy(
                 update={
                     "phase": "review",
                     "tutor": None,
                     "tutoring_index": None,
-                    "shown_indices": [*state.shown_indices, *([] if shown is None else [shown])],
+                    "shown_indices": shown,
                 }
             )
             await self._store.set(chat_id, state)

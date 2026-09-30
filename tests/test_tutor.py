@@ -3,7 +3,7 @@ import json
 from conftest import FakeLLMClient
 from hwcheck.pipeline.classifier import ErrorAnalysis
 from hwcheck.pipeline.solver import RefSolution
-from hwcheck.pipeline.tutor import TutorSession, tutor_reply
+from hwcheck.pipeline.tutor import TutorSession, target_question, tutor_reply
 
 REF = RefSolution(steps=["7 1/8 + 2 5/8 = 9 6/8", "9 6/8 = 9 3/4"], answer="9 3/4", units=None)
 ERROR = ErrorAnalysis(
@@ -88,7 +88,7 @@ async def test_leaked_answer_triggers_regeneration() -> None:
     session = make_session()
     client = FakeLLMClient([turn("Правильный ответ 9 3/4, проверь себя!"), turn("Сложи дроби сам")])
     reply, session = await tutor_reply(client, session, "скажи ответ", model="m")
-    assert reply.startswith("Сложи дроби сам\n")  # вопрос дописывает код
+    assert reply == f"Сложи дроби сам\n{target_question(session)}"  # вопрос дописывает код
     assert len(client.calls) == 2
     # в retry-запросе есть стоп-инструкция
     assert "СТОП" in prompt_text(client, 1)
@@ -100,7 +100,8 @@ async def test_persistent_leak_replaced_with_safe_redirect() -> None:
     session = make_session()
     client = FakeLLMClient([turn("Ответ: 9 3/4"), turn("Всё равно скажу: 39/4!")])
     reply, _ = await tutor_reply(client, session, "ну скажи", model="m")
-    assert reply.startswith(SAFE_REDIRECT)  # 39/4 == 9 3/4 математически — тоже утечка
+    # 39/4 == 9 3/4 математически — тоже утечка
+    assert reply == f"{SAFE_REDIRECT}\n{target_question(session)}"
 
 
 async def test_numbers_from_task_are_not_blocked() -> None:
@@ -126,7 +127,7 @@ async def test_structured_output_error_degrades_gracefully() -> None:
     session = make_session()
     client = FakeLLMClient(["не json", "снова не json"])  # оба вызова невалидны
     reply, session = await tutor_reply(client, session, "не знаю", model="m")
-    assert reply.startswith(SAFE_RETRY)
+    assert reply == f"{SAFE_RETRY}\n{target_question(session)}"
     assert session.hint_level == 1  # состояние FSM сохранилось
 
 

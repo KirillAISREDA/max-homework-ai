@@ -239,12 +239,15 @@ def action_values(expression: str) -> list[Any]:
         return []
     values: list[Any] = []
     for node in sympy.preorder_traversal(tree):
-        # «a − b» в дереве — a + (−1)·b, «a : b» — a · b⁻¹: обёртки знака и степени −1 не действия
+        # «a − b» в дереве — a + (−1)·b: обёртка знака (−1)·b — не действие; «a : b» — a · b⁻¹,
+        # сама степень b⁻¹ не сумма и не произведение и в действия не попадает
         if not isinstance(node, sympy.Add | sympy.Mul) or sympy.S.NegativeOne in node.args:
             continue
         terms = node.args
-        sizes = range(2, len(terms) + 1) if len(terms) <= MAX_ACTION_TERMS else [len(terms)]
-        for size in sizes:
+        # пары и «все, кроме одного» — частичные результаты при любом порядке членов; прочие
+        # сочетания давали бы ребёнку «верные действия», которых он не делал (ревью)
+        sizes = {2, len(terms) - 1, len(terms)} if len(terms) <= MAX_ACTION_TERMS else {len(terms)}
+        for size in sorted(s for s in sizes if s >= 2):
             for combo in itertools.combinations(terms, size):
                 value = node.func(*combo).doit()
                 if value.is_number and value not in values:
@@ -272,7 +275,14 @@ def _checked_segment(segment: str, *, allow_variable: bool = False) -> str | Non
     return segment
 
 
+def school_notation(expression: str) -> str:
+    """Выражение, как его пишут в школе: «700 − 400», «601 · 143». Только для текста ребёнку: в
+    строку для пересчёта идёт исходная запись."""
+    return expression.replace("*", "·").replace("-", "−")
+
+
 def _eval_segment(segment: str, *, allow_variable: bool = False) -> Any | None:
+    """Точное значение сегмента; None — не прошёл `_checked_segment` или не разобрался."""
     checked = _checked_segment(segment, allow_variable=allow_variable)
     if checked is None:
         return None
