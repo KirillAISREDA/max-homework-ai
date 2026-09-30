@@ -74,7 +74,8 @@ def grade(
     """`condition` — печатное условие задания: помогает перечитать знаки, спутанные OCR."""
     reason: UncertainReason | None = None
     checks = check_student_steps(student_steps, condition=condition)
-    if is_multipart(condition, student_steps) or several_answers(ref.answer):
+    listed = several_answers(ref.answer) and _SUBSTITUTION.search(condition or "") is not None
+    if is_multipart(condition, student_steps) or listed:
         # эталон солвера — один ответ на несколько пунктов (живые логи 06.09: «80» на
         # четыре выражения) или список ответов на несколько подстановок («[339, 7254]»,
         # живая проверка 30.09); сверять итог не с чем, судим по арифметике каждой строки
@@ -169,8 +170,9 @@ def is_multipart(condition: str | None, steps: list[str]) -> bool:
 
 # «… при c = 720, d = 382; c = 7112, d = 905» — наборы значений через «;»
 _SUBSTITUTION = re.compile(r"(?<![А-Яа-яЁё])при\s+(.+)", re.IGNORECASE | re.DOTALL)
-# список ответов солвера: «[2181, 20900]», «(316, 377)», «339; 7254»
-_ANSWER_LIST = re.compile(r"^\s*[\[(].*\d.*[,;].*\d.*[\])]\s*$|\d\s*;\s*-?\d", re.DOTALL)
+# список ответов солвера: «[2181, 20900]», «(316, 377)», «339; 7254». Под шаблон попадают и
+# точка «(2; 3)», и дроби «0,5; 1,5» — поэтому он действует только при подстановке «при …» (ревью)
+_ANSWER_LIST = re.compile(r"^\s*[\[(]?\s*-?\d+(?:\s*[,;]\s*-?\d+)+\s*[\])]?\s*$")
 
 
 def _substitutions(condition: str | None) -> int:

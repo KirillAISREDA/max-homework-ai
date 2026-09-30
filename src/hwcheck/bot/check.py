@@ -195,8 +195,15 @@ def _join_parts(pages: list[list[VisionTask]], transcripts: list[str]) -> list[l
 
 
 def _continues(previous: VisionTask, task: VisionTask, continued_page: bool) -> bool:
+    if _has_answer(previous) and _has_answer(task):
+        return False  # у каждой части свой ответ — скорее два задания; ответ первой не терять
     if task.number_on_page:
-        return previous.number_on_page and task.number == previous.number
+        # №181 из главы 2 и №181 из главы 3 — разные задания (ревью)
+        return (
+            previous.number_on_page
+            and task.number == previous.number
+            and task.number_label == previous.number_label
+        )
     if continued_page:
         return True
     item = _leading_item(task)

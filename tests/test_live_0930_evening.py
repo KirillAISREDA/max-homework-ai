@@ -145,3 +145,29 @@ def test_several_substitutions_are_graded_by_lines() -> None:
     wrong = grade(["41042 - 39761 = 1821"], None, RefSolution(steps=[], answer="[2181, 20900]"),
                   condition=single)  # fmt: skip
     assert (wrong.verdict, wrong.first_error_line) == ("wrong", 1)
+
+
+# --- ревью ---
+
+
+def test_same_number_with_different_labels_is_not_glued() -> None:
+    # структуризатор отдаёт номер целым: «2.181» и «21.81» — оба 2181, но это разные задания
+    first = _photo([_task(2181, "", ["1 + 1 = 2"])], "№ 2.181\n1 + 1 = 2")
+    second = _photo([_task(2181, "", ["3 + 3 = 6"])], "№ 21.81\n3 + 3 = 6")
+    album = split_pages([first, second], [])
+    assert [t.number_label for t in album.notebook] == ["2.181", "21.81"]
+
+
+def test_parts_with_their_own_answers_are_not_glued() -> None:
+    page = _photo(
+        [_task(12, "", ["2 + 2 = 5"], answer="5"), _task(12, "", ["2 + 2 = 4"], answer="4")],
+        "№ 12\n2 + 2 = 5\nОтвет: 5\n№ 12\n2 + 2 = 4\nОтвет: 4",
+    )
+    assert [t.student_answer for t in split_pages([page], []).notebook] == ["5", "4"]
+
+
+def test_listed_answer_without_substitution_is_not_graded_by_lines() -> None:
+    # «(2; 3)» — точка, ответ системы уравнений: сверять с эталоном, а не только арифметику
+    point = RefSolution(steps=[], answer="(2; 3)")
+    result = grade(["2 + 3 = 5"], "(2; 4)", point, condition="Решите систему уравнений")
+    assert result.verdict != "correct"
