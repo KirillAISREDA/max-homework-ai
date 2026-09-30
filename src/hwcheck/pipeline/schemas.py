@@ -1,6 +1,7 @@
 """Контракты шагов пайплайна (арх. §3.3): каждый шаг — (input: dict) -> dict по схеме."""
 
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 
 class VisionTask(BaseModel):
@@ -14,6 +15,9 @@ class VisionTask(BaseModel):
     # проставляет код по транскрипции (bot/pages.py), не модель: структуризатор
     # нумерует задания без номера с 1, и такой номер нельзя сопоставлять с учебником
     number_on_page: bool = True
+    # номер с точкой как на странице («2.181»); тоже код по транскрипции, поэтому в схеме
+    # ответа модели его нет. None — номер без точки
+    number_label: SkipJsonSchema[str | None] = None
 
 
 class VisionPage(BaseModel):

@@ -4,6 +4,7 @@ from hwcheck.bot.check import validator_only_grade
 from hwcheck.bot.fsm import ChatState, CheckedTask, Clarification
 from hwcheck.bot.summary import (
     MAX_MESSAGE_CHARS,
+    NEXT_PHOTO,
     message_length,
     remaining_buttons,
     review_header,
@@ -26,7 +27,7 @@ def checked(number: int, steps: list[str], findings: list[Finding] | None = None
 def test_math_lines_unchanged() -> None:
     assert task_line(0, checked(4, ["2 + 2 = 4"])) == ("№4 — верно ✅", None)
     text, button = task_line(1, checked(7, ["2 + 2 = 5"]))
-    assert text == "№7 — есть ошибка (строка 1) ❌"
+    assert text == "№7 — есть ошибка в строке «2 + 2 = 5» ❌"
     assert button == [{"type": "callback", "text": "Разобрать №7", "payload": "tutor:1"}]
     assert task_line(2, checked(9, ["<неразборчиво>"])) == (
         "№9 — часть записи неразборчива 🤔",
@@ -94,7 +95,7 @@ def test_correct_line_carries_the_explanation() -> None:
 def test_explanation_is_shown_only_for_correct_task() -> None:
     """Текст остался от прошлого вердикта, а задание уже с ошибкой: хвалить нельзя."""
     line, _button = task_line(0, praised(7, ["2 + 2 = 5"]))
-    assert line == "№7 — есть ошибка (строка 1) ❌"
+    assert line == "№7 — есть ошибка в строке «2 + 2 = 5» ❌"
     line, _button = task_line(0, praised(9, ["<неразборчиво>"]))
     assert line == "№9 — часть записи неразборчива 🤔"
 
@@ -111,9 +112,9 @@ def test_review_message_joins_lines_and_buttons() -> None:
     )
     text, buttons = review_message(state)
     assert text == (
-        "Проверил! 1 из 3 верно.\n"
+        "Проверил! 1 из 2 верно.\n"  # задание с вопросом ещё без вердикта
         f"№17 — верно ✅ {PRAISE}\n"
-        "№18 — есть ошибка (строка 1) ❌\n"
+        "№18 — есть ошибка в строке «2 + 2 = 5» ❌\n"
         "№19 — уточню у тебя одну деталь ✍️"
     )
     assert [row[0]["payload"] for row in buttons] == ["tutor:1"]
@@ -128,13 +129,15 @@ def test_long_review_drops_explanations_from_the_end_but_keeps_verdicts() -> Non
     lines = text.splitlines()
     assert message_length(text) <= MAX_MESSAGE_CHARS
     assert lines[0] == "Проверил! 30 из 30 верно."
-    assert [line.split(" — ")[0] for line in lines[1:]] == [f"№{n}" for n in range(1, 31)]
-    assert all(line.startswith(f"№{n} — верно ✅") for n, line in enumerate(lines[1:], start=1))
-    explained = [praise.strip() in line for line in lines[1:]]
+    assert lines[-1] == NEXT_PHOTO  # ошибок нет — сводка говорит, что дальше
+    tasks_lines = lines[1:-1]
+    assert [line.split(" — ")[0] for line in tasks_lines] == [f"№{n}" for n in range(1, 31)]
+    assert all(line.startswith(f"№{n} — верно ✅") for n, line in enumerate(tasks_lines, 1))
+    explained = [praise.strip() in line for line in tasks_lines]
     kept = sum(explained)
     assert 0 < kept < 30
     assert explained == [True] * kept + [False] * (30 - kept)  # опущены с конца
-    assert lines[-1] == "№30 — верно ✅"
+    assert tasks_lines[-1] == "№30 — верно ✅"
 
 
 def test_message_length_counts_utf16_units() -> None:

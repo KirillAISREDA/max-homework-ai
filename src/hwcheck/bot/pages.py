@@ -59,20 +59,43 @@ def page_role(page: VisionPage | None) -> PageRole:
 # номер задания в транскрипции: «№ 13», «N 462», «N° 35», «Задание 7», «Упр. 5» или
 # «23.» в начале строки. «1.124» — не номер 1, «1)» — пункт задания, а не номер
 _TASK_NUMBER = re.compile(
-    r"(?:(?<![A-Za-zА-Яа-яЁё])(?:№|N[°º]?|задани[ея]|упр(?:ажнение)?\.?)\s*(\d{1,4})\b"
+    r"(?:(?<![A-Za-zА-Яа-яЁё])(?:№|N[°º]?|задани[ея]|упр(?:ажнение)?\.?)\s*(\d{1,4})\b(?!\.\d)"
     r"|^\s*(\d{1,4})\.(?!\d))",
+    re.IGNORECASE | re.MULTILINE,
+)
+# номер с точкой, как в учебниках с главами: «№ 2.181» в тетради, «2.177» в начале строки учебника
+# (живая проверка 30.09). Структуризатор отдаёт его целым числом 2181; «12.75 + 1» — не номер
+_DOTTED_NUMBER = re.compile(
+    r"(?:(?<![A-Za-zА-Яа-яЁё])(?:№|N[°º]?|задани[ея]|упр(?:ажнение)?\.?)\s*(\d{1,2})\.(\d{1,4})\b"
+    r"|^\s*(\d{1,2})\.(\d{2,4})\b(?!\s*[-+−*·×:/=]))",
     re.IGNORECASE | re.MULTILINE,
 )
 
 
 def written_numbers(transcript: str) -> set[int]:
-    return {int(m.group(1) or m.group(2)) for m in _TASK_NUMBER.finditer(transcript)}
+    plain = {int(m.group(1) or m.group(2)) for m in _TASK_NUMBER.finditer(transcript)}
+    return plain | set(dotted_numbers(transcript))
+
+
+def dotted_numbers(transcript: str) -> dict[int, str]:
+    """Номера с точкой: {2181: «2.181»}."""
+    labels: dict[int, str] = {}
+    for match in _DOTTED_NUMBER.finditer(transcript):
+        major, minor = match.group(1, 2) if match.group(1) else match.group(3, 4)
+        labels[int(major + minor)] = f"{major}.{minor}"
+    return labels
 
 
 def mark_written_numbers(page: VisionPage, transcript: str) -> VisionPage:
     """Номер, которого нет в транскрипции, придумал структуризатор («нумеруй с 1»)."""
     written = written_numbers(transcript)
-    tasks = [t.model_copy(update={"number_on_page": t.number in written}) for t in page.tasks]
+    dotted = dotted_numbers(transcript)
+    tasks = [
+        t.model_copy(
+            update={"number_on_page": t.number in written, "number_label": dotted.get(t.number)}
+        )
+        for t in page.tasks
+    ]
     return page.model_copy(update={"tasks": tasks})
 
 
@@ -238,13 +261,20 @@ def _with_condition(task: VisionTask, condition: VisionTask) -> VisionTask:
     """Напечатанный номер учебника надёжнее рукописного; придуманный — не лучше номера тетради."""
     update: dict[str, object] = {"task_text": condition.task_text}
     if condition.number_on_page:
-        update |= {"number": condition.number, "number_on_page": True}
+        update |= {
+            "number": condition.number,
+            "number_on_page": True,
+            "number_label": condition.number_label or task.number_label,
+        }
     return task.model_copy(update=update)
 
 
 def task_label(task: VisionTask) -> str:
-    """«№19» — номер со страницы; «Задание 1» — порядковый, чтобы не искать №1 в учебнике."""
-    return f"№{task.number}" if task.number_on_page else f"Задание {task.number}"
+    """«№19», «№2.181» — номер со страницы; «Задание 1» — порядковый, чтобы не искать №1 в
+    учебнике."""
+    if task.number_on_page:
+        return f"№{task.number_label or task.number}"
+    return f"Задание {task.number}"
 
 
 def describe_tasks(tasks: list[VisionTask]) -> str:

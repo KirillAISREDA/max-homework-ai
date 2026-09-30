@@ -197,7 +197,10 @@ async def test_textbook_only_is_remembered_for_next_message(tmp_path: Path) -> N
     assert max_client.sent[-1].text.startswith("Вижу страницу учебника (№245)")
 
     await bot._on_photo(chat_id=1, user_id=7, urls=["u2"], subject="russian")
-    assert max_client.sent[-1].text == "Проверил! 1 из 1 верно.\n№245 — верно ✅"
+    assert (
+        max_client.sent[-1].text
+        == "Проверил! 1 из 1 верно.\n№245 — верно ✅\nПришли фото следующего задания — проверю 📸"
+    )
 
 
 async def test_textbook_of_another_subject_drops_the_old_review(tmp_path: Path) -> None:

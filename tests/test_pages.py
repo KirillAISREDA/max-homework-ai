@@ -237,7 +237,8 @@ class TestSyntheticNumbers:
             "Стр. 5 № 4\n1.124 Выполните действия\nI способ\n1) 312\n"
             "4/5 : 9/10 = 4/5 * 10/9 = 40/45 = 8/9\nЗадание 7\n"
         )
-        assert written_numbers(transcript) == {13, 462, 35, 23, 4, 7}
+        # «1.124» — номер учебника с главами (1124), а не №1
+        assert written_numbers(transcript) == {13, 462, 35, 23, 4, 7, 1124}
 
     def test_numbers_missing_from_transcript_are_marked_synthetic(self) -> None:
         page = _page([_task(1, "", ["4/5 : 9/10 = 8/9"]), _task(23, "Вычисли")])

@@ -14,6 +14,7 @@ from hwcheck.pipeline.mathparse import parse_equation, parse_value
 from hwcheck.pipeline.reading import review_reading
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.validator import (
+    BINARY_OPERATOR,
     LineCheck,
     check_steps,
     compare_answers,
@@ -30,6 +31,7 @@ UncertainReason = Literal[
     "steps_unparseable",  # ни одна строка решения не разобрана
     "column_unreadable",  # деление уголком не прочитано: обрывки вместо записи
     "line_misread",  # расхождение строки — скорее чтение, чем ошибка (pipeline/reading.py)
+    "no_solution",  # в тетради только условие: выражения без «=» и без ответа
 ]
 _UNREADABLE = "неразборчив"
 
@@ -135,9 +137,18 @@ def _uncertain_reason(checks: list[LineCheck], student_answer: str | None) -> Un
         return "ambiguous_equation"
     if answer and parse_value(answer) is None:
         return "answer_unparseable"
+    if not answer and _only_condition(checks):
+        return "no_solution"
     if not any(c.status in ("ok", "mismatch") for c in checks):
         return "steps_unparseable"
     return "no_answer"
+
+
+def _only_condition(checks: list[LineCheck]) -> bool:
+    """Ребёнок переписал примеры, но не решал: ни «=», ни строки-ответа («а) 75» — это ответ,
+    а не условие; живая проверка 30.09, №2.183)."""
+    lines = [c.line for c in checks if c.line.strip()]
+    return bool(lines) and all("=" not in line and BINARY_OPERATOR.search(line) for line in lines)
 
 
 def is_multipart(condition: str | None, steps: list[str]) -> bool:

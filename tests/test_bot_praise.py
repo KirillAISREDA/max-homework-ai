@@ -17,6 +17,7 @@ from hwcheck.bot.check import validator_only_grade
 from hwcheck.bot.fsm import ChatState, CheckedTask, InMemoryStateStore, RedisStateStore
 from hwcheck.bot.handlers import Bot
 from hwcheck.bot.praise import explain_correct, with_fallback_praise
+from hwcheck.bot.summary import NEXT_PHOTO
 from hwcheck.config import Settings
 from hwcheck.events import EventLog, anonymize
 from hwcheck.llm.base import ChatMessage, LLMResult
@@ -137,7 +138,7 @@ async def test_correct_task_gets_explanation_in_summary(
 
     await bot.handle_update(photo_update("correct"))
 
-    assert fake_max.sent[-1][1] == f"Проверил! 1 из 1 верно.\n№17 — верно ✅ {PRAISE}"
+    assert fake_max.sent[-1][1] == f"Проверил! 1 из 1 верно.\n№17 — верно ✅ {PRAISE}\n{NEXT_PHOTO}"
     assert len(llm.calls) == 1
     # объяснение хранится в состоянии: повторный показ сводки модель не зовёт
     state = await store.get(7)
@@ -182,10 +183,10 @@ async def test_wrong_and_unsure_tasks_never_reach_the_prompt(
     for secret in ("950", "660", "320", "340", "310", "300", "700", "лагере", "рисунок", "45"):
         assert secret not in sent, secret
     assert fake_max.sent[-1][1] == (
-        "Проверил! 1 из 4 верно.\n"
+        "Проверил! 1 из 3 верно.\n"  # №20 без вердикта в счёт не идёт
         f"№17 — верно ✅ {PRAISE}\n"
-        "№18 — есть ошибка (строка 1) ❌\n"
-        "№19 — есть ошибка (строка 1) ❌\n"
+        "№18 — есть ошибка в строке «950 + 50 − 660 = 320» ❌\n"
+        "№19 — есть ошибка в строке «700 − (220 + 180) = 310» ❌\n"
         "№20 — не смог разобрать решение 🤔"
     )
 
@@ -203,7 +204,7 @@ async def test_praise_for_a_wrong_task_index_is_ignored(
 
     lines = fake_max.sent[-1][1].splitlines()
     assert lines[1] == f"№17 — верно ✅ {PRAISE}"
-    assert lines[2] == "№18 — есть ошибка (строка 1) ❌"
+    assert lines[2] == "№18 — есть ошибка в строке «950 + 50 − 660 = 320» ❌"
     state = await store.get(7)
     assert [t.praise for t in state.tasks] == [PRAISE, None, None, None]
     [event] = events_of(events_path, "praise_generated")
@@ -235,7 +236,9 @@ async def test_invented_number_falls_back_to_validator_text(
 
     await bot.handle_update(photo_update("correct"))
 
-    assert fake_max.sent[-1][1] == f"Проверил! 1 из 1 верно.\n№17 — верно ✅ {FALLBACK}"
+    assert (
+        fake_max.sent[-1][1] == f"Проверил! 1 из 1 верно.\n№17 — верно ✅ {FALLBACK}\n{NEXT_PHOTO}"
+    )
     assert "982" not in fake_max.sent[-1][1]
     [event] = events_of(events_path, "praise_generated")
     assert (event["n_tasks"], event["n_fallback"]) == (1, 1)
@@ -256,7 +259,9 @@ async def test_model_failure_still_sends_summary(
 
     await bot.handle_update(photo_update("correct"))
 
-    assert fake_max.sent[-1][1] == f"Проверил! 1 из 1 верно.\n№17 — верно ✅ {FALLBACK}"
+    assert (
+        fake_max.sent[-1][1] == f"Проверил! 1 из 1 верно.\n№17 — верно ✅ {FALLBACK}\n{NEXT_PHOTO}"
+    )
     assert (await store.get(7)).tasks[0].praise == FALLBACK
     [failed] = events_of(events_path, "praise_failed")
     assert (failed["component"], failed["error"]) == ("praise", error)
@@ -273,7 +278,9 @@ async def test_slow_model_is_cut_by_timeout(
 
     await asyncio.wait_for(bot.handle_update(photo_update("correct")), timeout=5)
 
-    assert fake_max.sent[-1][1] == f"Проверил! 1 из 1 верно.\n№17 — верно ✅ {FALLBACK}"
+    assert (
+        fake_max.sent[-1][1] == f"Проверил! 1 из 1 верно.\n№17 — верно ✅ {FALLBACK}\n{NEXT_PHOTO}"
+    )
     assert llm.calls == 1
     [failed] = events_of(events_path, "praise_failed")
     assert failed["error"] == "TimeoutError"
@@ -307,7 +314,7 @@ async def test_bug_in_praise_code_leaves_the_dry_summary(
 
     await bot.handle_update(photo_update("correct"))
 
-    assert fake_max.sent[-1][1] == "Проверил! 1 из 1 верно.\n№17 — верно ✅"
+    assert fake_max.sent[-1][1] == f"Проверил! 1 из 1 верно.\n№17 — верно ✅\n{NEXT_PHOTO}"
     assert events_of(events_path, "check_failed") == []
 
 
