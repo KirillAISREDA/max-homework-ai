@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from hwcheck.pipeline.mathparse import parse_equation, parse_value
+from hwcheck.pipeline.reading import review_reading
 from hwcheck.pipeline.solver import RefSolution
 from hwcheck.pipeline.validator import (
     LineCheck,
@@ -28,6 +29,7 @@ UncertainReason = Literal[
     "no_answer",  # ответа нет, последняя строка не совпала с эталоном
     "steps_unparseable",  # ни одна строка решения не разобрана
     "column_unreadable",  # деление уголком не прочитано: обрывки вместо записи
+    "line_misread",  # расхождение строки — скорее чтение, чем ошибка (pipeline/reading.py)
 ]
 _UNREADABLE = "неразборчив"
 
@@ -69,7 +71,7 @@ def grade(
 ) -> GradeResult:
     """`condition` — печатное условие задания: помогает перечитать знаки, спутанные OCR."""
     reason: UncertainReason | None = None
-    checks = check_steps(student_steps, condition=condition)
+    checks = check_student_steps(student_steps, condition=condition)
     if is_multipart(condition, student_steps):
         # эталон солвера — один ответ на несколько пунктов (живые логи 06.09: «80» на
         # четыре выражения); сверять с ним нечего, судим по арифметике каждой строки
@@ -114,11 +116,21 @@ def grade(
     )
 
 
+def check_student_steps(steps: list[str], *, condition: str | None = None) -> list[LineCheck]:
+    """Пересчёт строк работы ученика: расхождение, похожее на ошибку чтения, — «не уверен».
+
+    Только для тетради: эталон солвера проверяется `check_steps` без этого прохода.
+    """
+    return review_reading(check_steps(steps, condition=condition), condition)
+
+
 def _uncertain_reason(checks: list[LineCheck], student_answer: str | None) -> UncertainReason:
     """Одна главная причина: сначала то, что лечится вопросом ученику, потом пробелы разбора."""
     answer = (student_answer or "").strip()
     if _UNREADABLE in answer.lower() or any(_UNREADABLE in c.line.lower() for c in checks):
         return "unreadable"
+    if any(c.misread for c in checks):
+        return "line_misread"
     if any(c.doubtful for c in checks):
         return "ambiguous_equation"
     if answer and parse_value(answer) is None:
