@@ -39,6 +39,7 @@ UNCERTAIN_TEXT = {
     "no_answer": "не нашёл итоговый ответ",
     "steps_unparseable": "не смог разобрать решение",
     "column_unreadable": "не смог прочитать деление уголком",
+    "line_misread": "не уверен, что верно прочитал запись",
 }
 _DIGITS = re.compile(r"\d+")
 

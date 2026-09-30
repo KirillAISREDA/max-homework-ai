@@ -20,7 +20,7 @@ from hwcheck.bot.pages import (
     split_columns,
 )
 from hwcheck.llm.base import LLMResult
-from hwcheck.pipeline.grade import GradeResult, grade, grade_by_lines
+from hwcheck.pipeline.grade import GradeResult, check_student_steps, grade, grade_by_lines
 from hwcheck.pipeline.schemas import VisionPage, VisionTask
 from hwcheck.pipeline.solver import (
     FileCache,
@@ -29,7 +29,6 @@ from hwcheck.pipeline.solver import (
     StructuredOutputError,
     solve_task,
 )
-from hwcheck.pipeline.validator import check_steps
 from hwcheck.pipeline.vision import RecognizedPage, VisionAndChatClient, recognize_page_two_stage
 
 logger = logging.getLogger(__name__)
@@ -237,4 +236,4 @@ async def check_task(
 def validator_only_grade(steps: list[str], *, condition: str | None = None) -> GradeResult:
     """Столбик примеров без условия: проверка — только детерминированный пересчёт."""
     condition = condition or None
-    return grade_by_lines(check_steps(steps, condition=condition), condition=condition)
+    return grade_by_lines(check_student_steps(steps, condition=condition), condition=condition)

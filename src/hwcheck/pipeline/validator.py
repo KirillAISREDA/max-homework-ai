@@ -30,8 +30,11 @@ class LineCheck(BaseModel):
     # уравнение («3x + 4 = 19»): values — корень ([верный, записанный] при mismatch);
     # присваивание «S = 6 * 4» и ответ «x = 7» — посчитанная работа, не уравнение
     equation: bool = False
-    # корень сменился, но это может быть новое уравнение, а не ошибка → «не уверен»
+    # строка под сомнением → «не уверен»: корень сменился, но это может быть новое уравнение,
+    # или строка скорее прочитана неверно (`misread`)
     doubtful: bool = False
+    # расхождение — скорее чтение или переписывание примера, чем ошибка (pipeline/reading.py)
+    misread: bool = False
 
 
 @dataclass
@@ -53,8 +56,9 @@ _COLUMN_SIGNED = re.compile(r"^\s*([+\-−×*·])\s*(\d+(?:[.,]\d+)?)\s*$")
 _COLUMN_SIGN = re.compile(r"^\s*([+\-−×*·])\s*$")
 _COLUMN_RULE = re.compile(r"^\s*[-_—–=]{2,}\s*$")
 _MULTIPLY = "×*·"
-# бинарный оператор между числами/скобками: «Вычисли: 15» — не оператор, «(-12)» — знак
-_OPERATOR = re.compile(r"(?<=[\d)])\s*([+\-−*·×:/])\s*(?=[\d(])")
+# бинарный оператор между числами/скобками: «Вычисли: 15» — не оператор, «(-12)» — знак.
+# Общий с pipeline/reading.py: там по числу действий строка-пример отличается от строки-действия
+BINARY_OPERATOR = re.compile(r"(?<=[\d)])\s*([+\-−*·×:/])\s*(?=[\d(])")
 
 
 def check_steps(steps: list[str], *, condition: str | None = None) -> list[LineCheck]:
@@ -102,8 +106,8 @@ def _reread(expression: str, condition: str) -> ParsedLine | None:
     станет верной, только если записанный результат совпал с умножением.
     """
     first, rest = expression.split("=", 1)
-    line_ops = list(_OPERATOR.finditer(first))
-    printed = [m.group(1) for m in _OPERATOR.finditer(condition.split("=", 1)[0])]
+    line_ops = list(BINARY_OPERATOR.finditer(first))
+    printed = [m.group(1) for m in BINARY_OPERATOR.finditer(condition.split("=", 1)[0])]
     if len(line_ops) != len(printed):
         return None
     swaps = [
