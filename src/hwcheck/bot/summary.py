@@ -2,20 +2,37 @@
 
 Строка задания — по худшей находке: верно / есть ошибка / стоит перепроверить / разобрал без
 оценки. Кнопка «Разобрать» — только для ошибок (verified или подтверждённый candidate).
-К верному заданию дописывается объяснение, за что похвалили (`CheckedTask.praise`).
+К верному заданию дописывается объяснение, за что похвалили (`CheckedTask.praise`). У задания из
+пунктов («а)», «б)») ошибка называется пунктом, а остальные пункты перечисляются по итогу: «есть
+ошибка в пункте а) ❌ Верно: б), в).» (живая проверка 30.09).
 """
 
 from __future__ import annotations
 
 from collections import Counter
+from typing import Literal
 
 from hwcheck.bot.fsm import ChatState, CheckedTask
 from hwcheck.bot.max_api import Buttons, callback_button
 from hwcheck.bot.pages import task_label
+from hwcheck.pipeline.mathparse import school_notation
+from hwcheck.pipeline.reading import line_label
+from hwcheck.pipeline.validator import LineCheck
 from hwcheck.subjects.base import Finding, strength_of_task
 from hwcheck.subjects.math.module import findings_from_grade
 
 MAX_MESSAGE_CHARS = 4000  # лимит текста сообщения MAX
+QUOTE_CHARS = 30  # столько знаков строки ребёнка цитируем, если пункта нет
+# сводка без ошибок и без вопросов — ребёнок не должен гадать, что дальше (живая проверка 30.09)
+NEXT_PHOTO = "Пришли фото следующего задания — проверю 📸"
+
+ItemStatus = Literal["error", "doubt", "ok", "unknown"]
+# как перечисляются пункты после главной фразы строки, по порядку
+_ITEM_GROUPS: tuple[tuple[ItemStatus, str], ...] = (
+    ("doubt", "Под вопросом"),
+    ("ok", "Верно"),
+    ("unknown", "Не смог проверить"),
+)
 
 
 def task_findings(index: int, item: CheckedTask) -> list[Finding]:
@@ -44,14 +61,18 @@ def verdict_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, str
     strength = strength_of_task(findings)
     if strength == "ok":
         return f"{label} — верно ✅", None
+    items = _items(item)
     if strength == "verified":
         error = next(f for f in findings if f.is_error)
         button = [callback_button(f"Разобрать {lower(label)}", f"tutor:{index}")]
-        return f"{label} — есть ошибка{_where(error)} ❌", button
+        wrong = [name for name, status in items if status == "error"]
+        if wrong and error.kind == "arithmetic":
+            return f"{label} — {_error_head(wrong)} ❌{_other_items(items)}", button
+        return f"{label} — есть ошибка{_where(item, error)} ❌", button
     if strength == "candidate":
         candidates = [f for f in findings if f.strength == "candidate" and f.confirmed is None]
         if len(candidates) == 1 and candidates[0].detail:
-            return f"{label} — {candidates[0].detail} 🤔", None
+            return f"{label} — {candidates[0].detail} 🤔{_other_items(items)}", None
         return f"{label} — стоит перепроверить 🤔 ({_places(len(candidates))})", None
     return f"{label} — разобрал, оценки нет 📝", None
 
@@ -64,10 +85,12 @@ def clarified_line(index: int, item: CheckedTask) -> tuple[str, list[dict[str, s
 
 
 def review_header(state: ChatState) -> str:
-    correct = sum(
-        1 for i, t in enumerate(state.tasks) if strength_of_task(task_findings(i, t)) == "ok"
-    )
-    return f"Проверил! {correct} из {len(state.tasks)} верно.\n"
+    """Счёт — по заданиям с вердиктом: непрочитанное задание не делает «0 из 2 верно» из «0 из 1»
+    (живая проверка 30.09); без единого вердикта — без счёта, строки заданий скажут остальное."""
+    strengths = [strength_of_task(task_findings(i, t)) for i, t in enumerate(state.tasks)]
+    correct = strengths.count("ok")
+    graded = correct + strengths.count("verified")
+    return f"Проверил! {correct} из {graded} верно.\n" if graded else "Проверил!\n"
 
 
 def review_message(state: ChatState) -> tuple[str, Buttons]:
@@ -87,10 +110,11 @@ def review_message(state: ChatState) -> tuple[str, Buttons]:
         praises.append(praise_of(index, item))
         if button:
             buttons.append(button)
-    return _fit(review_header(state), verdicts, praises), buttons
+    footer = "" if buttons or asked else f"\n{NEXT_PHOTO}"
+    return _fit(review_header(state), verdicts, praises, footer), buttons
 
 
-def _fit(header: str, verdicts: list[str], praises: list[str | None]) -> str:
+def _fit(header: str, verdicts: list[str], praises: list[str | None], footer: str = "") -> str:
     """Сводка в пределах лимита сообщения: объяснения опускаются с конца, вердикты остаются все —
     без объяснения ребёнок обойдётся, без вердикта нет."""
     kept = list(praises)
@@ -99,7 +123,7 @@ def _fit(header: str, verdicts: list[str], praises: list[str | None]) -> str:
             f"{verdict} {praise}" if praise else verdict
             for verdict, praise in zip(verdicts, kept, strict=True)
         ]
-        text = header + "\n".join(lines)
+        text = header + "\n".join(lines) + footer
         explained = [i for i, praise in enumerate(kept) if praise]
         if message_length(text) <= MAX_MESSAGE_CHARS or not explained:
             return text
@@ -127,12 +151,81 @@ def lower(label: str) -> str:
     return label[:1].lower() + label[1:]
 
 
-def _where(finding: Finding) -> str:
-    if finding.line is not None and finding.kind == "arithmetic":
-        return f" (строка {finding.line})"
+def _where(item: CheckedTask, finding: Finding) -> str:
+    """Где ошибка: пункт строки, а без пункта — сама строка ребёнка; «строка 2» ребёнку ничего не
+    говорит (живая проверка 30.09)."""
+    steps = item.task.student_solution_steps
+    if finding.line is not None and finding.kind == "arithmetic" and finding.line <= len(steps):
+        line = steps[finding.line - 1]
+        label = line_label(line)
+        if label is not None:
+            return f" в пункте {label})"
+        shown = school_notation(line.strip())
+        if len(shown) > QUOTE_CHARS:
+            shown = shown[:QUOTE_CHARS].rstrip() + "…"
+        return f" в строке «{shown}»"
     if finding.actual:
         return f" (слово «{finding.actual}»)"
     return ""
+
+
+def _items(item: CheckedTask) -> list[tuple[str, ItemStatus]]:
+    """Итог по пунктам задания; строки без метки после пункта — его действия, пустые строки не в
+    счёт. Если у задания есть буквенные пункты, «1)», «2)» — действия внутри пункта, а не пункты.
+
+    Пустой список (строка задания — без пунктов): пунктов меньше двух, метка повторилась или
+    ошибка стоит до первого пункта — иначе сводка её не назвала бы (ревью).
+    """
+    if item.grade is None:
+        return []
+    checks = [c for c in item.grade.line_checks if c.line.strip()]
+    labels = [line_label(c.line) for c in checks]
+    lettered = any(label is not None and label.isalpha() for label in labels)
+    groups: dict[str, list[LineCheck]] = {}
+    current: str | None = None
+    for check, label in zip(checks, labels, strict=True):
+        if label is not None and (label.isalpha() or not lettered):
+            if label in groups:
+                return []
+            current = label
+            groups[label] = []
+        if current is not None:
+            groups[current].append(check)
+        elif check.status == "mismatch":
+            return []
+    if len(groups) < 2:
+        return []
+    return [(label, _item_status(group)) for label, group in groups.items()]
+
+
+def _item_status(checks: list[LineCheck]) -> ItemStatus:
+    # `misread`-строка всегда `skipped` (pipeline/reading.py), с расхождением она не совпадает
+    if any(c.status == "mismatch" for c in checks):
+        return "error"
+    if any(c.misread for c in checks):
+        return "doubt"
+    if all(c.status == "ok" for c in checks):
+        return "ok"
+    return "unknown"
+
+
+def _error_head(wrong: list[str]) -> str:
+    if len(wrong) == 1:
+        return f"есть ошибка в пункте {wrong[0]})"
+    return f"есть ошибки в пунктах {', '.join(f'{name})' for name in wrong)}"
+
+
+def _other_items(items: list[tuple[str, ItemStatus]]) -> str:
+    """« Верно: б), в). Не смог проверить: г).» — без пунктов с ошибкой: они в главной фразе
+    строки. Ни один пункт не проверен — перечислять нечего."""
+    if all(status == "unknown" for _name, status in items):
+        return ""
+    parts = []
+    for status, title in _ITEM_GROUPS:
+        names = [f"{name})" for name, current in items if current == status]
+        if names:
+            parts.append(f"{title}: {', '.join(names)}.")
+    return " " + " ".join(parts) if parts else ""
 
 
 def _places(n: int) -> str:

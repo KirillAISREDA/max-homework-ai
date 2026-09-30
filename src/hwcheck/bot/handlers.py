@@ -46,9 +46,9 @@ from hwcheck.bot.pages import (
     textbook_is_fresh,
 )
 from hwcheck.bot.praise import explain_correct, with_fallback_praise
+from hwcheck.bot.summary import NEXT_PHOTO, review_message
 from hwcheck.bot.summary import lower as _lower
 from hwcheck.bot.summary import remaining_buttons as _remaining_buttons
-from hwcheck.bot.summary import review_message
 from hwcheck.config import Settings
 from hwcheck.db.findings import FindingRecord, FindingsRepository
 from hwcheck.events import EventLog, anonymize, current_trace_id, trace
@@ -843,6 +843,9 @@ class Bot:
             }
         )
         await self._store.set(chat_id, state)
+        if not rest and not _remaining_buttons(state):
+            # последний вопрос, разбирать нечего — ребёнок не должен гадать, что дальше (ревью)
+            message = f"{message}\n{NEXT_PHOTO}"
         await self._max.send_message(chat_id, message, buttons=buttons)
         if rest:
             await self._ask_clarification(chat_id, user_id, state)
