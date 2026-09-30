@@ -12,9 +12,12 @@ from hwcheck.bot.check import validator_only_grade
 from hwcheck.bot.fsm import CheckedTask, Clarification
 from hwcheck.bot.max_api import Buttons, callback_button
 from hwcheck.bot.pages import task_label
+from hwcheck.bot.summary import clarified_line
 from hwcheck.pipeline.grade import grade
 from hwcheck.pipeline.mathparse import parse_value
+from hwcheck.pipeline.reading import line_label
 from hwcheck.pipeline.schemas import VisionTask
+from hwcheck.pipeline.validator import LineCheck, compare_answers
 from hwcheck.subjects.base import Finding
 from hwcheck.subjects.math.module import findings_from_grade
 
@@ -42,11 +45,10 @@ MATH_KINDS = {"arithmetic", "uncertain"}
 def plan_clarifications(tasks: list[CheckedTask]) -> list[Clarification]:
     plan: list[Clarification] = []
     for index, item in enumerate(tasks):
-        clarification = _clarification_for(index, item)
-        if clarification is not None:
+        for clarification in _clarifications_for(index, item):
             plan.append(clarification)
-        if len(plan) == MAX_QUESTIONS:
-            return plan
+            if len(plan) == MAX_QUESTIONS:
+                return plan
     for index, item in enumerate(tasks):
         for finding in item.findings:
             if len(plan) == MAX_QUESTIONS:
@@ -70,6 +72,21 @@ def _is_word_candidate(finding: Finding) -> bool:
         and finding.word.box is not None
         and finding.confirmed is None
     )
+
+
+def _clarifications_for(index: int, item: CheckedTask) -> list[Clarification]:
+    """Строки, прочитанные не так, как напечатан их пункт, спрашиваем все (в пределах лимита
+    домашки): у каждой свой пункт и свой ответ. Прочие причины — один вопрос на задание."""
+    if item.grade is None or item.grade.uncertain_reason != "line_misread":
+        clarification = _clarification_for(index, item)
+        return [clarification] if clarification is not None else []
+    return [
+        Clarification(
+            task_index=index, kind="result" if check.printed else "line", line_index=line_index
+        )
+        for line_index, check in enumerate(item.grade.line_checks)
+        if check.misread
+    ]
 
 
 def _clarification_for(index: int, item: CheckedTask) -> Clarification | None:
@@ -111,6 +128,15 @@ def question(item: CheckedTask, clarification: Clarification) -> tuple[str, Butt
             raise ValueError("word clarification without a live finding")
         word = finding.word.text if finding.word is not None else ""
         return f"{label}: здесь написано «{finding.actual or word}»?", word_buttons(clarification)
+    if clarification.kind == "result":
+        printed = _printed(item, clarification)
+        return (
+            # спрашиваем запись, а не новый расчёт: иначе ответ, пересчитанный заново, спрятал бы
+            # неверный результат в тетради (ревью)
+            f"{label}, {_part(item, clarification)}: я прочитал пример как «{_shown(printed)}». "
+            "Какой ответ у тебя записан? Напиши его числом, как в тетради.",
+            None,
+        )
     line = _line(item, clarification)
     if clarification.kind == "sign":
         shown = _UNREADABLE.sub("?", line, count=1)
@@ -124,7 +150,7 @@ def question(item: CheckedTask, clarification: Clarification) -> tuple[str, Butt
 
 
 def retry_prompt(clarification: Clarification) -> tuple[str, Buttons | None]:
-    if clarification.kind == "answer":
+    if clarification.kind in ("answer", "result"):
         return "Не понял 🙂 Напиши только число, без слов.", None
     if clarification.kind == "line":
         return "Не понял 🙂 Перепиши строку целиком, со знаком «=».", None
@@ -172,6 +198,8 @@ def apply_text(item: CheckedTask, clarification: Clarification, text: str) -> Ch
     if clarification.kind == "word":
         key = _TYPED_YES_NO.get(text.strip().lower())
         return apply_word(item, clarification, key) if key else None
+    if clarification.kind == "result":
+        return _apply_result(item, clarification, text)
     if "=" not in text:
         return None
     return _replace_line(item, clarification, text.strip())
@@ -195,6 +223,54 @@ def apply_word(item: CheckedTask, clarification: Clarification, key: str) -> Che
         return None
     findings[index] = findings[index].model_copy(update={"confirmed": key == "yes"})
     return item.model_copy(update={"findings": findings})
+
+
+def _apply_result(item: CheckedTask, clarification: Clarification, text: str) -> CheckedTask | None:
+    """Результат пункта от ребёнка → строка «а) <печатное выражение> = <результат>» и пересчёт.
+
+    Результат сходится с тем, как пример прочитан в тетради, но не с печатным выражением, —
+    ребёнок переписал пример с ошибкой или условие прочиталось неверно: по ответу не различить,
+    поэтому ошибку не утверждаем и задание не трогаем (`answer_reply` просит сверить запись).
+    """
+    typed = parse_value(text)
+    if typed is None:
+        return None
+    check = _line_check(item, clarification)
+    printed = _printed(item, clarification)
+    as_read = check.values[0] if check.values else None
+    if compare_answers(str(typed), as_read) and not compare_answers(str(typed), printed):
+        return item
+    label = line_label(_line(item, clarification))
+    return _replace_line(item, clarification, f"{label}) {printed} = {typed}")
+
+
+def answer_reply(
+    clarification: Clarification, item: CheckedTask, *, more_for_task: bool
+) -> tuple[str, list[dict[str, str]] | None]:
+    """Ответ бота на ответ ребёнка. У вопроса о пункте — итог пункта, а итог задания с кнопкой
+    «Разобрать» — после последнего вопроса по этому заданию."""
+    if clarification.kind != "result":
+        return clarified_line(clarification.task_index, item)
+    note = _result_note(item, clarification)
+    if more_for_task:
+        return note, None
+    line, button = clarified_line(clarification.task_index, item)
+    return f"{note}\n{line}", button
+
+
+def _result_note(item: CheckedTask, clarification: Clarification) -> str:
+    check = _line_check(item, clarification)
+    part = _part(item, clarification).capitalize()
+    if check.status == "ok":
+        return f"{part} — верно ✅"
+    if check.status == "mismatch":
+        return f"{part} — есть ошибка ❌"
+    if check.misread and check.printed:
+        return (
+            f"{part}: ответ сходится с твоей записью, но в условии я вижу "
+            f"«{_shown(check.printed)}». Сверь, так ли переписан пример 🤔"
+        )
+    return f"{part} — не получилось проверить 🤔"
 
 
 def regrade(item: CheckedTask, task: VisionTask, task_index: int) -> CheckedTask:
@@ -241,6 +317,33 @@ def _replace_line(item: CheckedTask, clarification: Clarification, line: str) ->
 
 def _line(item: CheckedTask, clarification: Clarification) -> str:
     return item.task.student_solution_steps[_line_index(clarification)]
+
+
+def _line_check(item: CheckedTask, clarification: Clarification) -> LineCheck:
+    # вопрос о пункте ставится только по пересчёту (`_clarifications_for`) — до языков не доходит
+    assert item.grade is not None
+    return item.grade.line_checks[_line_index(clarification)]
+
+
+def _printed(item: CheckedTask, clarification: Clarification) -> str:
+    printed = _line_check(item, clarification).printed
+    if printed is None:
+        # печатное выражение ставит пересчёт вместе с вопросом, а новый пересчёт строки, по
+        # которой ещё не ответили, его не снимает — сюда попадёт только чужой вопрос
+        raise ValueError("result clarification without a printed expression")
+    return printed
+
+
+def _part(item: CheckedTask, clarification: Clarification) -> str:
+    """«пункт а)»; строка без метки — «строка 2»."""
+    label = line_label(_line(item, clarification))
+    return f"пункт {label})" if label else f"строка {_line_number(clarification)}"
+
+
+def _shown(expression: str) -> str:
+    """Выражение, как его пишут в школе: «39452 − 16452 : (300 − 264)», «601 · 143». Только для
+    текста ребёнку: в строку для пересчёта идёт исходная запись."""
+    return expression.replace("*", "·").replace("-", "−")
 
 
 def _line_number(clarification: Clarification) -> int:

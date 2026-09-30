@@ -35,6 +35,8 @@ class LineCheck(BaseModel):
     doubtful: bool = False
     # расхождение — скорее чтение или переписывание примера, чем ошибка (pipeline/reading.py)
     misread: bool = False
+    # печатное выражение пункта у `misread`-строки: по нему ребёнка спрашивают результат
+    printed: str | None = None
 
 
 @dataclass
