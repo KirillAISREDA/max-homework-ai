@@ -599,3 +599,69 @@ async def test_recognize_all_keeps_album_order_for_failed_photos(tmp_path: Path)
 
     assert len(results) == 2
     assert len(paths) == 3 and paths[1] == "" and paths[0] and paths[2]
+
+
+# --- конец разбора (спецификация 2026-09-30-tutor-code-question-design.md) ---
+
+
+async def _tutoring_with_two_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> tuple[Bot, "FakeMax", Path]:
+    """Чат в разборе первого из двух неверных заданий; тьютор подменён: `outcome` — чем кончится."""
+    from hwcheck.bot import handlers
+    from hwcheck.bot.fsm import ChatState, CheckedTask
+    from hwcheck.pipeline.schemas import VisionTask
+    from hwcheck.pipeline.solver import RefSolution
+    from hwcheck.pipeline.tutor import TutorSession
+
+    bot, fake_max, events_path = make_bot(tmp_path)
+    tasks = []
+    for number, steps in ((55, ["2 + 2 = 5"]), (56, ["3 + 3 = 7"])):
+        task = VisionTask(number=number, task_text="", student_solution_steps=steps, confidence=1)
+        tasks.append(CheckedTask(task=task, ref=None, grade=_validator_only_grade(steps)))
+    session = TutorSession(
+        task_text="", student_steps=[], student_answer=None, ref=RefSolution(steps=[], answer="4")
+    )
+
+    async def reply(_llm: Any, current: TutorSession, _text: str, **_kw: Any) -> Any:
+        return "итог разбора", current.model_copy(update={outcome: True})
+
+    monkeypatch.setattr(handlers, "tutor_reply", reply)
+    state = ChatState(phase="tutoring", tasks=tasks, tutor=session, tutoring_index=0)
+    await bot._store.set(7, state)
+    return bot, fake_max, events_path
+
+
+async def test_tutoring_closed_by_code_is_not_a_fixed_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bot, fake_max, events_path = await _tutoring_with_two_errors(tmp_path, monkeypatch, "closed")
+    await bot.handle_update(MaxUpdate.model_validate(TEXT_UPDATE))
+
+    state = await bot._store.get(7)
+    assert (state.phase, state.tutor, state.shown_indices, state.resolved_indices) == (
+        "review",
+        None,
+        [0],
+        [],
+    )
+    types = [e["type"] for e in read_events(events_path)]
+    assert "tutor_closed" in types and "error_fixed" not in types
+    # «что дальше»: показанное решение — тоже конец разбора, кнопка только у второго задания
+    _chat, text, buttons = fake_max.sent[-1]
+    assert text == "Разберём ещё одну ошибку?"
+    assert buttons is not None and [row[0]["payload"] for row in buttons] == ["tutor:1"]
+
+
+async def test_last_fixed_error_asks_for_the_next_photo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hwcheck.bot.handlers import TUTORING_DONE
+
+    bot, fake_max, _ = await _tutoring_with_two_errors(tmp_path, monkeypatch, "resolved")
+    state = await bot._store.get(7)
+    await bot._store.set(7, state.model_copy(update={"shown_indices": [1]}))
+    await bot.handle_update(MaxUpdate.model_validate(TEXT_UPDATE))
+
+    assert [text for _chat, text, _buttons in fake_max.sent[-2:]] == ["итог разбора", TUTORING_DONE]
+    assert (await bot._store.get(7)).resolved_indices == [0]

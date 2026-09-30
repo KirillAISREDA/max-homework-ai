@@ -14,7 +14,7 @@ from hwcheck.bot.max_api import Buttons, callback_button
 from hwcheck.bot.pages import task_label
 from hwcheck.bot.summary import clarified_line
 from hwcheck.pipeline.grade import grade
-from hwcheck.pipeline.mathparse import parse_value
+from hwcheck.pipeline.mathparse import parse_value, school_notation
 from hwcheck.pipeline.reading import line_label
 from hwcheck.pipeline.schemas import VisionTask
 from hwcheck.pipeline.validator import LineCheck, compare_answers
@@ -129,11 +129,11 @@ def question(item: CheckedTask, clarification: Clarification) -> tuple[str, Butt
         word = finding.word.text if finding.word is not None else ""
         return f"{label}: здесь написано «{finding.actual or word}»?", word_buttons(clarification)
     if clarification.kind == "result":
-        printed = _printed(item, clarification)
+        printed = school_notation(_printed(item, clarification))
         return (
             # спрашиваем запись, а не новый расчёт: иначе ответ, пересчитанный заново, спрятал бы
             # неверный результат в тетради (ревью)
-            f"{label}, {_part(item, clarification)}: я прочитал пример как «{_shown(printed)}». "
+            f"{label}, {_part(item, clarification)}: я прочитал пример как «{printed}». "
             "Какой ответ у тебя записан? Напиши его числом, как в тетради.",
             None,
         )
@@ -268,7 +268,7 @@ def _result_note(item: CheckedTask, clarification: Clarification) -> str:
     if check.misread and check.printed:
         return (
             f"{part}: ответ сходится с твоей записью, но в условии я вижу "
-            f"«{_shown(check.printed)}». Сверь, так ли переписан пример 🤔"
+            f"«{school_notation(check.printed)}». Сверь, так ли переписан пример 🤔"
         )
     return f"{part} — не получилось проверить 🤔"
 
@@ -338,12 +338,6 @@ def _part(item: CheckedTask, clarification: Clarification) -> str:
     """«пункт а)»; строка без метки — «строка 2»."""
     label = line_label(_line(item, clarification))
     return f"пункт {label})" if label else f"строка {_line_number(clarification)}"
-
-
-def _shown(expression: str) -> str:
-    """Выражение, как его пишут в школе: «39452 − 16452 : (300 − 264)», «601 · 143». Только для
-    текста ребёнку: в строку для пересчёта идёт исходная запись."""
-    return expression.replace("*", "·").replace("-", "−")
 
 
 def _line_number(clarification: Clarification) -> int:

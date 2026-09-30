@@ -10,7 +10,7 @@ import pytest
 from hwcheck.bot import handlers, notifier
 from hwcheck.bot.check import RecognizedPhoto, validator_only_grade
 from hwcheck.bot.fsm import ChatState, CheckedTask
-from hwcheck.bot.handlers import RETRY, Bot
+from hwcheck.bot.handlers import RETRY, TUTORING_DONE, Bot
 from hwcheck.bot.notifier import switch_keyboard
 from hwcheck.bot.onboarding.router import Onboarding
 from hwcheck.config import Settings
@@ -352,7 +352,7 @@ async def test_notifier_bug_does_not_break_the_tutoring(
     monkeypatch.setattr(notifier, broken_step, broken)
     await resolve_error(bot, kit, monkeypatch, index=3)
 
-    assert kit.last(CHILD)[0] == "Верно! 🎉"
+    assert kit.texts(CHILD)[-2:] == ["Верно! 🎉", TUTORING_DONE]
     assert RETRY not in kit.texts(CHILD)
     assert "update_failed" not in event_types(kit)
     [failed] = kit.events("notifier_failed")
@@ -425,7 +425,11 @@ async def test_parent_is_told_once_when_all_errors_are_resolved(
     [resolved] = kit.events("homework_resolved")
     assert (resolved["subject"], resolved["errors"]) == ("math", 2)
     # ответ тьютора ребёнку ушёл раньше сообщения родителю
-    assert kit.max.timeline[-2:] == [("chat", chat(CHILD), "Верно! 🎉"), ("user", PARENT, RESOLVED)]
+    assert kit.max.timeline[-3:] == [
+        ("chat", chat(CHILD), "Верно! 🎉"),
+        ("chat", chat(CHILD), TUTORING_DONE),  # «что дальше» ребёнку — до итога родителю
+        ("user", PARENT, RESOLVED),
+    ]
 
     # кнопка «Разобрать» в старой сводке жива: повторный разбор — не второе «разобрал все ошибки»
     await resolve_error(bot, kit, monkeypatch, index=2)
@@ -444,7 +448,7 @@ async def test_resolved_errors_with_blocked_parent(
     kit.max.blocked_users.add(PARENT)
     await resolve_error(bot, kit, monkeypatch, index=3)
 
-    assert kit.last(CHILD)[0] == "Верно! 🎉"
+    assert kit.texts(CHILD)[-2:] == ["Верно! 🎉", TUTORING_DONE]
     [failed] = kit.events("notify_failed")
     assert (failed["kind"], failed["error"]) == ("errors_resolved", "RuntimeError")
     assert len(kit.events("homework_resolved")) == 1  # метрика от доставки не зависит
@@ -478,7 +482,7 @@ async def test_dialog_started_before_deploy_has_no_homework(
     await kit.ctx.dialogs.set(chat(CHILD), ChatState.model_validate(old))
 
     await resolve_error(bot, kit, monkeypatch, index=0)
-    assert kit.last(CHILD)[0] == "Верно! 🎉"
+    assert kit.texts(CHILD)[-2:] == ["Верно! 🎉", TUTORING_DONE]
     assert kit.max.to_users == [] and kit.repo.homeworks == {}
     types = event_types(kit)
     assert "error_fixed" in types
@@ -502,7 +506,7 @@ async def test_without_onboarding_bot_works_as_before(
     assert summary.startswith("Проверил! 3 из 4 верно.") and buttons is not None
     await resolve_error(bot, kit, monkeypatch, index=3)
 
-    assert kit.last(CHILD)[0] == "Верно! 🎉"
+    assert kit.texts(CHILD)[-2:] == ["Верно! 🎉", TUTORING_DONE]
     assert kit.max.to_users == [] and kit.repo.homeworks == {}
     assert (await kit.ctx.dialogs.get(chat(CHILD))).homework_id is None
     assert profile.parent_user_id is not None

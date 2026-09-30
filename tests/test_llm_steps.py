@@ -103,8 +103,8 @@ async def test_tutor_step_includes_leak_regeneration(tmp_path: Path) -> None:
     replies = [turn("Правильный ответ 9 3/4, проверь себя!"), turn("Сложи дроби сам")]
     client, path = journaled(FakeLLMClient(replies), tmp_path)
     reply, _ = await tutor_reply(client, make_session(), "не знаю", model="m")
-    assert reply == "Сложи дроби сам"
-    assert steps(path) == [("tutor", "v1", "chat")] * 2
+    assert reply.startswith("Сложи дроби сам")  # вопрос дописывает код
+    assert steps(path) == [("tutor", "v2", "chat")] * 2
     assert_prompts_exist(steps(path))
 
 

@@ -113,11 +113,12 @@ def message_length(text: str) -> int:
 
 
 def remaining_buttons(state: ChatState) -> Buttons:
-    """Кнопки для ещё не разобранных ошибок."""
+    """Кнопки для ещё не разобранных ошибок (решение, показанное кодом, — тоже разбор)."""
+    done = {*state.resolved_indices, *state.shown_indices}
     return [
         [callback_button(f"Разобрать {lower(task_label(t.task))}", f"tutor:{i}")]
         for i, t in enumerate(state.tasks)
-        if strength_of_task(task_findings(i, t)) == "verified" and i not in state.resolved_indices
+        if strength_of_task(task_findings(i, t)) == "verified" and i not in done
     ]
 
 
