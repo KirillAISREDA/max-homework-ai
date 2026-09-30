@@ -86,10 +86,16 @@ def _review(check: LineCheck, items: dict[str, PrintedItem]) -> LineCheck:
             )
         left = parse_value(check.values[0])
         if left is None or not _same(left, item.value):
-            return _doubt(check)
+            return _doubt(check, printed=item.expression)
     if check.status == "mismatch" and _impossible(parse_value(check.values[0]), written, body):
         return _doubt(check)
     return check
+
+
+def line_label(line: str) -> str | None:
+    """Метка пункта в начале строки тетради («a)» → «а»); None — строка без метки."""
+    label = _LINE_LABEL.match(line)
+    return _normal_label(label.group(1)) if label else None
 
 
 def _impossible(expected: Any, written: Any, line: str) -> bool:
@@ -159,5 +165,7 @@ def _same(a: Any, b: Any) -> bool:
     return bool(sympy.simplify(a - b) == 0)
 
 
-def _doubt(check: LineCheck) -> LineCheck:
-    return check.model_copy(update={"status": "skipped", "doubtful": True, "misread": True})
+def _doubt(check: LineCheck, *, printed: str | None = None) -> LineCheck:
+    return check.model_copy(
+        update={"status": "skipped", "doubtful": True, "misread": True, "printed": printed}
+    )

@@ -22,6 +22,7 @@ from hwcheck.bot.check import (
 from hwcheck.bot.clarify import (
     MAX_ATTEMPTS,
     _finding,
+    answer_reply,
     apply_sign,
     apply_text,
     apply_word,
@@ -45,9 +46,9 @@ from hwcheck.bot.pages import (
     textbook_is_fresh,
 )
 from hwcheck.bot.praise import explain_correct, with_fallback_praise
-from hwcheck.bot.summary import clarified_line, review_message
 from hwcheck.bot.summary import lower as _lower
 from hwcheck.bot.summary import remaining_buttons as _remaining_buttons
+from hwcheck.bot.summary import review_message
 from hwcheck.config import Settings
 from hwcheck.db.findings import FindingRecord, FindingsRepository
 from hwcheck.events import EventLog, anonymize, current_trace_id, trace
@@ -816,10 +817,12 @@ class Bot:
                     kind=confirmed_finding.kind,
                     answer="yes" if confirmed_finding.confirmed else "no",
                 )
+            # по заданию могут спрашивать несколько пунктов: итог — после последнего вопроса
+            more_for_task = any(c.task_index == clarification.task_index for c in rest)
             # отдельное событие: задание уже учтено в task_checked, в отчёте не дублируем.
             # У предмета без пересчёта (языки) вердикт от ответа не меняется — пересчитывать
             # нечего, а сам ответ ребёнка уже записан в finding_confirmed
-            if updated.grade is not None:
+            if updated.grade is not None and not more_for_task:
                 self._events.log(
                     "task_clarified",
                     user_id=user_id,
@@ -828,7 +831,7 @@ class Bot:
                     verdict=updated.grade.verdict,
                     reason=updated.grade.uncertain_reason,
                 )
-            message, button = clarified_line(clarification.task_index, updated)
+            message, button = answer_reply(clarification, updated, more_for_task=more_for_task)
             buttons = [button] if button else None
         state = state.model_copy(
             update={

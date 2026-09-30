@@ -20,6 +20,7 @@ from hwcheck.pipeline.solver import RefSolution, SolvedTask
 from hwcheck.pipeline.vision import RecognizedPage
 from test_bot import FakeMax
 from test_pages import NOTEBOOK_19, TEXTBOOK
+from test_reading import CONDITION_2181, STEPS_2181
 
 PAGES: dict[bytes, VisionPage] = {
     b"textbook": VisionPage(tasks=TEXTBOOK, page_ok=True),
@@ -66,6 +67,18 @@ PAGES: dict[bytes, VisionPage] = {
                 confidence=0.9,
             )
             for n in (5, 6, 7)
+        ],
+        page_ok=True,
+    ),
+    # живая проверка 30.09: пункты а) и б) прочитаны не так, как напечатаны
+    b"live2181": VisionPage(
+        tasks=[
+            VisionTask(
+                number=2181,
+                task_text=CONDITION_2181,
+                student_solution_steps=STEPS_2181,
+                confidence=0.9,
+            )
         ],
         page_ok=True,
     ),
@@ -422,6 +435,35 @@ async def test_questions_are_limited_and_others_get_reason(harness: Harness) -> 
     assert "№7 — часть записи неразборчива" in review
     assert "показать взрослому" not in review
     assert len((await store.get(7)).clarifications) == 2
+
+
+async def test_misread_items_are_asked_one_by_one(harness: Harness, tmp_path: Path) -> None:
+    bot, fake_max, store, _solved = harness
+    await bot.handle_update(photo_update("live2181"))
+    review, ask = fake_max.sent[-2][1], fake_max.sent[-1][1]
+    assert "Задание 2181 — уточню у тебя пару деталей" in review
+    assert "есть ошибка" not in review  # ошибки чтения — не ошибки ребёнка
+    assert "пункт а)" in ask and "38995" not in ask
+
+    await bot.handle_update(text_update("38997"))
+    note, next_ask = fake_max.sent[-2], fake_max.sent[-1]
+    assert (note[1], note[2]) == ("Пункт а) — есть ошибка ❌", None)
+    assert "пункт б)" in next_ask[1]
+    assert events_of(tmp_path, "task_clarified") == []  # задание ещё не уточнено до конца
+
+    await bot.handle_update(text_update("67860"))
+    text, buttons = fake_max.sent[-1][1], fake_max.sent[-1][2]
+    assert text.startswith("Пункт б) — верно ✅\nЗадание 2181 — есть ошибка")
+    assert buttons is not None and buttons[0][0]["payload"] == "tutor:0"
+    [clarified] = events_of(tmp_path, "task_clarified")
+    assert (clarified["kind"], clarified["verdict"]) == ("result", "wrong")
+    state = await store.get(7)
+    assert (state.phase, state.clarifications) == ("review", [])
+
+    # цель разбора — значение печатного пункта а), а не число из ошибки чтения
+    grade = state.tasks[0].grade
+    assert grade is not None and grade.first_error_line == 1
+    assert grade.line_checks[0].values[0] == "38995"
 
 
 async def test_unclear_reply_twice_leaves_task_as_is(harness: Harness, tmp_path: Path) -> None:

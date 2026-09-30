@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+
 from hwcheck.bot.fsm import ChatState, CheckedTask
 from hwcheck.bot.max_api import Buttons, callback_button
 from hwcheck.bot.pages import task_label
@@ -70,13 +72,14 @@ def review_header(state: ChatState) -> str:
 
 def review_message(state: ChatState) -> tuple[str, Buttons]:
     """Текст сводки и кнопки «Разобрать»; задания с вопросом ученику ждут его ответа."""
-    asked = {c.task_index for c in state.clarifications}
+    asked = Counter(c.task_index for c in state.clarifications)
     verdicts: list[str] = []
     praises: list[str | None] = []
     buttons: Buttons = []
     for index, item in enumerate(state.tasks):
         if index in asked:
-            verdicts.append(f"{task_label(item.task)} — уточню у тебя одну деталь ✍️")
+            details = "одну деталь" if asked[index] == 1 else "пару деталей"  # MAX_QUESTIONS = 2
+            verdicts.append(f"{task_label(item.task)} — уточню у тебя {details} ✍️")
             praises.append(None)
             continue
         line, button = verdict_line(index, item)

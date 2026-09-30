@@ -50,7 +50,8 @@ class Clarification(BaseModel):
     """Вопрос ученику по спорному заданию (bot/clarify.py)."""
 
     task_index: int
-    kind: Literal["answer", "sign", "line", "word"]
+    # result — результат пункта, прочитанного не так, как он напечатан (pipeline/reading.py)
+    kind: Literal["answer", "sign", "line", "word", "result"]
     line_index: int | None = None  # строка решения для sign/line
     finding_id: str | None = None  # `Finding.id` находки item.findings для word
     attempts: int = 0  # неразобранных ответов
