@@ -97,7 +97,10 @@ def test_result_matching_childs_own_record_is_not_called_an_error() -> None:
     # неверно: ошибку не утверждаем, просим сверить запись
     item = live_task(["а) 39454 - 16452 : (300 - 264) = 38997"])
     updated = apply_text(item, result_question(0), "38997")
-    assert updated is not None and updated.grade.verdict == "uncertain"
+    assert updated is not None and updated.grade is not None
+    assert updated.grade.verdict == "uncertain"
+    check = updated.grade.line_checks[0]
+    assert (check.misread, check.printed) == (True, "39452 - 16452 : (300 - 264)")
     text, button = answer_reply(result_question(0), updated, more_for_task=False)
     assert "сходится с твоей записью" in text and "39452 − 16452 : (300 − 264)" in text
     assert button is None

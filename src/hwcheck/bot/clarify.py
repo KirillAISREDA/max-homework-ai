@@ -131,8 +131,10 @@ def question(item: CheckedTask, clarification: Clarification) -> tuple[str, Butt
     if clarification.kind == "result":
         printed = _printed(item, clarification)
         return (
+            # спрашиваем запись, а не новый расчёт: иначе ответ, пересчитанный заново, спрятал бы
+            # неверный результат в тетради (ревью)
             f"{label}, {_part(item, clarification)}: я прочитал пример как «{_shown(printed)}». "
-            "Какой ответ у тебя получился? Напиши числом.",
+            "Какой ответ у тебя записан? Напиши его числом, как в тетради.",
             None,
         )
     line = _line(item, clarification)
@@ -339,7 +341,8 @@ def _part(item: CheckedTask, clarification: Clarification) -> str:
 
 
 def _shown(expression: str) -> str:
-    """Выражение, как его пишут в школе: «39452 − 16452 : (300 − 264)», «601 · 143»."""
+    """Выражение, как его пишут в школе: «39452 − 16452 : (300 − 264)», «601 · 143». Только для
+    текста ребёнку: в строку для пересчёта идёт исходная запись."""
     return expression.replace("*", "·").replace("-", "−")
 
 

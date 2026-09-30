@@ -78,7 +78,7 @@ def review_message(state: ChatState) -> tuple[str, Buttons]:
     buttons: Buttons = []
     for index, item in enumerate(state.tasks):
         if index in asked:
-            details = "одну деталь" if asked[index] == 1 else "пару деталей"  # MAX_QUESTIONS = 2
+            details = {1: "одну деталь", 2: "пару деталей"}.get(asked[index], "несколько деталей")
             verdicts.append(f"{task_label(item.task)} — уточню у тебя {details} ✍️")
             praises.append(None)
             continue
