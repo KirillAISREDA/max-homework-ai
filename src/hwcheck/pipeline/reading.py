@@ -10,12 +10,13 @@
 """
 
 import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
 import sympy
 
-from hwcheck.pipeline.mathparse import parse_value
+from hwcheck.pipeline.mathparse import VARIABLE, parse_value
 from hwcheck.pipeline.validator import BINARY_OPERATOR, LineCheck
 
 
@@ -35,8 +36,6 @@ _LINE_LABEL = re.compile(r"^\s*([А-Яа-яЁёA-Za-z]|\d{1,2})\)")
 _THOUSANDS_GAP = re.compile(r"(?<=\d)[   ](?=\d{3}(?!\d)(?!\s*/))")
 # пункт для сверки — только числовое выражение: без слов и без «=»
 _NUMERIC_EXPRESSION = re.compile(r"^[\d\s+\-−*·×∙:/().,]+$")
-# переменная, как в `mathparse`: строки уравнений и присваиваний здесь не трогаем
-_VARIABLE = re.compile(r"(?<![A-Za-zА-Яа-яЁё])(?:[A-Za-z]|х)(?![A-Za-zА-Яа-яЁё])")
 _FRACTION_NOTATION = re.compile(r"/|\d[.,]\d")
 # отрицательное число в записи: минус в начале, после «(», «=» или знака действия
 _NEGATIVE_NUMBER = re.compile(r"(?:^|[(=+\-−*·×:/])\s*[-−]\s*[\d(]")
@@ -47,19 +46,21 @@ _LOOKALIKES = str.maketrans("ae", "ае")
 def printed_items(condition: str | None) -> dict[str, PrintedItem]:
     """Пункты условия, пригодные для сверки; метка, встретившаяся дважды, не используется."""
     text = condition or ""
-    marks = [m for m in _LABEL.finditer(text) if _depth(text, m.start(1)) == 0]
-    labels = [_normal_label(m.group(1)) for m in marks]
+    marks = _top_level_labels(text)
+    counts = Counter(_normal_label(m.group(1)) for m in marks)
     items: dict[str, PrintedItem] = {}
     for index, mark in enumerate(marks):
+        label = _normal_label(mark.group(1))
         end = marks[index + 1].start(1) if index + 1 < len(marks) else len(text)
         item = _printed_item(text[mark.end() : end])
-        if item is not None and labels.count(labels[index]) == 1:
-            items[labels[index]] = item
+        if item is not None and counts[label] == 1:
+            items[label] = item
     return items
 
 
 def review_reading(checks: list[LineCheck], condition: str | None) -> list[LineCheck]:
-    """Строки, чьё расхождение — скорее чтение, чем ошибка, становятся «не уверен» (`misread`)."""
+    """Строки, чьё расхождение — скорее чтение, чем ошибка, становятся `skipped` с `misread`
+    (и `doubtful`: для вердикта это то же «не уверен», `misread` только называет причину)."""
     items = printed_items(condition)
     return [_review(check, items) for check in checks]
 
@@ -70,12 +71,16 @@ def _review(check: LineCheck, items: dict[str, PrintedItem]) -> LineCheck:
     label = _LINE_LABEL.match(check.line)
     body = check.line[label.end() :] if label else check.line
     written = parse_value(check.values[-1])
-    if written is None or _VARIABLE.search(body):
-        return check
+    if written is None or VARIABLE.search(body):
+        return check  # уравнения и присваивания («S = 6 * 4») здесь не трогаем
     item = items.get(_normal_label(label.group(1))) if label else None
     if item is not None and _operators(body.split("=", 1)[0]) >= item.operators:
-        # ребёнок переписал пример целиком: выражение берём из условия, из тетради — результат
-        if _same(written, item.value):
+        # ребёнок переписал пример целиком: выражение берём из условия, из тетради — остальное.
+        # Всё после первого «=» — его вычисление: промежуточные значения цепочки тоже должны
+        # сойтись («а) 2 * 3 + 4 = 5 + 4 = 10» — ошибка в середине, не «верно», ревью)
+        computed = [parse_value(value) for value in check.values[1:]]
+        if all(value is not None and _same(value, item.value) for value in computed):
+            # у верной строки values — значение печатного выражения и записанный результат
             return check.model_copy(
                 update={"status": "ok", "values": [str(item.value), check.values[-1]]}
             )
@@ -125,15 +130,22 @@ def _operators(expression: str) -> int:
     return len(BINARY_OPERATOR.findall(expression))
 
 
-def _depth(text: str, position: int) -> int:
-    """Глубина скобок выражения: «)» меток пунктов («а)») не уводит её ниже нуля."""
+def _top_level_labels(text: str) -> list[re.Match[str]]:
+    """Метки вне скобок выражения: «(5244 : 19 : 12)» не даёт метку «12)». Один проход по тексту;
+    «)» самих меток («а)») не уводит глубину ниже нуля."""
+    marks: list[re.Match[str]] = []
     depth = 0
-    for char in text[:position]:
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            depth = max(depth - 1, 0)
-    return depth
+    position = 0
+    for mark in _LABEL.finditer(text):
+        for char in text[position : mark.start(1)]:
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth = max(depth - 1, 0)
+        position = mark.start(1)
+        if depth == 0:
+            marks.append(mark)
+    return marks
 
 
 def _normal_label(label: str) -> str:
@@ -141,6 +153,9 @@ def _normal_label(label: str) -> str:
 
 
 def _same(a: Any, b: Any) -> bool:
+    """Рациональные сравниваются точно и дёшево, корни и прочее — через simplify (как валидатор)."""
+    if a.is_Rational and b.is_Rational:
+        return bool(a == b)
     return bool(sympy.simplify(a - b) == 0)
 
 

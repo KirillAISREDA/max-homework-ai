@@ -5,6 +5,8 @@
 разбора «3175254/61», а настоящую ошибку пункта а) пропустил. Печатное условие было в руках.
 """
 
+import time
+
 import pytest
 
 from hwcheck.bot.check import validator_only_grade
@@ -68,6 +70,13 @@ def test_items_unfit_for_comparison_are_dropped(condition: str | None, labels: s
     assert set(printed_items(condition)) == labels
 
 
+def test_many_labels_are_parsed_in_linear_time() -> None:
+    # ревью: глубина скобок пересчитывалась от начала текста для каждой метки
+    started = time.perf_counter()
+    assert printed_items("а) 1 " * 3000) == {}
+    assert time.perf_counter() - started < 0.5
+
+
 def test_mixed_number_is_not_glued_as_thousands() -> None:
     items = printed_items("а) 8 3/7 - 4 4/7; б) 1 200 + 300")
     assert {label: str(item.value) for label, item in items.items()} == {"а": "27/7", "б": "1500"}
@@ -99,6 +108,25 @@ def test_written_result_equal_to_printed_value_is_correct_whatever_the_left_part
     result = validator_only_grade(["а) 48 + 35 = 75", "б) 90 - 18 = 72"], condition=CONDITION)
     assert result.verdict == "correct"
     assert result.line_checks[0].values == ["75", "75"]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "а) 2 * 3 + 4 = 5 + 4 = 10",
+        "а) 2 * 3 + 4 = 6 + 5 = 10",
+    ],
+)
+def test_slip_inside_chain_is_not_hidden_by_right_result(line: str) -> None:
+    # ревью: верный итог не отменяет ошибку в середине цепочки
+    result = validator_only_grade([line, "б) 7 * 8 = 56"], condition="а) 2 * 3 + 4; б) 7 * 8")
+    assert (result.verdict, result.first_error_line) == ("wrong", 1)
+
+
+def test_chain_with_misread_start_and_right_steps_is_correct() -> None:
+    line = "а) 2 * 8 + 4 = 6 + 4 = 10"  # «3» прочиталась как «8», дальше всё сходится
+    result = validator_only_grade([line, "б) 7 * 8 = 56"], condition="а) 2 * 3 + 4; б) 7 * 8")
+    assert result.verdict == "correct"
 
 
 def test_wrong_result_of_correctly_copied_item_is_an_error_with_printed_target() -> None:

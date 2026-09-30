@@ -52,7 +52,7 @@ _TRANSFORMATIONS = (*standard_transformations, rationalize)
 
 X = sympy.Symbol("x")
 # переменная уравнения — одиночная буква, не часть слова: «x», «y», кириллическая «х»
-_VARIABLE = re.compile(r"(?<![A-Za-zА-Яа-яЁё])([A-Za-z]|х)(?![A-Za-zА-Яа-яЁё])")
+VARIABLE = re.compile(r"(?<![A-Za-zА-Яа-яЁё])([A-Za-z]|х)(?![A-Za-zА-Яа-яЁё])")
 _IMPLICIT_MUL_BEFORE = re.compile(r"(?<=[\d)])\s*(?=x)")  # «3x», «(2+1)x» → «3*x»
 _IMPLICIT_MUL_AFTER = re.compile(r"(?<=x)\s*(?=[\d(])")  # «x(» , «x2» → «x*(»
 _NUMBER_LITERAL = re.compile(r"^-?\d+(?:\.\d+)?(?:/\d+)?$")
@@ -124,11 +124,11 @@ def parse_equation(line: str) -> EquationLine | None:
         return None
     item_marker = _EQUATION_ITEM.match(line) is not None
     text = _normalize(_EQUATION_ITEM.sub("", line))
-    letters = {m.group(1) for m in _VARIABLE.finditer(text)}
+    letters = {m.group(1) for m in VARIABLE.finditer(text)}
     if len(letters) != 1:
         return None
     variable = letters.pop()
-    text = _VARIABLE.sub("x", text)
+    text = VARIABLE.sub("x", text)
     text = _IMPLICIT_MUL_AFTER.sub("*", _IMPLICIT_MUL_BEFORE.sub("*", text))
     raw_segments = [s.strip() for s in text.split("=")]
     if len(raw_segments) < 2 or not all(raw_segments):
