@@ -185,14 +185,17 @@ class MathModule:
                 )  # fmt: skip
             except StructuredOutputError:
                 logger.warning("classifier failed")
+        line = grade.first_error_line
+        target = task.lines[line - 1] if line is not None and line <= len(task.lines) else None
         return TutorSession(
             task_text=task.condition or "\n".join(task.lines),
             student_steps=task.lines,
             student_answer=task.answer,
             ref=ref,
             error=error,
-            first_error_line=grade.first_error_line,
+            first_error_line=line,
             expected=_error_line_value(grade),
+            target_line=target,
         )
 
 

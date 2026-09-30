@@ -8,6 +8,7 @@ float-погрешностей) или None, если строка не явля
 и лимиты на размер чисел/степеней (sympy парсит через eval).
 """
 
+import itertools
 import logging
 import re
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 MAX_LINE_LENGTH = 200
 MAX_NUMBER_DIGITS = 12
 MAX_EXPONENT = 40
+MAX_ACTION_TERMS = 5  # сочетаний членов суммы в `action_values` — не больше 2⁵
 
 # маркер пункта в начале строки: «а)», «3)», «№4», «1. » (точка — только с пробелом,
 # иначе съедим начало десятичной дроби «5.5»)
@@ -212,7 +214,46 @@ def _school_division(segment: str) -> str:
     return _DIVISION_COLON.sub("/", _FRACTION.sub(wrap, segment))
 
 
-def _eval_segment(segment: str, *, allow_variable: bool = False) -> Any | None:
+def action_values(expression: str) -> list[Any]:
+    """Значения действий числового выражения — то, что ребёнок считает по шагам.
+
+    «39452 − 16452 : (300 − 264)» → 36, 457, 38995: дерево SymPy без вычисления, значение каждого
+    действия. Порядок слагаемых в таком дереве SymPy не хранит, поэтому у суммы или произведения
+    из нескольких членов берутся частичные результаты всех сочетаний (до `MAX_ACTION_TERMS` членов):
+    «329503 + 340088» среди них есть. Сами числа записи действиями не считаются; мусор — пустой
+    список.
+    """
+    segment = _checked_segment(_normalize(_ITEM_MARKER.sub("", expression)))
+    if segment is None:
+        return []
+    try:
+        tree = parse_expr(
+            segment,
+            local_dict={"sqrt": sympy.sqrt},
+            transformations=_TRANSFORMATIONS,
+            evaluate=False,
+        )
+    except Exception:
+        return []  # как в `_eval_segment`: мусор из тетради роняет parse_expr чем угодно
+    if not isinstance(tree, sympy.Expr) or tree.free_symbols:
+        return []
+    values: list[Any] = []
+    for node in sympy.preorder_traversal(tree):
+        # «a − b» в дереве — a + (−1)·b, «a : b» — a · b⁻¹: обёртки знака и степени −1 не действия
+        if not isinstance(node, sympy.Add | sympy.Mul) or sympy.S.NegativeOne in node.args:
+            continue
+        terms = node.args
+        sizes = range(2, len(terms) + 1) if len(terms) <= MAX_ACTION_TERMS else [len(terms)]
+        for size in sizes:
+            for combo in itertools.combinations(terms, size):
+                value = node.func(*combo).doit()
+                if value.is_number and value not in values:
+                    values.append(value)
+    return values
+
+
+def _checked_segment(segment: str, *, allow_variable: bool = False) -> str | None:
+    """Сегмент после школьного деления, прошедший whitelist и лимиты; None — в SymPy не пускаем."""
     segment = _school_division(segment)
     without_functions = segment.replace("sqrt", "").replace("**", "*")
     if allow_variable:
@@ -228,6 +269,14 @@ def _eval_segment(segment: str, *, allow_variable: bool = False) -> Any | None:
     for match in _EXPONENT.finditer(segment):
         if int(match.group(1)) > MAX_EXPONENT:
             return None
+    return segment
+
+
+def _eval_segment(segment: str, *, allow_variable: bool = False) -> Any | None:
+    checked = _checked_segment(segment, allow_variable=allow_variable)
+    if checked is None:
+        return None
+    segment = checked
     try:
         # rationalize: 4.7 → 47/10, арифметика точная, без float-погрешностей
         value = parse_expr(

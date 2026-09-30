@@ -67,6 +67,9 @@ class ChatState(BaseModel):
     tutor: TutorSession | None = None
     tutoring_index: int | None = None
     resolved_indices: list[int] = Field(default_factory=list)  # разобранные ошибки
+    # разборы, закрытые кодом после показанного решения: ошибка не исправлена ребёнком, но кнопка
+    # «Разобрать» по ней больше не нужна (pipeline/tutor.py, `closed`)
+    shown_indices: list[int] = Field(default_factory=list)
     # условия со страниц учебника по номеру задания: фото тетради может прийти
     # следующим сообщением (сценарий «учебник + тетрадь», сессия 9)
     textbook_tasks: list[VisionTask] = Field(default_factory=list)

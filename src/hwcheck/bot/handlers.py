@@ -101,6 +101,7 @@ SUBJECT_UNAVAILABLE = "Проверка по этому предмету пок�
 NOTHING_TO_TUTOR = "Здесь нечего разбирать — ошибка не подтверждена 🙂"
 REVIEW_HINT = "Выбери задание для разбора 👇 Или пришли фото новой домашки 📸"
 REVIEW_DONE = "Эту домашку я уже проверил 👍 Пришли фото следующей — проверю 📸"
+TUTORING_DONE = "Разобрали все ошибки 👍 Пришли фото следующего задания — проверю 📸"
 SOLVER_CACHE_DIR = Path(".cache/solver")
 
 
@@ -990,17 +991,37 @@ class Bot:
             )
             await self._store.set(chat_id, state)
             await self._max.send_message(chat_id, reply)
-            remaining = _remaining_buttons(state)
-            if remaining:
-                await self._max.send_message(
-                    chat_id, "Разберём ещё одну ошибку?", buttons=remaining
-                )
+            await self._after_tutoring(chat_id, state)
             if self._notifier is not None:
                 await self._notifier.error_fixed(chat_id, user_id, state, fixed)
+        elif session.closed:
+            # решение показано, ответ снова неверный: разбор закрыл код — это не «исправил сам»,
+            # поэтому ни error_fixed, ни сообщения родителю о разобранной ошибке
+            shown = state.tutoring_index
+            state = state.model_copy(
+                update={
+                    "phase": "review",
+                    "tutor": None,
+                    "tutoring_index": None,
+                    "shown_indices": [*state.shown_indices, *([] if shown is None else [shown])],
+                }
+            )
+            await self._store.set(chat_id, state)
+            self._events.log("tutor_closed", user_id=user_id, component="tutor", outcome="shown")
+            await self._max.send_message(chat_id, reply)
+            await self._after_tutoring(chat_id, state)
         else:
             state = state.model_copy(update={"tutor": session})
             await self._store.set(chat_id, state)
             await self._max.send_message(chat_id, reply)
+
+    async def _after_tutoring(self, chat_id: int, state: ChatState) -> None:
+        """Разбор закончен — ребёнок не должен гадать, что дальше (живой разбор 30.09)."""
+        remaining = _remaining_buttons(state)
+        if remaining:
+            await self._max.send_message(chat_id, "Разберём ещё одну ошибку?", buttons=remaining)
+        else:
+            await self._max.send_message(chat_id, TUTORING_DONE)
 
 
 def _numbered_by_condition(
