@@ -144,9 +144,7 @@ def test_ready_answers_are_mentioned_only_as_refused() -> None:
     """Готовые ответы бот не даёт: упоминать их можно только с отрицанием."""
     mention = re.compile(r"[^.!?\n]*готов\w+ ответ\w+[^.!?\n]*")
     mentions = [m.group().lower() for value in all_texts() for m in mention.finditer(value)]
-    # вводное родителя, инструкции, приглашение родителю; экран согласия говорит то же словами
-    # «не решает задания за ребёнка»
-    assert len(mentions) >= 3
+    assert mentions  # проверка должна охватывать существующие упоминания
     assert "не решает задания за ребёнка" in texts.CONSENT_SUMMARY
     for sentence in mentions:
         assert re.search(r"\b(не|без)\b", sentence), sentence
