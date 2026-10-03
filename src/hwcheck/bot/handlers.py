@@ -38,6 +38,7 @@ from hwcheck.bot.max_api import MaxClient
 from hwcheck.bot.models import MaxUpdate
 from hwcheck.bot.onboarding.policy import allows_foreign_models
 from hwcheck.bot.onboarding.router import CheckPhotos, Onboarding
+from hwcheck.bot.onboarding.texts import STUDENT_PHOTO_GUIDE
 from hwcheck.bot.pages import (
     MAX_PHOTOS,
     attach_conditions,
@@ -76,10 +77,7 @@ from hwcheck.subjects.registry import SubjectDeps, module_for
 
 logger = logging.getLogger(__name__)
 
-WELCOME = (
-    "Привет! Я проверяю домашку по математике. 📚\n"
-    "Пришли фото страницы тетради с решением — я проверю и помогу разобрать ошибки."
-)
+WELCOME = f"Привет! Я проверяю домашку по математике. 📚\n\n{STUDENT_PHOTO_GUIDE}"
 CHECKING = "Проверяю... 🔍 Обычно это занимает меньше минуты."
 UNREADABLE = (
     "Не смог разобрать фото 😕 Попробуй переснять: страница целиком, "
